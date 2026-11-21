@@ -61,6 +61,9 @@ import { SavedProjectsService } from './services/saved-projects-service'
 import { DirProjectLister } from './infra/dir-project-lister'
 import { IndasPipelineService } from './services/indas-pipeline-service'
 import { IndasController } from './indas/indas-controller'
+import { IndasProjectService } from './services/indas-project-service'
+import { readIndas, writeIndas } from './project/indas-file'
+import { readManifest } from './project/axbrl'
 import { SettingsService } from './services/settings-service'
 import { SidecarManager } from './sidecar'
 import { findProjectArg, parseDotEnv, windowTitle } from './util/launch'
@@ -154,6 +157,11 @@ const indas = new IndasController(
   getWindow,
   () => projectsFolder.dir(),
   (done, total) => mainWindow?.webContents.send(IPC.indasProgress, { done, total }),
+  new IndasProjectService(
+    { write: writeIndas, read: readIndas, manifestOf: (p) => (existsSync(p) ? readManifest(p) : Promise.resolve(null)) },
+    () => projectsFolder.dir(),
+    app.getVersion(),
+  ),
 )
 const preview = new PreviewService(projects, app.getVersion())
 const pdfExport = new PdfExportService(preview, new ElectronPdfRenderer(), (path, data) => writeFile(path, data))

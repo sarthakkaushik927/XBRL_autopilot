@@ -5,8 +5,19 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { dialog, shell, type BrowserWindow } from 'electron'
-import type { ConceptSuggestion, GenerateXmlInput, GenerateXmlResult, MasterFields, RecommendRequest, TransformResult } from '@shared/indas'
+import type {
+  ConceptSuggestion,
+  GenerateXmlInput,
+  GenerateXmlResult,
+  IndasOpened,
+  IndasSaved,
+  IndasSaveRequest,
+  MasterFields,
+  RecommendRequest,
+  TransformResult,
+} from '@shared/indas'
 import type { IndasPipelineService } from '../services/indas-pipeline-service'
+import type { IndasProjectService } from '../services/indas-project-service'
 
 export const TEMPLATE_FILE_NAME = 'XBRL_Autopilot_Standard_Template.xlsx'
 const EXCEL_FILTERS = [{ name: 'Excel workbook', extensions: ['xlsx', 'xls'] }]
@@ -19,7 +30,16 @@ export class IndasController {
     private readonly getWindow: () => BrowserWindow | null,
     private readonly projectsDir: () => string,
     private readonly onProgress: (done: number, total: number) => void,
+    private readonly projects: IndasProjectService,
   ) {}
+
+  save(req: IndasSaveRequest): Promise<IndasSaved> {
+    return this.projects.save(req)
+  }
+
+  open(path: string): Promise<IndasOpened> {
+    return this.projects.open(path)
+  }
 
   /** Asks where to save the standard template and writes it. `null` = cancelled. */
   async saveTemplate(): Promise<string | null> {

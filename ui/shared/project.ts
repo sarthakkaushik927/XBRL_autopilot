@@ -106,6 +106,8 @@ export interface RecentProject {
 /** A filing found in the projects folder (docs/17), shown on the start screen. */
 export interface SavedProject {
   path: string
+  /** 'indas' = an Ind AS pipeline project (opens the Ind AS screen); 'filing' = an engine filing */
+  kind: 'filing' | 'indas'
   fileName: string
   company: string
   cin: string

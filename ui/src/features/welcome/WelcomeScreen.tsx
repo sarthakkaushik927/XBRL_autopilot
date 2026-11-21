@@ -21,7 +21,7 @@ function Card(props: { title: string; icon: ReactNode; children: ReactNode; clas
 
 /** Shown when no filing is open: start, open, recent, saved in the projects folder, recover. */
 export function WelcomeScreen() {
-  const { openPipeline, saveTemplate } = useIndas()
+  const { openPipeline, openSaved, saveTemplate } = useIndas()
   const { recent, recovery, saved, openNewFiling, openImportXbrl, open, recover, discardRecovery, forgetRecent, openProjectsFolder } = useProject()
   return (
     <div className="h-full overflow-auto bg-bg">
@@ -132,10 +132,11 @@ export function WelcomeScreen() {
             <ul data-testid="welcome-saved-projects">
               {saved.projects.map((p) => (
                 <li key={p.path}>
-                  <button className="flex w-full items-center gap-3 rounded px-2 py-1.5 text-left hover:bg-panel-2" title={p.path} onClick={() => void open(p.path)}>
+                  <button className="flex w-full items-center gap-3 rounded px-2 py-1.5 text-left hover:bg-panel-2" title={p.path} onClick={() => void (p.kind === 'indas' ? openSaved(p.path) : open(p.path))}>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px]">
                         {p.company} <span className="text-muted">· {p.fy}</span>
+                        {p.kind === 'indas' && <span className="ml-2 rounded bg-accent/10 px-1 text-[10px] text-accent">Ind AS</span>}
                       </div>
                       <div className="truncate text-[11px] text-muted">
                         {p.fileName} · saved {when(p.updatedAt)}

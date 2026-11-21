@@ -18,7 +18,10 @@ import {
   acceptTopMembers,
   acceptTopSuggestions,
   buildGenerateInput,
+  fromDraft,
   ppeFromTransform,
+  projectCompanyName,
+  toDraft,
   prefillMasters,
   rowsFromTransform,
   socieFromTransform,
@@ -54,9 +57,17 @@ interface IndasState {
   auditor: Record<string, string>
   signatories: Signatory[]
   result: GenerateXmlResult | null
+  /** the project this work is saved as */
+  projectId: string
+  savedPath: string | null
+  savedAt: string | null
 
   openPipeline(): void
-  closePipeline(): void
+  /** reopens a saved Ind AS project (start screen → Saved projects) */
+  openSaved(path: string): Promise<void>
+  /** saves to the projects folder (a new file the first time); false when it failed */
+  save(): Promise<boolean>
+  closePipeline(): Promise<void>
   setStep(step: IndasStep): void
   setTab(tab: TagTab): void
   saveTemplate(): Promise<void>
@@ -105,7 +116,14 @@ const initial = () => ({
   auditor: {},
   signatories: [blankSignatory(), blankSignatory()],
   result: null,
+  projectId: newProjectId(),
+  savedPath: null as string | null,
+  savedAt: null as string | null,
 })
+
+function newProjectId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
 
 const isLineTab = (tab: TagTab): tab is StatementKey => LINE_SHEETS.some((s) => s.key === tab)
 
@@ -180,7 +198,38 @@ export const useIndas = create<IndasState>((set, get) => {
     ...initial(),
 
     openPipeline: () => set({ open: true }),
-    closePipeline: () => set({ open: false, ...initial() }),
+    // leaving keeps the work: it is saved first (when there is any)
+    closePipeline: async () => {
+      if (get().transform && !(await get().save())) return
+      set({ open: false, ...initial() })
+    },
+
+    openSaved: (path) =>
+      run('Opening the project…', async () => {
+        const opened = await unwrap(api().open(path))
+        if (!opened) return
+        const work = fromDraft(opened.draft)
+        set({ ...initial(), ...work, open: true, step: work.transform ? 'tagging' : 'financials', projectId: opened.projectId, savedPath: opened.path, savedAt: null })
+        toast.success(`Opened ${projectCompanyName(work)}`)
+      }),
+
+    save: async () => {
+      const s = get()
+      const saved = await unwrap(
+        api().save({
+          projectId: s.projectId,
+          path: s.savedPath,
+          draft: toDraft(s),
+          company: { name: projectCompanyName(s), cin: Object.entries(s.company).find(([k]) => k.endsWith(':CorporateIdentityNumber'))?.[1] ?? '' },
+          nature: s.meta.nature,
+          cy: { start: s.meta.startDate, end: s.meta.endDate },
+        }),
+      )
+      if (!saved) return false
+      set({ savedPath: saved.path, savedAt: saved.savedAt })
+      toast.success(`Saved ${saved.path}`)
+      return true
+    },
     setStep: (step) => {
       set({ step })
       if (step === 'masters') void get().loadFields()

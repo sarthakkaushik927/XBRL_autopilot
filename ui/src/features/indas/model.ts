@@ -11,6 +11,7 @@ import {
   type CanonicalRow,
   type ConceptSuggestion,
   type GenerateXmlInput,
+  type IndasDraft,
   type MasterField,
   type NoteText,
   type PeriodRole,
@@ -225,4 +226,38 @@ export function buildGenerateInput(s: FilingDraft & { companyNameField?: string 
 /** Amounts with Indian digit grouping (display only); blank for no amount. */
 export function formatAmount(v: number | null): string {
   return v === null ? '' : v.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+}
+
+/** What a saved Ind AS project holds (indas.json). Bump DRAFT_VERSION when the shape changes. */
+export const DRAFT_VERSION = 1
+export interface IndasWork extends FilingDraft {
+  transform: TransformResult | null
+}
+
+export function toDraft(w: IndasWork): IndasDraft {
+  const { transform, rows, socie, ppe, texts, meta, company, auditor, signatories } = w
+  return { version: DRAFT_VERSION, transform, rows, socie, ppe, texts, meta, company, auditor, signatories }
+}
+
+/** The saved work back as state; missing parts (an older draft) become empty. */
+export function fromDraft(d: Record<string, unknown>): IndasWork {
+  const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+  const obj = <T>(v: unknown, fallback: T): T => (v && typeof v === 'object' ? (v as T) : fallback)
+  return {
+    transform: (d.transform as TransformResult | null) ?? null,
+    rows: arr<TagRow>(d.rows),
+    socie: arr<SocieRow>(d.socie),
+    ppe: arr<PpeRow>(d.ppe),
+    texts: arr<TextBlockRow>(d.texts),
+    meta: obj<FilingMeta>(d.meta, { nature: 'Standalone', startDate: '', endDate: '' }),
+    company: obj<Record<string, string>>(d.company, {}),
+    auditor: obj<Record<string, string>>(d.auditor, {}),
+    signatories: arr<Signatory>(d.signatories),
+  }
+}
+
+/** The name a project is saved under: the company field, else the workbook's name. */
+export function projectCompanyName(w: Pick<IndasWork, 'company' | 'transform'>): string {
+  const typed = Object.entries(w.company).find(([k]) => k.endsWith(':NameOfCompany'))?.[1]?.trim()
+  return typed || (w.transform?.fileName ?? '').replace(/\.[^.]+$/, '') || 'Untitled company'
 }

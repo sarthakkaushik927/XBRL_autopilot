@@ -21,6 +21,7 @@ export class SavedProjectsService {
       if (!manifest) continue
       projects.push({
         path,
+        kind: manifest.kind === 'indas' ? 'indas' : 'filing',
         fileName: basename(path),
         company: manifest.company.name || '(unnamed company)',
         cin: manifest.company.cin,

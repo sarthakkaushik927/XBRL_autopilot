@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Save } from 'lucide-react'
 import { Button } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 import { useIndas, type IndasStep } from '@/stores/indas'
@@ -16,13 +16,13 @@ const STEPS: { id: IndasStep; title: string }[] = [
 
 /** Vashu's Ind AS pipeline (docs/17): Excel → canonical sheets → tags → masters → XML. */
 export function IndasPipeline() {
-  const { step, setStep, closePipeline, busy, progress, transform } = useIndas()
+  const { step, setStep, closePipeline, busy, progress, transform, save, savedPath } = useIndas()
   const at = STEPS.findIndex((s) => s.id === step)
   const canLeaveFirst = transform !== null
   return (
     <div className="flex h-full flex-col bg-bg" data-testid="indas-pipeline">
       <header className="flex items-center gap-2 border-b border-border px-4 py-2">
-        <Button variant="ghost" onClick={closePipeline} title="Back to the start screen">
+        <Button variant="ghost" onClick={() => void closePipeline()} title="Back to the start screen (saves your work)">
           <ArrowLeft size={14} /> Start
         </Button>
         <h1 className="text-sm font-semibold">Ind AS filing (AOC-4 XBRL)</h1>
@@ -38,7 +38,10 @@ export function IndasPipeline() {
             </button>
           ))}
         </nav>
-        <div className="ml-auto text-xs text-muted" aria-live="polite">
+        <Button className="ml-auto" disabled={!transform || !!busy} onClick={() => void save()} title={savedPath ?? 'Save to the projects folder'} data-testid="indas-save">
+          <Save size={14} /> Save
+        </Button>
+        <div className="text-xs text-muted" aria-live="polite">
           {busy && (
             <>
               {busy}

@@ -8,7 +8,7 @@ import type { AppSettings, NewFilingInput } from '@shared/project'
 import { PREVIEW_SPACINGS, type PreviewFormat } from '@xap/engine/basics'
 import type { ProjectController } from '../project/project-controller'
 import type { IndasController } from '../indas/indas-controller'
-import type { GenerateXmlInput, RecommendRequest } from '@shared/indas'
+import type { GenerateXmlInput, IndasSaveRequest, RecommendRequest } from '@shared/indas'
 import type { SavedProjectsService } from '../services/saved-projects-service'
 import type { AutoTagService } from '../services/auto-tag-service'
 import type { ColumnPeriodService } from '../services/column-period-service'
@@ -369,6 +369,35 @@ function registerIndasIpc({ indas }: IpcDeps): void {
   handleResult(IPC.indasMasterFields, () => indas.masterFields())
   handleResult(IPC.indasGenerate, (_e, input: unknown) => indas.generate(requireGenerateInput(input)))
   handleQuery(IPC.indasShowGenerated, () => indas.showGenerated())
+  handleResult(IPC.indasSave, (_e, req: unknown) => indas.save(requireSaveRequest(req)))
+  handleResult(IPC.indasOpen, (_e, path: unknown) => indas.open(requireProjectPath(path)))
+}
+
+function requireSaveRequest(v: unknown): IndasSaveRequest {
+  const r = v as IndasSaveRequest
+  const ok =
+    !!r &&
+    typeof r === 'object' &&
+    typeof r.projectId === 'string' &&
+    /^[a-zA-Z0-9-]{1,64}$/.test(r.projectId) &&
+    (r.path === null || (typeof r.path === 'string' && r.path.toLowerCase().endsWith('.axbrl'))) &&
+    !!r.draft &&
+    typeof r.draft.version === 'number' &&
+    !!r.company &&
+    typeof r.company.name === 'string' &&
+    typeof r.company.cin === 'string' &&
+    typeof r.nature === 'string' &&
+    !!r.cy &&
+    typeof r.cy.start === 'string' &&
+    typeof r.cy.end === 'string'
+  if (!ok) throw new Error('Invalid project data')
+  return r
+}
+
+function requireProjectPath(v: unknown): string {
+  const path = requireString(v, 'path')
+  if (!path.toLowerCase().endsWith('.axbrl')) throw new Error('Not a project file')
+  return path
 }
 
 function requireRecommendRequest(v: unknown): RecommendRequest {

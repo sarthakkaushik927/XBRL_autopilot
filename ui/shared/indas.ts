@@ -148,3 +148,29 @@ export interface GenerateXmlProblem {
 export type GenerateXmlResult =
   | { ok: true; path: string; fileName: string; sizeKb: number }
   | { ok: false; errors: GenerateXmlProblem[] }
+
+// ---------------------------------------------------------------- saving the work (docs/17 projects folder)
+
+/** The screen's work as saved in the project file (opaque to main; `version` guards old apps). */
+export type IndasDraft = { version: number } & Record<string, unknown>
+
+export interface IndasSaveRequest {
+  projectId: string
+  /** null = a new file in the projects folder, named after the company and year */
+  path: string | null
+  draft: IndasDraft
+  company: { name: string; cin: string }
+  nature: string
+  cy: { start: string; end: string }
+}
+
+export interface IndasSaved {
+  path: string
+  savedAt: string
+}
+
+export interface IndasOpened {
+  path: string
+  projectId: string
+  draft: IndasDraft
+}

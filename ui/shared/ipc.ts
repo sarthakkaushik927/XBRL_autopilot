@@ -1,5 +1,15 @@
 /** Shared IPC contract between main, preload and renderer. See docs/09-ipc-and-sidecar-api.md. */
-import type { ConceptSuggestion, GenerateXmlInput, GenerateXmlResult, MasterFields, RecommendRequest, TransformResult } from './indas'
+import type {
+  ConceptSuggestion,
+  GenerateXmlInput,
+  GenerateXmlResult,
+  IndasOpened,
+  IndasSaved,
+  IndasSaveRequest,
+  MasterFields,
+  RecommendRequest,
+  TransformResult,
+} from './indas'
 import type {
   AppSettings,
   ElrInfo,
@@ -220,6 +230,8 @@ export const IPC = {
   indasGenerate: 'indas:generate',
   indasShowGenerated: 'indas:show-generated',
   indasProgress: 'indas:progress',
+  indasSave: 'indas:save',
+  indasOpen: 'indas:open',
 } as const
 
 /** The API exposed on window.xap by the preload script. */
@@ -416,6 +428,10 @@ export interface XapApi {
     generate(input: GenerateXmlInput): Promise<Result<GenerateXmlResult>>
     /** shows the last generated XML in Explorer */
     showGenerated(): Promise<void>
+    /** saves the work to the projects folder (or to its existing file) */
+    save(req: IndasSaveRequest): Promise<Result<IndasSaved>>
+    /** reopens a saved Ind AS project */
+    open(path: string): Promise<Result<IndasOpened>>
     onProgress(cb: (p: { done: number; total: number }) => void): () => void
   }
 }

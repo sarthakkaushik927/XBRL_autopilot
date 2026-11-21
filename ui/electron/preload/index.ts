@@ -152,6 +152,8 @@ const api: XapApi = {
     generate: (input) => invoke(IPC.indasGenerate, input),
     showGenerated: () => invoke(IPC.indasShowGenerated),
     onProgress: (cb) => subscribe<{ done: number; total: number }>(IPC.indasProgress, cb),
+    save: (req) => invoke(IPC.indasSave, req),
+    open: (path) => invoke(IPC.indasOpen, path),
   },
 }
 
