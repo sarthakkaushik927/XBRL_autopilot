@@ -41,6 +41,7 @@ All under `/api/v1/indas/`:
 - **The six canonical sheets are the pipeline stage** (not only an export view as in ADR-0016 decision 6).
 - **Removed on Vashu's `main`:** `/taxonomies` and `/mapping` routes, the engine authority / engine rules builders and their `knowledge_base/*_engine_*.json` outputs, the Dixon and Rebel instances. The old UI and engine tests that use them will break; that is accepted during the rework (see CLAUDE.md → Branching).
 - **Client workbooks in `notebooks/`** are accepted by the team; don't flag them.
+- **AI and client fixtures (2026-11-21, Sarthak):** line-item names and headings from the client workbooks (e.g. HPL) may be sent to Groq for the AI tag pick and in the Ind AS e2e run. Amounts, company names, CINs and whole workbooks are never sent. (Replaces CLAUDE.md's old "never send them to an AI service".)
 
 ### 4. Projects folder (decided 2026-11-21) ✅
 - Filings are saved by default to **`<Program Files>\XBRL_Autopilot\Projects`**. The per-machine installer creates it and makes it writable for every user (`ui/build/installer.nsh`).

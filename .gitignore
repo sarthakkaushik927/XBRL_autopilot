@@ -42,3 +42,6 @@ engine/authority/*.json
 # Sidecar working files (/indas/transform, /indas/generateXML outputs; deleted after DELETE_FILE_AFTER)
 /output/
 /static/
+
+# Claude Code personal settings
+.claude/settings.local.json
