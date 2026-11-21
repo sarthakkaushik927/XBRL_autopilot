@@ -489,6 +489,7 @@ class XbrlXmlGenerator:
             ("6. BALANCE SHEET FACTS", ("balanceSheet", "balance_sheet"), "instant"),
             ("7. PROFIT & LOSS FACTS", ("profitLoss", "profit_and_loss", "pnl"), "duration"),
             ("7b. CASH FLOW FACTS", ("cashFlow", "cash_flow"), "duration"),
+            ("7c. NOTE FACTS", ("noteLines",), "instant"),
         )
         emitted: set[tuple[str, str]] = set()  # (concept, context): an opening balance can repeat the PY closing
         for title, keys, default_period in sections:

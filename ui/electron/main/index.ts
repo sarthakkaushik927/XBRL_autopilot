@@ -146,7 +146,11 @@ const mandatory = new MandatoryInputService(projects)
 const generate = new GenerateService(projects, new FileOutputWriter(join(userData, 'output')))
 // docs/17: Vashu's Ind AS pipeline (/indas routes); generated XML goes to the projects folder
 const indas = new IndasController(
-  new IndasPipelineService(sidecar, { write: (_p, name, text) => new FileOutputWriter(projectsFolder.dir()).write(null, name, text) }),
+  new IndasPipelineService(
+    sidecar,
+    { write: (_p, name, text) => new FileOutputWriter(projectsFolder.dir()).write(null, name, text) },
+    () => settings.get().aiConsent,
+  ),
   getWindow,
   () => projectsFolder.dir(),
   (done, total) => mainWindow?.webContents.send(IPC.indasProgress, { done, total }),

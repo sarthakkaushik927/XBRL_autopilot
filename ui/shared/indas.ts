@@ -1,6 +1,6 @@
 /**
  * Contracts for Vashu's Ind AS pipeline (docs/17): Excel → canonical sheets → tags → masters → XML,
- * driven through the sidecar's /api/v1/indas/* routes.
+ * driven through the sidecar's /api/v1/indas/* routes. Every canonical sheet is tagged (docs/15 §5).
  */
 
 /** One canonical row as the sidecar returns it (column → value; blank cells are null). */
@@ -16,12 +16,40 @@ export const CANONICAL_SHEETS = [
   'CANONICAL_FINANCIAL_NOTES',
 ] as const
 
-/** The statements /indas/generateXML accepts today, with the canonical sheet each comes from. */
-export const TAGGED_STATEMENTS = [
+/** Sheets tagged line by line ([L]); `key` is the /generateXML statements field. */
+export const LINE_SHEETS = [
   { key: 'balanceSheet', sheet: 'CANONICAL_BS', title: 'Balance Sheet' },
-  { key: 'profitLoss', sheet: 'CANONICAL_PL', title: 'Profit and Loss' },
+  { key: 'profitLoss', sheet: 'CANONICAL_PL', title: 'Profit & Loss' },
+  { key: 'cashFlow', sheet: 'CANONICAL_CF', title: 'Cash Flow' },
+  { key: 'noteLines', sheet: 'CANONICAL_FINANCIAL_NOTES', title: 'Notes' },
 ] as const
-export type StatementKey = (typeof TAGGED_STATEMENTS)[number]['key']
+export type StatementKey = (typeof LINE_SHEETS)[number]['key']
+
+/**
+ * Table sheets ([T]): rows are members of one axis (docs/15 §4.4, §4.5). The axis qnames match the sidecar's
+ * SHEET_AXES (src/services/sheet_scope.py); `table` is what /generateXML keys its checks on.
+ */
+export const SOCIE_TABLE = { sheet: 'CANONICAL_SOCIE', table: 'ind-as:StatementOfChangesInEquityTable', axis: 'ind-as:ComponentsOfEquityAxis' } as const
+export const PPE_TABLE = { sheet: 'CANONICAL_PPE_SCHEDULE', table: 'ind-as:PropertyPlantAndEquipmentTable', axis: 'ind-as:ClassesOfPropertyPlantAndEquipmentAxis' } as const
+/** The scope name for the notes' narrative text blocks ([E]). */
+export const TEXT_BLOCKS_SCOPE = 'TEXT_BLOCKS'
+
+/** PPE schedule column → /generateXML PPE row field. */
+export const PPE_FIELDS = {
+  Gross_Opening: 'grossOpening',
+  Gross_Additions: 'grossAdditions',
+  Gross_Disposals: 'grossDisposals',
+  Gross_Closing: 'grossClosing',
+  Dep_Opening: 'depOpening',
+  Dep_For_Year: 'depForYear',
+  Dep_Disposals: 'depDisposals',
+  Dep_Closing: 'depClosing',
+  Net_Current_Year: 'netCurrentYear',
+  Net_Previous_Year: 'netPreviousYear',
+} as const
+
+/** "start" = an opening balance (an instant concept reported at the start of the year). */
+export type PeriodRole = 'start' | 'end'
 
 export interface TransformResult {
   /** the uploaded workbook's file name */
@@ -40,6 +68,19 @@ export interface ConceptSuggestion {
   type: string | null
   periodType: string | null
   balance: string | null
+  /** 'ai' when the LLM chose it among the scoped candidates */
+  pickedBy: 'ai' | null
+}
+
+/** What to suggest for (docs/15 §3: always one sheet's scope). */
+export interface RecommendRequest {
+  keys: string[]
+  /** each key's headings (breadcrumb), shown to the AI */
+  contexts?: string[]
+  /** a canonical sheet name, or TEXT_BLOCKS_SCOPE */
+  scope: string
+  /** 'member' = members of the sheet's table axis */
+  kind?: 'concept' | 'member'
 }
 
 export interface MasterField {
@@ -61,11 +102,23 @@ export interface Signatory {
   signingDate?: string
 }
 
-/** One tagged statement line (amounts exactly as the canonical sheet gave them). */
+/** One tagged line (amounts exactly as the canonical sheet gave them). */
 export interface StatementLine {
   concept: string
   cy: number | null
   py: number | null
+  periodRole?: PeriodRole
+}
+
+export interface TableInput {
+  table: string
+  axis: string
+  rows: Record<string, string | number | null>[]
+}
+
+export interface NoteText {
+  concept: string
+  content: string
 }
 
 export interface GenerateXmlInput {
@@ -81,6 +134,8 @@ export interface GenerateXmlInput {
     signatories: Signatory[]
   }
   statements: Record<StatementKey, StatementLine[]>
+  tables: TableInput[]
+  notes: NoteText[]
   /** used for the output file name */
   companyName: string
 }

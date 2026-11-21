@@ -38,7 +38,17 @@ const writer = () => {
 const input = (over: Partial<GenerateXmlInput> = {}): GenerateXmlInput => ({
   meta: { nature: 'Standalone', startDate: '2025-04-01', endDate: '2026-03-31' },
   master: { company: { 'in-ca:NameOfCompany': 'Acme Pvt Ltd', 'in-ca:TypeOfIndustry': ' ' }, auditor: {}, signatories: [{ din: ' 01234567 ', name: 'A B', designation: '' }] },
-  statements: { balanceSheet: [{ concept: 'ind-as:EquityShareCapital', cy: 417830, py: 390220 }, { concept: '', cy: 1, py: 1 }], profitLoss: [] },
+  statements: {
+    balanceSheet: [{ concept: 'ind-as:EquityShareCapital', cy: 417830, py: 390220 }, { concept: '', cy: 1, py: 1 }],
+    profitLoss: [],
+    cashFlow: [{ concept: 'ind-as:CashAndCashEquivalentsCashFlowStatement', cy: 10, py: 8, periodRole: 'start' }],
+    noteLines: [],
+  },
+  tables: [
+    { table: 'ind-as:StatementOfChangesInEquityTable', axis: 'ind-as:ComponentsOfEquityAxis', rows: [] },
+    { table: 'ind-as:PropertyPlantAndEquipmentTable', axis: 'ind-as:ClassesOfPropertyPlantAndEquipmentAxis', rows: [{ member: 'ind-as:BuildingsMember', grossClosing: 5 }] },
+  ],
+  notes: [{ concept: 'ind-as:X', content: '  ' }, { concept: 'ind-as:DisclosureOfPropertyPlantAndEquipmentExplanatory', content: 'PPE note' }],
   companyName: 'Acme Pvt Ltd',
   ...over,
 })
@@ -76,10 +86,13 @@ describe('IndasPipelineService', () => {
         ),
     })
     const progress: number[] = []
-    const out = await new IndasPipelineService(sidecar, writer()).recommend(keys, 3, (done) => progress.push(done))
+    const contexts = keys.map((k) => `ctx ${k}`)
+    const out = await new IndasPipelineService(sidecar, writer(), () => true).recommend({ keys, contexts, scope: 'CANONICAL_BS' }, 3, (done) => progress.push(done))
     expect(calls.map((c) => (c.body as { keys: string[] }).keys.length)).toEqual([RECOMMEND_BATCH, 2])
+    // every batch carries its sheet scope, its keys' contexts and the AI consent
+    expect(calls[1].body).toMatchObject({ scope: 'CANONICAL_BS', kind: 'concept', use_llm: true, contexts: contexts.slice(RECOMMEND_BATCH) })
     expect(out).toHaveLength(keys.length)
-    expect(out[0]).toEqual([{ qname: 'ind-as:k0', label: 'Label k0', score: 0.9, type: 'monetaryItemType', periodType: null, balance: null }])
+    expect(out[0]).toEqual([{ qname: 'ind-as:k0', label: 'Label k0', score: 0.9, type: 'monetaryItemType', periodType: null, balance: null, pickedBy: null }])
     expect(out[1]).toEqual([]) // nothing matched; a match without a qname is dropped
     expect(progress).toEqual([RECOMMEND_BATCH, keys.length])
   })
@@ -113,9 +126,20 @@ describe('IndasPipelineService', () => {
 })
 
 describe('toPayload', () => {
+  it('asks without the AI unless the user allowed it', async () => {
+    const { sidecar, calls } = fakeSidecar({ '/api/v1/indas/recommend/': () => ok([[]]) })
+    await new IndasPipelineService(sidecar, writer()).recommend({ keys: ['Buildings'], scope: 'CANONICAL_PPE_SCHEDULE', kind: 'member' })
+    expect(calls[0].body).toMatchObject({ scope: 'CANONICAL_PPE_SCHEDULE', kind: 'member', use_llm: false })
+  })
+
   it('matches the GenerateXML schema: untagged lines and blank master values dropped, DINs trimmed', () => {
     const p = toPayload(input())
     expect(p.statements.balanceSheet).toEqual([{ concept: 'ind-as:EquityShareCapital', cy: 417830, py: 390220 }])
+    expect(p.statements.cashFlow).toEqual([{ concept: 'ind-as:CashAndCashEquivalentsCashFlowStatement', cy: 10, py: 8, periodRole: 'start' }])
+    expect(p.statements.noteLines).toEqual([])
+    // an empty table is left out; note text without content is left out
+    expect(p.tables.map((t) => t.table)).toEqual(['ind-as:PropertyPlantAndEquipmentTable'])
+    expect(p.notes).toEqual([{ concept: 'ind-as:DisclosureOfPropertyPlantAndEquipmentExplanatory', content: 'PPE note' }])
     expect(p.master.company).toEqual({ 'in-ca:NameOfCompany': 'Acme Pvt Ltd' })
     expect(p.master.signatories).toEqual([{ din: '01234567', name: 'A B', designation: 'Director', signingDate: undefined }])
     expect(p.meta).toEqual({ taxonomy: 'ind_as', nature: 'Standalone', startDate: '2025-04-01', endDate: '2026-03-31', unit: 'INR', decimals: '0' })

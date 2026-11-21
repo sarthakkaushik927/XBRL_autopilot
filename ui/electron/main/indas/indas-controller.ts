@@ -5,7 +5,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { dialog, shell, type BrowserWindow } from 'electron'
-import type { ConceptSuggestion, GenerateXmlInput, GenerateXmlResult, MasterFields, TransformResult } from '@shared/indas'
+import type { ConceptSuggestion, GenerateXmlInput, GenerateXmlResult, MasterFields, RecommendRequest, TransformResult } from '@shared/indas'
 import type { IndasPipelineService } from '../services/indas-pipeline-service'
 
 export const TEMPLATE_FILE_NAME = 'XBRL_Autopilot_Standard_Template.xlsx'
@@ -46,8 +46,8 @@ export class IndasController {
     return this.service.transform(basename(file), new Uint8Array(await readFile(file)))
   }
 
-  recommend(keys: string[]): Promise<ConceptSuggestion[][]> {
-    return this.service.recommend(keys, 3, this.onProgress)
+  recommend(req: RecommendRequest): Promise<ConceptSuggestion[][]> {
+    return this.service.recommend(req, 3, this.onProgress)
   }
 
   masterFields(): Promise<MasterFields> {

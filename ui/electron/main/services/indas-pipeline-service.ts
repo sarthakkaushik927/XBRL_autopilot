@@ -11,16 +11,18 @@ import type {
   GenerateXmlProblem,
   GenerateXmlResult,
   MasterFields,
+  RecommendRequest,
   StatementLine,
   TransformResult,
 } from '@shared/indas'
+import { LINE_SHEETS } from '@shared/indas'
 import { sidecarCall } from '../infra/sidecar-call'
 import type { OutputWriter } from './mca-tool-service'
 import type { SidecarClient, SidecarFileClient } from './ports'
 
 const BASE = '/api/v1/indas'
 /** Keys per /recommend call: small enough to show progress and stay under the request timeout. */
-export const RECOMMEND_BATCH = 8
+export const RECOMMEND_BATCH = 20
 const SLOW_MS = 300_000
 
 interface Envelope<T> {
@@ -39,6 +41,8 @@ export class IndasPipelineService {
   constructor(
     private readonly sidecar: SidecarClient & SidecarFileClient,
     private readonly output: OutputWriter,
+    /** the user's AI consent (Settings): only then does the AI pick among the candidates */
+    private readonly aiAllowed: () => boolean = () => false,
   ) {}
 
   /** The standard template workbook (.xlsx bytes) — input path 1. */
@@ -63,15 +67,24 @@ export class IndasPipelineService {
   }
 
   /**
-   * Tag suggestions for each key, in key order (an empty list when nothing matched).
+   * Tag suggestions for each key, in key order (an empty list when nothing matched), from the request's sheet
+   * scope only (docs/15 §3). The AI picks among the candidates only when the user allowed AI (Settings).
    * `onProgress(done, total)` after each batch.
    */
-  async recommend(keys: string[], topK = 3, onProgress?: (done: number, total: number) => void): Promise<ConceptSuggestion[][]> {
+  async recommend(req: RecommendRequest, topK = 3, onProgress?: (done: number, total: number) => void): Promise<ConceptSuggestion[][]> {
+    const { keys } = req
     const out: ConceptSuggestion[][] = []
     for (let i = 0; i < keys.length; i += RECOMMEND_BATCH) {
       const batch = keys.slice(i, i + RECOMMEND_BATCH)
       const data = await sidecarCall<RawMatch[][]>(this.sidecar, 'POST', `${BASE}/recommend/`, {
-        body: { keys: batch, top_k: topK },
+        body: {
+          keys: batch,
+          contexts: req.contexts?.slice(i, i + RECOMMEND_BATCH),
+          scope: req.scope,
+          kind: req.kind ?? 'concept',
+          top_k: topK,
+          use_llm: this.aiAllowed(),
+        },
         timeoutMs: SLOW_MS,
         what: 'Tag suggestions',
       })
@@ -113,12 +126,14 @@ function toSuggestion(m: RawMatch): ConceptSuggestion | null {
     type: str(md.type),
     periodType: str(md.periodType),
     balance: str(md.balance),
+    pickedBy: md.pickedBy === 'ai' ? 'ai' : null,
   }
 }
 
 /** The /generateXML request body (api/v1/schemas/indas_schema.py → GenerateXML). */
 export function toPayload(input: GenerateXmlInput) {
-  const lines = (rows: StatementLine[]) => rows.filter((r) => r.concept).map((r) => ({ concept: r.concept, cy: r.cy, py: r.py }))
+  const lines = (rows: StatementLine[] = []) =>
+    rows.filter((r) => r.concept).map((r) => ({ concept: r.concept, cy: r.cy, py: r.py, ...(r.periodRole === 'start' ? { periodRole: 'start' } : {}) }))
   const filled = (o: Record<string, string>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v.trim() !== ''))
   return {
     meta: { taxonomy: 'ind_as', nature: input.meta.nature, startDate: input.meta.startDate, endDate: input.meta.endDate, unit: 'INR', decimals: '0' },
@@ -132,9 +147,9 @@ export function toPayload(input: GenerateXmlInput) {
         signingDate: s.signingDate || undefined,
       })),
     },
-    statements: { balanceSheet: lines(input.statements.balanceSheet), profitLoss: lines(input.statements.profitLoss) },
-    tables: [],
-    notes: [],
+    statements: Object.fromEntries(LINE_SHEETS.map((s) => [s.key, lines(input.statements[s.key])])),
+    tables: input.tables.filter((t) => t.rows.length > 0),
+    notes: input.notes.filter((n) => n.concept && n.content.trim()).map((n) => ({ concept: n.concept, content: n.content })),
   }
 }
 

@@ -21,6 +21,7 @@ SHEET_ELRS: dict[str, tuple[str, ...]] = {
 }
 # Notes are tagged against every note ELR (4xxxxx-6xxxxx), the statements excluded.
 NOTE_ELR_PREFIXES = ("4", "5", "6")
+STATEMENT_ELRS = frozenset(e for s in ("CANONICAL_BS", "CANONICAL_PL", "CANONICAL_CF") for e in SHEET_ELRS[s])
 
 # The axis whose members a table sheet's rows are (docs/15 §4.4, §4.5).
 SHEET_AXES: dict[str, tuple[str, str]] = {
@@ -33,10 +34,15 @@ NON_NUMERIC_TYPES = frozenset({"textBlockItemType", "stringItemType", "dateItemT
 STRUCTURAL_SUFFIXES = ("Abstract", "Axis", "Member", "Table", "Domain", "LineItems")
 
 
+# The notes' narrative text [E] (docs/15 §5 "Notes Tagging"): text-block concepts of the note ELRs.
+TEXT_BLOCKS = "TEXT_BLOCKS"
+
+
 def sheet_elrs(kb: dict[str, Any], sheet: str) -> list[str]:
-    if sheet == "CANONICAL_FINANCIAL_NOTES":
-        statements = {e for elrs in SHEET_ELRS.values() for e in elrs}
-        return [e for e in kb.get("presentation", {}) if e.startswith(NOTE_ELR_PREFIXES) and e not in statements]
+    if sheet in ("CANONICAL_FINANCIAL_NOTES", TEXT_BLOCKS):
+        # numeric note lines: not the ELRs another sheet already tags; text blocks: every note ELR
+        taken = STATEMENT_ELRS if sheet == TEXT_BLOCKS else {e for elrs in SHEET_ELRS.values() for e in elrs}
+        return [e for e in kb.get("presentation", {}) if e.startswith(NOTE_ELR_PREFIXES) and e not in taken]
     if sheet not in SHEET_ELRS:
         raise ValueError(f"Unknown sheet: {sheet}")
     return list(SHEET_ELRS[sheet])
@@ -51,13 +57,18 @@ def _taggable(kb: dict[str, Any], qname: str) -> bool:
     return c.get("type") not in NON_NUMERIC_TYPES
 
 
+def _text_block(kb: dict[str, Any], qname: str) -> bool:
+    return (kb.get("concepts", {}).get(qname) or {}).get("type") == "textBlockItemType"
+
+
 def scope_concepts(kb: dict[str, Any], sheet: str) -> list[str]:
-    """Non-abstract numeric concepts in the sheet's ELRs, in presentation order, no duplicates."""
+    """Non-abstract numeric concepts in the sheet's ELRs (text blocks for TEXT_BLOCKS), in presentation order."""
+    wanted = _text_block if sheet == TEXT_BLOCKS else _taggable
     seen: dict[str, None] = {}
     for elr in sheet_elrs(kb, sheet):
         for arc in kb.get("presentation", {}).get(elr, []):
             for q in (arc["from"], arc["to"]):
-                if q not in seen and _taggable(kb, q):
+                if q not in seen and wanted(kb, q):
                     seen[q] = None
     return list(seen)
 

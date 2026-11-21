@@ -1,18 +1,25 @@
 /**
- * Pure helpers for the Ind AS pipeline screen (docs/17): canonical rows → taggable lines, the suggestion key,
- * master-field prefill and the /generateXML input. No React, no IPC (tested in ui/test/indas-model.test.ts).
+ * Pure helpers for the Ind AS pipeline screen (docs/17): canonical rows → taggable rows for every sheet
+ * (docs/15 §5), the suggestion keys, master-field prefill and the /generateXML input. No React, no IPC
+ * (tested in ui/test/indas-model.test.ts).
  */
 import {
-  TAGGED_STATEMENTS,
+  LINE_SHEETS,
+  PPE_FIELDS,
+  PPE_TABLE,
+  SOCIE_TABLE,
   type CanonicalRow,
   type ConceptSuggestion,
   type GenerateXmlInput,
   type MasterField,
+  type NoteText,
+  type PeriodRole,
   type Signatory,
   type StatementKey,
   type TransformResult,
 } from '@shared/indas'
 
+/** A line of a statement or of the notes ([L]). */
 export interface TagRow {
   id: string
   statement: StatementKey
@@ -23,6 +30,39 @@ export interface TagRow {
   py: number | null
   suggestions: ConceptSuggestion[]
   /** the concept the user accepted ('' = not tagged) */
+  concept: string
+  /** for an instant concept: closing (end) or opening (start) balance */
+  periodRole: PeriodRole
+}
+
+/** A changes-in-equity movement: concept (the movement) × member (the equity component). */
+export interface SocieRow {
+  id: string
+  component: string
+  description: string
+  cy: number | null
+  py: number | null
+  suggestions: ConceptSuggestion[]
+  concept: string
+  memberSuggestions: ConceptSuggestion[]
+  member: string
+  periodRole: PeriodRole
+}
+
+/** A PPE schedule row: one asset class (a member); the columns map to fixed fields (no AI needed). */
+export interface PpeRow {
+  id: string
+  assetClass: string
+  amounts: Record<string, number | null>
+  memberSuggestions: ConceptSuggestion[]
+  member: string
+}
+
+export interface TextBlockRow {
+  id: string
+  heading: string
+  content: string
+  suggestions: ConceptSuggestion[]
   concept: string
 }
 
@@ -44,29 +84,68 @@ export function amount(v: CanonicalRow[string] | undefined): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/** The statement lines that carry an amount, in sheet order, ready to tag. */
+/** The lines of every line-tagged sheet (BS, P&L, cash flow, notes) that carry an amount, in sheet order. */
 export function rowsFromTransform(t: TransformResult): TagRow[] {
   const out: TagRow[] = []
-  for (const st of TAGGED_STATEMENTS) {
+  for (const st of LINE_SHEETS) {
     ;(t.sheets[st.sheet] ?? []).forEach((r, i) => {
       const cy = amount(r.Current_Year_Amount)
       const py = amount(r.Previous_Year_Amount)
       const label = text(r.Line_Item)
       if (!label || (cy === null && py === null)) return
-      out.push({ id: `${st.key}:${i}`, statement: st.key, label, breadcrumb: text(r.Breadcrumb_Hierarchy), note: text(r.Note_No).replace(/\.0$/, ''), cy, py, suggestions: [], concept: '' })
+      out.push({
+        id: `${st.key}:${i}`,
+        statement: st.key,
+        label,
+        breadcrumb: text(r.Breadcrumb_Hierarchy),
+        note: text(r.Note_No).replace(/\.0$/, ''),
+        cy,
+        py,
+        suggestions: [],
+        concept: '',
+        periodRole: 'end',
+      })
     })
   }
   return out
 }
 
-/** What the tagger searches with: the breadcrumb (it carries the section) or else the line item. */
-export function suggestionKey(r: Pick<TagRow, 'label' | 'breadcrumb'>): string {
-  return r.breadcrumb || r.label
+export function socieFromTransform(t: TransformResult): SocieRow[] {
+  return (t.sheets[SOCIE_TABLE.sheet] ?? []).flatMap((r, i) => {
+    const cy = amount(r.Current_Year_Amount)
+    const py = amount(r.Previous_Year_Amount)
+    const description = text(r.Transaction_Description)
+    if (!description || (cy === null && py === null)) return []
+    return [{ id: `socie:${i}`, component: text(r.Equity_Component), description, cy, py, suggestions: [], concept: '', memberSuggestions: [], member: '', periodRole: 'end' as const }]
+  })
+}
+
+export function ppeFromTransform(t: TransformResult): PpeRow[] {
+  return (t.sheets[PPE_TABLE.sheet] ?? []).flatMap((r, i) => {
+    const assetClass = text(r.Asset_Class)
+    if (!assetClass) return []
+    const amounts = Object.fromEntries(Object.keys(PPE_FIELDS).map((c) => [c, amount(r[c])]))
+    return [{ id: `ppe:${i}`, assetClass, amounts, memberSuggestions: [], member: '' }]
+  })
+}
+
+/** What the tagger searches with: the line item; its headings go along as context (docs/15 §3). */
+export function suggestionKey(r: Pick<TagRow, 'label'>): string {
+  return r.label
 }
 
 /** Accept the top suggestion on every row the user hasn't tagged yet. */
-export function acceptTopSuggestions(rows: TagRow[]): TagRow[] {
+export function acceptTopSuggestions<T extends { concept: string; suggestions: ConceptSuggestion[] }>(rows: T[]): T[] {
   return rows.map((r) => (r.concept || !r.suggestions[0] ? r : { ...r, concept: r.suggestions[0].qname }))
+}
+
+export function acceptTopMembers<T extends { member: string; memberSuggestions: ConceptSuggestion[] }>(rows: T[]): T[] {
+  return rows.map((r) => (r.member || !r.memberSuggestions[0] ? r : { ...r, member: r.memberSuggestions[0].qname }))
+}
+
+/** Whether the accepted concept is reported at an instant (then the row can be an opening balance). */
+export function isInstant(concept: string, suggestions: ConceptSuggestion[]): boolean {
+  return suggestions.find((s) => s.qname === concept)?.periodType === 'instant'
 }
 
 /** Values the app already knows (period, nature) for the matching master fields; the user's own values win. */
@@ -92,8 +171,19 @@ export function fieldKind(type: string): 'date' | 'boolean' | 'text' | 'longtext
   return 'text'
 }
 
+export interface FilingDraft {
+  rows: TagRow[]
+  socie: SocieRow[]
+  ppe: PpeRow[]
+  texts: TextBlockRow[]
+  meta: FilingMeta
+  company: Record<string, string>
+  auditor: Record<string, string>
+  signatories: Signatory[]
+}
+
 /** Problems that would make /generateXML refuse, found before sending (the sidecar checks again). */
-export function readinessProblems(input: { rows: TagRow[]; meta: FilingMeta; signatories: Signatory[]; companyFields: MasterField[]; company: Record<string, string> }): string[] {
+export function readinessProblems(input: Pick<FilingDraft, 'rows' | 'meta' | 'signatories' | 'company'> & { companyFields: MasterField[] }): string[] {
   const p: string[] = []
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.meta.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(input.meta.endDate)) p.push('Enter the financial year start and end dates.')
   if (!input.rows.some((r) => r.concept)) p.push('Tag at least one statement line.')
@@ -106,20 +196,28 @@ export function readinessProblems(input: { rows: TagRow[]; meta: FilingMeta; sig
   return p
 }
 
-export function buildGenerateInput(s: {
-  rows: TagRow[]
-  meta: FilingMeta
-  company: Record<string, string>
-  auditor: Record<string, string>
-  signatories: Signatory[]
-  companyNameField?: string
-}): GenerateXmlInput {
-  const lines = (key: StatementKey) => s.rows.filter((r) => r.statement === key && r.concept).map((r) => ({ concept: r.concept, cy: r.cy, py: r.py }))
+export function buildGenerateInput(s: FilingDraft & { companyNameField?: string }): GenerateXmlInput {
+  const lines = (key: StatementKey) =>
+    s.rows.filter((r) => r.statement === key && r.concept).map((r) => ({ concept: r.concept, cy: r.cy, py: r.py, periodRole: r.periodRole }))
+  const statements = Object.fromEntries(LINE_SHEETS.map((st) => [st.key, lines(st.key)])) as GenerateXmlInput['statements']
+  const socieRows = s.socie
+    .filter((r) => r.concept && r.member)
+    .map((r) => ({ member: r.member, concept: r.concept, cy: r.cy, py: r.py, ...(r.periodRole === 'start' ? { periodRole: 'start' } : {}) }))
+  // his PPE checks do arithmetic on every field: a blank schedule cell is 0
+  const ppeRows = s.ppe
+    .filter((r) => r.member)
+    .map((r) => ({ member: r.member, ...Object.fromEntries(Object.entries(PPE_FIELDS).map(([col, field]) => [field, r.amounts[col] ?? 0])) }))
+  const notes: NoteText[] = s.texts.filter((t) => t.concept && t.content.trim()).map((t) => ({ concept: t.concept, content: t.content }))
   const nameKey = s.companyNameField ?? Object.keys(s.company).find((k) => k.endsWith(':NameOfCompany')) ?? ''
   return {
     meta: s.meta,
     master: { company: s.company, auditor: s.auditor, signatories: s.signatories },
-    statements: { balanceSheet: lines('balanceSheet'), profitLoss: lines('profitLoss') },
+    statements,
+    tables: [
+      { table: SOCIE_TABLE.table, axis: SOCIE_TABLE.axis, rows: socieRows },
+      { table: PPE_TABLE.table, axis: PPE_TABLE.axis, rows: ppeRows },
+    ],
+    notes,
     companyName: (nameKey && s.company[nameKey]) || 'Filing',
   }
 }

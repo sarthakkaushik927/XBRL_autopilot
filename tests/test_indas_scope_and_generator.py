@@ -136,3 +136,20 @@ def test_validator_flags_an_opening_balance_that_differs_from_the_prior_closing(
     assert any(e["type"] == "OPENING_CLOSING_MISMATCH" for e in errors)
     _, ok_errors = IndASValidator(INDAS_OUTPUT_JSON_PATH).validate(_payload())
     assert not any(e["type"] == "OPENING_CLOSING_MISMATCH" for e in ok_errors)
+
+
+def test_text_block_scope_is_the_notes_narrative_concepts(kb):
+    tb = scope_concepts(kb, "TEXT_BLOCKS")
+    assert tb and all(kb["concepts"][q]["type"] == "textBlockItemType" for q in tb)
+    assert "ind-as:DisclosureOfPropertyPlantAndEquipmentExplanatory" in tb
+
+
+def test_note_lines_use_each_concepts_period(concepts):
+    p = _payload()
+    p["statements"]["noteLines"] = [
+        {"concept": "ind-as:InventoriesAtNetRealisableValue", "cy": 7, "py": 6},
+        {"concept": "ind-as:InventoryWritedown", "cy": 2, "py": 1},
+    ]
+    x = XbrlXmlGenerator(p, concepts).build()
+    assert '<ind-as:InventoriesAtNetRealisableValue contextRef="CY_Instant" unitRef="INR" decimals="0">7<' in x
+    assert '<ind-as:InventoryWritedown contextRef="PY_Duration" unitRef="INR" decimals="0">1<' in x

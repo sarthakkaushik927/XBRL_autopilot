@@ -1,5 +1,5 @@
 /** Shared IPC contract between main, preload and renderer. See docs/09-ipc-and-sidecar-api.md. */
-import type { ConceptSuggestion, GenerateXmlInput, GenerateXmlResult, MasterFields, TransformResult } from './indas'
+import type { ConceptSuggestion, GenerateXmlInput, GenerateXmlResult, MasterFields, RecommendRequest, TransformResult } from './indas'
 import type {
   AppSettings,
   ElrInfo,
@@ -410,8 +410,8 @@ export interface XapApi {
     saveTemplate(): Promise<Result<string | null>>
     /** converts the workbook at `path` (no path → file dialog); null when cancelled */
     transform(path?: string): Promise<Result<TransformResult | null>>
-    /** tag suggestions per key, in key order (progress arrives through onProgress) */
-    recommend(keys: string[]): Promise<Result<ConceptSuggestion[][]>>
+    /** tag suggestions per key, in key order, from one sheet's scope (progress arrives through onProgress) */
+    recommend(req: RecommendRequest): Promise<Result<ConceptSuggestion[][]>>
     masterFields(): Promise<Result<MasterFields>>
     generate(input: GenerateXmlInput): Promise<Result<GenerateXmlResult>>
     /** shows the last generated XML in Explorer */

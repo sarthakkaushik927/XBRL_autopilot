@@ -8,7 +8,7 @@ import type { AppSettings, NewFilingInput } from '@shared/project'
 import { PREVIEW_SPACINGS, type PreviewFormat } from '@xap/engine/basics'
 import type { ProjectController } from '../project/project-controller'
 import type { IndasController } from '../indas/indas-controller'
-import type { GenerateXmlInput } from '@shared/indas'
+import type { GenerateXmlInput, RecommendRequest } from '@shared/indas'
 import type { SavedProjectsService } from '../services/saved-projects-service'
 import type { AutoTagService } from '../services/auto-tag-service'
 import type { ColumnPeriodService } from '../services/column-period-service'
@@ -365,13 +365,25 @@ function requireSetSheetColumnsInput(v: unknown): SetSheetColumnsInput {
 function registerIndasIpc({ indas }: IpcDeps): void {
   handleResult(IPC.indasSaveTemplate, () => indas.saveTemplate())
   handleResult(IPC.indasTransform, (_e, path?: unknown) => indas.transform(path === undefined ? undefined : requireString(path, 'path')))
-  handleResult(IPC.indasRecommend, (_e, keys: unknown) => {
-    if (!Array.isArray(keys) || keys.length > 2000 || !keys.every((k) => typeof k === 'string')) throw new Error('Invalid keys')
-    return indas.recommend(keys as string[])
-  })
+  handleResult(IPC.indasRecommend, (_e, req: unknown) => indas.recommend(requireRecommendRequest(req)))
   handleResult(IPC.indasMasterFields, () => indas.masterFields())
   handleResult(IPC.indasGenerate, (_e, input: unknown) => indas.generate(requireGenerateInput(input)))
   handleQuery(IPC.indasShowGenerated, () => indas.showGenerated())
+}
+
+function requireRecommendRequest(v: unknown): RecommendRequest {
+  const r = v as RecommendRequest
+  const strings = (a: unknown, max: number) => Array.isArray(a) && a.length <= max && a.every((k) => typeof k === 'string')
+  const ok =
+    !!r &&
+    typeof r === 'object' &&
+    strings(r.keys, 2000) &&
+    (r.contexts === undefined || strings(r.contexts, 2000)) &&
+    typeof r.scope === 'string' &&
+    /^[A-Z_]{1,40}$/.test(r.scope) &&
+    (r.kind === undefined || r.kind === 'concept' || r.kind === 'member')
+  if (!ok) throw new Error('Invalid suggestion request')
+  return r
 }
 
 function requireGenerateInput(v: unknown): GenerateXmlInput {
@@ -388,7 +400,9 @@ function requireGenerateInput(v: unknown): GenerateXmlInput {
     Array.isArray(i.master.signatories) &&
     !!i.statements &&
     Array.isArray(i.statements.balanceSheet) &&
-    Array.isArray(i.statements.profitLoss)
+    Array.isArray(i.statements.profitLoss) &&
+    Array.isArray(i.tables) &&
+    Array.isArray(i.notes)
   if (!ok) throw new Error('Invalid filing data')
   return i
 }
