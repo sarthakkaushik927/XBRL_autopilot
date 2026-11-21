@@ -11,13 +11,16 @@ from src.constants import BASE_DIR, INDAS_OUTPUT_JSON_PATH, IND_AS_TAXONOMY_VDB,
 from src.core.logger import logger
 from src.utils.main_utils import load_file, load_json, save_file
 from src.pipeline.recom_taxonomies_pipeline import RecommendationPipeline
-from api.v1.schemas.indas_schema import RecommendSchema, GenerateXML
+from api.v1.schemas.indas_schema import CheckSchema, RecommendSchema, GenerateXML
 from src.pipeline.xml_generation_pipeline import XMLGenerationPipeline
 from api.helper.delete_file import delete_file_after
 from src.pipeline.indas_transformation import IndasTransformationPipeline
 from api.middlewares.multi_middleware import multer_middleware
 from src.transformation.template import TEMPLATE_FILE_NAME, build_standard_template
 from src.services.master_fields import master_fields
+from src.services.sheet_scope import knowledge_base
+from src.services.sheet_tree import sheet_trees
+from src.services import calc_check
 recomm_pipeline = RecommendationPipeline()
 router = APIRouter()
 
@@ -35,6 +38,24 @@ async def get_autherity():
         except Exception as e:
             logger.error("indas.authority_error", error=str(e))
             return error_response(message=f"Failed to load authority: {str(e)}", status_code=500)
+
+
+@router.get("/tree/{scope}")
+async def get_sheet_tree(scope: str, kind: str = "concept"):
+    """The split view's right pane: the presentation tree(s) of a sheet's ELRs, or its table axis members."""
+    with logger.span("indas.sheet_tree", scope=scope, kind=kind):
+        try:
+            data = sheet_trees(knowledge_base(), scope, "member" if kind == "member" else "concept")
+            return success_response(data=data, message="sheet tree", status_code=200)
+        except (KeyError, ValueError) as e:
+            return error_response(message=f"Unknown sheet: {scope}", status_code=400, errors=e)
+
+
+@router.post("/check")
+async def check_differences(payload: CheckSchema):
+    """Live Difference bar: calculation totals vs their tagged children, and the balance sheet balance."""
+    with logger.span("indas.check", rows=len(payload.rows)):
+        return success_response(data=calc_check.check(knowledge_base(), payload.rows), message="checked", status_code=200)
 
 
 @router.get("/master-fields")

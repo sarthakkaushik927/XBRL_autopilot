@@ -5,8 +5,11 @@ import {
   PPE_TABLE,
   SOCIE_TABLE,
   TEXT_BLOCKS_SCOPE,
+  type CheckResult,
   type ConceptSuggestion,
   type GenerateXmlResult,
+  type SheetTree,
+  type TreeNode,
   type MasterFields,
   type PeriodRole,
   type RecommendRequest,
@@ -18,6 +21,7 @@ import {
   acceptTopMembers,
   acceptTopSuggestions,
   buildGenerateInput,
+  checkRows,
   fromDraft,
   ppeFromTransform,
   projectCompanyName,
@@ -57,6 +61,12 @@ interface IndasState {
   auditor: Record<string, string>
   signatories: Signatory[]
   result: GenerateXmlResult | null
+  /** split view: the taxonomy trees loaded so far, by "scope:kind" */
+  trees: Record<string, SheetTree[]>
+  /** the row (and which of its fields) a click in the tree tags */
+  selection: { id: string; field: 'concept' | 'member' } | null
+  /** the live Difference check of the active line tab */
+  check: CheckResult | null
   /** the project this work is saved as */
   projectId: string
   savedPath: string | null
@@ -70,6 +80,13 @@ interface IndasState {
   closePipeline(): Promise<void>
   setStep(step: IndasStep): void
   setTab(tab: TagTab): void
+  select(id: string, field?: 'concept' | 'member'): void
+  /** tags the selected row (its selected field) with a node clicked in the tree */
+  tagFromTree(node: TreeNode): void
+  /** drops a row's first suggestion so the next one shows */
+  rejectSuggestion(id: string, field?: 'concept' | 'member'): void
+  loadTree(scope: string, kind: 'concept' | 'member'): Promise<void>
+  runCheck(): void
   saveTemplate(): Promise<void>
   /** no path → file dialog */
   upload(path?: string): Promise<void>
@@ -116,6 +133,8 @@ const initial = () => ({
   auditor: {},
   signatories: [blankSignatory(), blankSignatory()],
   result: null,
+  selection: null as { id: string; field: 'concept' | 'member' } | null,
+  check: null as CheckResult | null,
   projectId: newProjectId(),
   savedPath: null as string | null,
   savedAt: null as string | null,
@@ -125,7 +144,8 @@ function newProjectId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-const isLineTab = (tab: TagTab): tab is StatementKey => LINE_SHEETS.some((s) => s.key === tab)
+export const isLineTab = (tab: TagTab): tab is StatementKey => LINE_SHEETS.some((s) => s.key === tab)
+let checkTimer: ReturnType<typeof setTimeout> | undefined
 
 export const useIndas = create<IndasState>((set, get) => {
   const run = async (label: string, fn: () => Promise<void>) => {
@@ -195,6 +215,7 @@ export const useIndas = create<IndasState>((set, get) => {
   return {
     open: false,
     fields: null,
+    trees: {},
     ...initial(),
 
     openPipeline: () => set({ open: true }),
@@ -234,7 +255,53 @@ export const useIndas = create<IndasState>((set, get) => {
       set({ step })
       if (step === 'masters') void get().loadFields()
     },
-    setTab: (tab) => set({ tab }),
+    setTab: (tab) => {
+      set({ tab, selection: null, check: null })
+      get().runCheck()
+    },
+    select: (id, field = 'concept') => set({ selection: { id, field } }),
+    tagFromTree: (node) => {
+      const sel = get().selection
+      if (!sel) return
+      const qname = node.qname
+      // the clicked node joins the row's candidates (label, period type), so the cell and Opening/Closing know it
+      const asSuggestion: ConceptSuggestion = { qname, label: node.label, score: 0, type: node.type, periodType: node.periodType, balance: node.balance, pickedBy: null }
+      const withNode = <T extends { id: string; suggestions?: ConceptSuggestion[]; memberSuggestions?: ConceptSuggestion[] }>(r: T): T => {
+        if (r.id !== sel.id) return r
+        const key = sel.field === 'member' ? 'memberSuggestions' : 'suggestions'
+        const list = r[key] ?? []
+        return list.some((x) => x.qname === qname) ? r : { ...r, [key]: [...list, asSuggestion] }
+      }
+      set({ rows: get().rows.map(withNode), socie: get().socie.map(withNode), ppe: get().ppe.map(withNode), texts: get().texts.map(withNode) })
+      if (sel.field === 'member') get().setMember(sel.id, qname)
+      else get().setConcept(sel.id, qname)
+      // move on to the next untagged row of the same list, like webXBRL's keyboard flow
+      const list = [...get().rows, ...get().socie, ...get().ppe, ...get().texts] as { id: string; concept?: string; member?: string }[]
+      const i = list.findIndex((r) => r.id === sel.id)
+      const prefix = sel.id.split(':')[0]
+      const next = list.slice(i + 1).find((r) => r.id.split(':')[0] === prefix && !(sel.field === 'member' ? r.member : r.concept))
+      if (next) set({ selection: { id: next.id, field: sel.field } })
+    },
+    rejectSuggestion: (id, field = 'concept') => {
+      const drop = <T extends { id: string; suggestions?: ConceptSuggestion[]; memberSuggestions?: ConceptSuggestion[] }>(r: T): T =>
+        r.id !== id ? r : field === 'member' ? { ...r, memberSuggestions: (r.memberSuggestions ?? []).slice(1) } : { ...r, suggestions: (r.suggestions ?? []).slice(1) }
+      set({ rows: get().rows.map(drop), socie: get().socie.map(drop), ppe: get().ppe.map(drop), texts: get().texts.map(drop) })
+    },
+    loadTree: async (scope, kind) => {
+      const key = `${scope}:${kind}`
+      if (get().trees[key]) return
+      const trees = await unwrap(api().tree(scope, kind), { quiet: true })
+      if (trees) set({ trees: { ...get().trees, [key]: trees } })
+    },
+    runCheck: () => {
+      const tab = get().tab
+      if (!isLineTab(tab)) return
+      clearTimeout(checkTimer)
+      checkTimer = setTimeout(async () => {
+        const result = await unwrap(api().check(checkRows(get().rows, tab)), { quiet: true })
+        if (result && get().tab === tab) set({ check: result })
+      }, 400)
+    },
 
     saveTemplate: () =>
       run('Preparing the template…', async () => {
@@ -265,27 +332,32 @@ export const useIndas = create<IndasState>((set, get) => {
         const mine = get().rows.filter((r) => r.statement === t)
         const accepted = new Map(acceptTopSuggestions(mine).map((r) => [r.id, r]))
         set({ rows: get().rows.map((r) => accepted.get(r.id) ?? r) })
+        get().runCheck()
       } else if (t === 'socie') set({ socie: acceptTopMembers(acceptTopSuggestions(get().socie)) })
       else if (t === 'ppe') set({ ppe: acceptTopMembers(get().ppe) })
       else set({ texts: acceptTopSuggestions(get().texts) })
     },
 
-    setConcept: (id, concept) =>
+    setConcept: (id, concept) => {
       set({
         rows: get().rows.map((r) => (r.id === id ? { ...r, concept } : r)),
         socie: get().socie.map((r) => (r.id === id ? { ...r, concept } : r)),
         texts: get().texts.map((r) => (r.id === id ? { ...r, concept } : r)),
-      }),
+      })
+      get().runCheck()
+    },
     setMember: (id, member) =>
       set({
         socie: get().socie.map((r) => (r.id === id ? { ...r, member } : r)),
         ppe: get().ppe.map((r) => (r.id === id ? { ...r, member } : r)),
       }),
-    setPeriodRole: (id, periodRole) =>
+    setPeriodRole: (id, periodRole) => {
       set({
         rows: get().rows.map((r) => (r.id === id ? { ...r, periodRole } : r)),
         socie: get().socie.map((r) => (r.id === id ? { ...r, periodRole } : r)),
-      }),
+      })
+      get().runCheck()
+    },
 
     addTextBlock: () => set({ texts: [...get().texts, { id: `text:${++textSeq}`, heading: '', content: '', suggestions: [], concept: '' }] }),
     updateTextBlock: (id, patch) =>

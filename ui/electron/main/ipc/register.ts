@@ -8,7 +8,7 @@ import type { AppSettings, NewFilingInput } from '@shared/project'
 import { PREVIEW_SPACINGS, type PreviewFormat } from '@xap/engine/basics'
 import type { ProjectController } from '../project/project-controller'
 import type { IndasController } from '../indas/indas-controller'
-import type { GenerateXmlInput, IndasSaveRequest, RecommendRequest } from '@shared/indas'
+import type { GenerateXmlInput, IndasSaveRequest, RecommendRequest, StatementLine } from '@shared/indas'
 import type { SavedProjectsService } from '../services/saved-projects-service'
 import type { AutoTagService } from '../services/auto-tag-service'
 import type { ColumnPeriodService } from '../services/column-period-service'
@@ -371,6 +371,15 @@ function registerIndasIpc({ indas }: IpcDeps): void {
   handleQuery(IPC.indasShowGenerated, () => indas.showGenerated())
   handleResult(IPC.indasSave, (_e, req: unknown) => indas.save(requireSaveRequest(req)))
   handleResult(IPC.indasOpen, (_e, path: unknown) => indas.open(requireProjectPath(path)))
+  handleResult(IPC.indasTree, (_e, scope: unknown, kind?: unknown) => {
+    const s = requireString(scope, 'scope')
+    if (!/^[A-Z_]{1,40}$/.test(s) || (kind !== undefined && kind !== 'concept' && kind !== 'member')) throw new Error('Invalid tree request')
+    return indas.tree(s, (kind as 'concept' | 'member' | undefined) ?? 'concept')
+  })
+  handleResult(IPC.indasCheck, (_e, rows: unknown) => {
+    if (!Array.isArray(rows) || rows.length > 5000) throw new Error('Invalid rows')
+    return indas.check(rows as StatementLine[])
+  })
 }
 
 function requireSaveRequest(v: unknown): IndasSaveRequest {

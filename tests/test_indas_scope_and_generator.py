@@ -153,3 +153,51 @@ def test_note_lines_use_each_concepts_period(concepts):
     x = XbrlXmlGenerator(p, concepts).build()
     assert '<ind-as:InventoriesAtNetRealisableValue contextRef="CY_Instant" unitRef="INR" decimals="0">7<' in x
     assert '<ind-as:InventoryWritedown contextRef="PY_Duration" unitRef="INR" decimals="0">1<' in x
+
+
+# ---------------------------------------------------------------- split view: trees + Difference check
+def test_balance_sheet_tree_is_the_presentation_hierarchy(kb):
+    from src.services.sheet_tree import sheet_trees
+
+    [bs] = sheet_trees(kb, "CANONICAL_BS")
+    assert bs["elr"] == "110000"
+    qnames = [n["qname"] for n in bs["nodes"]]
+    assert qnames.index("ind-as:Inventories") < qnames.index("ind-as:CurrentAssets") or "ind-as:CurrentAssets" in qnames
+    inv = next(n for n in bs["nodes"] if n["qname"] == "ind-as:Inventories")
+    assert inv["depth"] > 0 and not inv["abstract"] and inv["label"] == "Inventories"
+    assert any(n["abstract"] for n in bs["nodes"])  # headings stay, for structure
+    mandatory = {n["qname"] for n in bs["nodes"] if n["mandatory"]}
+    assert "ind-as:Assets" in mandatory or mandatory  # MCA's mandatory BS lines are flagged
+
+
+def test_member_tree_for_fixed_assets(kb):
+    from src.services.sheet_tree import sheet_trees
+
+    [t] = sheet_trees(kb, "CANONICAL_PPE_SCHEDULE", "member")
+    nodes = {n["qname"]: n for n in t["nodes"]}
+    assert nodes["ind-as:BuildingsMember"]["depth"] < nodes["ind-as:FactoryBuildingMember"]["depth"]
+
+
+def test_difference_check_sums_tagged_children_exactly(kb):
+    from src.services import calc_check
+
+    rows = [
+        # Ind AS: cash rolls up into current financial assets, which (with inventories) make current assets
+        {"concept": "ind-as:CurrentAssets", "cy": "100.10", "py": 50},
+        {"concept": "ind-as:Inventories", "cy": "60.05", "py": 50},
+        {"concept": "ind-as:CurrentFinancialAssets", "cy": "40.05", "py": None},
+        {"concept": "ind-as:CashAndCashEquivalents", "cy": "40.04", "py": None},
+        {"concept": "ind-as:Assets", "cy": 300, "py": 50},
+        {"concept": "ind-as:EquityAndLiabilities", "cy": 290, "py": 50},
+    ]
+    res = calc_check.check(kb, rows)
+    by = {(d["year"], d["concept"], d["label"][:7]) for d in res["differences"]}
+    assert not any(c == "ind-as:CurrentAssets" for _, c, _ in by)  # 60.05 + 40.05 = 100.10 exactly
+    assert ("CY", "ind-as:Assets", "Balance") in by  # 300 vs 290
+    # 40.05 vs 40.04: within MCA's 1 INR tolerance, so not reported
+    assert not any(d["concept"] == "ind-as:CurrentFinancialAssets" for d in res["differences"])
+    # Assets 300 vs its only tagged child (current assets 100.10): the untagged 199.90 shows, plus the balance gap 10
+    assert any(d["concept"] == "ind-as:Assets" and d["difference"] == "199.90" for d in res["differences"])
+    assert res["total"] == "209.90"
+
+    assert all(d["year"] != "PY" or d["concept"] != "ind-as:Assets" for d in res["differences"] if d["label"].startswith("Balance"))

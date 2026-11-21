@@ -152,3 +152,20 @@ describe('xmlFileName', () => {
     expect(xmlFileName('  ', '')).toBe('Filing_AOC4_FY.xml')
   })
 })
+
+describe('split view calls', () => {
+  it('asks for a sheet tree and runs the Difference check', async () => {
+    const tree = [{ elr: '110000', title: 'Balance sheet', nodes: [] }]
+    const { sidecar, calls } = fakeSidecar({
+      '/api/v1/indas/tree/CANONICAL_PPE_SCHEDULE?kind=member': () => ok(tree),
+      '/api/v1/indas/check': () => ok({ differences: [], total: '0' }),
+    })
+    const svc = new IndasPipelineService(sidecar, writer())
+    expect(await svc.tree('CANONICAL_PPE_SCHEDULE', 'member')).toEqual(tree)
+    expect(await svc.check([{ concept: 'ind-as:Assets', cy: 1, py: null }])).toEqual({ differences: [], total: '0' })
+    expect(calls.map((c) => [c.method, c.path])).toEqual([
+      ['GET', '/api/v1/indas/tree/CANONICAL_PPE_SCHEDULE?kind=member'],
+      ['POST', '/api/v1/indas/check'],
+    ])
+  })
+})

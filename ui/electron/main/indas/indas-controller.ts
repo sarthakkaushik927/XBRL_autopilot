@@ -14,6 +14,9 @@ import type {
   IndasSaveRequest,
   MasterFields,
   RecommendRequest,
+  SheetTree,
+  CheckResult,
+  StatementLine,
   TransformResult,
 } from '@shared/indas'
 import type { IndasPipelineService } from '../services/indas-pipeline-service'
@@ -72,6 +75,14 @@ export class IndasController {
 
   masterFields(): Promise<MasterFields> {
     return this.service.masterFields()
+  }
+
+  tree(scope: string, kind: 'concept' | 'member'): Promise<SheetTree[]> {
+    return this.service.tree(scope, kind)
+  }
+
+  check(rows: StatementLine[]): Promise<CheckResult> {
+    return this.service.check(rows)
   }
 
   async generate(input: GenerateXmlInput): Promise<GenerateXmlResult> {

@@ -8,6 +8,9 @@ import type {
   IndasSaveRequest,
   MasterFields,
   RecommendRequest,
+  SheetTree,
+  CheckResult,
+  StatementLine,
   TransformResult,
 } from './indas'
 import type {
@@ -231,6 +234,8 @@ export const IPC = {
   indasShowGenerated: 'indas:show-generated',
   indasProgress: 'indas:progress',
   indasSave: 'indas:save',
+  indasTree: 'indas:tree',
+  indasCheck: 'indas:check',
   indasOpen: 'indas:open',
 } as const
 
@@ -432,6 +437,10 @@ export interface XapApi {
     save(req: IndasSaveRequest): Promise<Result<IndasSaved>>
     /** reopens a saved Ind AS project */
     open(path: string): Promise<Result<IndasOpened>>
+    /** a sheet's taxonomy tree(s) for the split view */
+    tree(scope: string, kind?: 'concept' | 'member'): Promise<Result<SheetTree[]>>
+    /** the live Difference check of tagged lines */
+    check(rows: StatementLine[]): Promise<Result<CheckResult>>
     onProgress(cb: (p: { done: number; total: number }) => void): () => void
   }
 }

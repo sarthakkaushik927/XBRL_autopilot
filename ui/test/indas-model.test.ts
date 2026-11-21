@@ -186,3 +186,25 @@ describe('every canonical sheet (docs/15 §5)', () => {
     expect(input.notes).toEqual([{ concept: 'ind-as:DisclosureOfPropertyPlantAndEquipmentExplanatory', content: 'Policy text' }])
   })
 })
+
+describe('split view helpers', () => {
+  it('groups note lines by note number in sheet order', async () => {
+    const { groupByNote } = await import('../src/features/indas/model')
+    const rows = rowsFromTransform({
+      fileName: 'x', source: 'heuristic', summary: {},
+      sheets: { CANONICAL_FINANCIAL_NOTES: [
+        { Note_No: 3, Line_Item: 'Authorised', Breadcrumb_Hierarchy: 'Equity > Share capital', Current_Year_Amount: 1, Previous_Year_Amount: 1 },
+        { Note_No: 4, Line_Item: 'Retained earnings', Breadcrumb_Hierarchy: 'Equity > Other equity', Current_Year_Amount: 2, Previous_Year_Amount: 2 },
+        { Note_No: 3, Line_Item: 'Issued', Breadcrumb_Hierarchy: 'Equity > Share capital', Current_Year_Amount: 3, Previous_Year_Amount: 3 },
+      ] },
+    })
+    expect(groupByNote(rows).map((g) => [g.note, g.rows.map((r) => r.label)])).toEqual([['3', ['Authorised', 'Issued']], ['4', ['Retained earnings']]])
+  })
+
+  it('sends only the tagged lines of one statement to the Difference check', async () => {
+    const { checkRows } = await import('../src/features/indas/model')
+    const rows = rowsFromTransform(transform).map((r, i) => ({ ...r, concept: i === 0 ? 'ind-as:EquityShareCapital' : '' }))
+    expect(checkRows(rows, 'balanceSheet')).toEqual([{ concept: 'ind-as:EquityShareCapital', cy: 417830, py: 390220, periodRole: 'end' }])
+    expect(checkRows(rows, 'profitLoss')).toEqual([])
+  })
+})

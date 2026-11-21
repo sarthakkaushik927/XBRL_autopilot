@@ -12,6 +12,8 @@ import type {
   GenerateXmlResult,
   MasterFields,
   RecommendRequest,
+  SheetTree,
+  CheckResult,
   StatementLine,
   TransformResult,
 } from '@shared/indas'
@@ -92,6 +94,16 @@ export class IndasPipelineService {
       onProgress?.(out.length, keys.length)
     }
     return out
+  }
+
+  /** The split view's right pane: a sheet's ELR trees, or its table axis members. */
+  tree(scope: string, kind: 'concept' | 'member' = 'concept'): Promise<SheetTree[]> {
+    return sidecarCall<SheetTree[]>(this.sidecar, 'GET', `${BASE}/tree/${encodeURIComponent(scope)}?kind=${kind}`, { what: 'Taxonomy tree' })
+  }
+
+  /** The live Difference bar: totals vs their tagged children, balance sheet balance (exact decimals). */
+  check(rows: StatementLine[]): Promise<CheckResult> {
+    return sidecarCall<CheckResult>(this.sidecar, 'POST', `${BASE}/check`, { body: { rows }, what: 'Difference check' })
   }
 
   masterFields(): Promise<MasterFields> {

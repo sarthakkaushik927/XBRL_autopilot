@@ -174,3 +174,44 @@ export interface IndasOpened {
   projectId: string
   draft: IndasDraft
 }
+
+// ---------------------------------------------------------------- split view (docs/15 §5)
+
+/** One taxonomy node of a sheet's tree (presentation order, `depth` = indent). */
+export interface TreeNode {
+  qname: string
+  label: string
+  depth: number
+  /** headings: shown for structure, not taggable */
+  abstract: boolean
+  type: string | null
+  periodType: string | null
+  balance: string | null
+  /** MCA requires it (red until tagged, as in webXBRL) */
+  mandatory: boolean
+}
+
+/** One ELR's tree (a statement, a note) or a table axis's member hierarchy. */
+export interface SheetTree {
+  elr: string
+  title: string
+  nodes: TreeNode[]
+}
+
+/** A calculation total that does not equal the sum of its tagged children (amounts: decimal strings). */
+export interface Difference {
+  year: 'CY' | 'PY'
+  elr: string
+  concept: string
+  label: string
+  reported: string
+  calculated: string
+  difference: string
+  children: string[]
+}
+
+export interface CheckResult {
+  differences: Difference[]
+  /** Σ |difference| as a decimal string; "0" = everything ties */
+  total: string
+}

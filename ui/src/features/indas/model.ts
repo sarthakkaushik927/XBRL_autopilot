@@ -261,3 +261,20 @@ export function projectCompanyName(w: Pick<IndasWork, 'company' | 'transform'>):
   const typed = Object.entries(w.company).find(([k]) => k.endsWith(':NameOfCompany'))?.[1]?.trim()
   return typed || (w.transform?.fileName ?? '').replace(/\.[^.]+$/, '') || 'Untitled company'
 }
+
+/** Notes rows grouped by note number, in sheet order (the Notes tab shows one collapsible group per note). */
+export function groupByNote(rows: TagRow[]): { note: string; rows: TagRow[] }[] {
+  const out: { note: string; rows: TagRow[] }[] = []
+  for (const r of rows) {
+    const key = r.note || '—'
+    const g = out.find((x) => x.note === key)
+    if (g) g.rows.push(r)
+    else out.push({ note: key, rows: [r] })
+  }
+  return out
+}
+
+/** The tagged lines of a statement, as the Difference check takes them. */
+export function checkRows(rows: TagRow[], statement: StatementKey) {
+  return rows.filter((r) => r.statement === statement && r.concept).map((r) => ({ concept: r.concept, cy: r.cy, py: r.py, periodRole: r.periodRole }))
+}
