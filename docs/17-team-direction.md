@@ -34,6 +34,12 @@ All under `/api/v1/indas/`:
 - `/recommend` returns **one list per key, in key order**. Before, `top_k > 1` gave one flat list and you couldn't tell which key a match belonged to.
 - `load_object` loads pickles holding a `PosixPath` on Windows. `db/ind_as_taxonomy.pkl` is built on Linux and failed on Windows with "cannot instantiate 'PosixPath'", so `/recommend` could not run on a CA's PC.
 - Restored `api/__main__.py` + `src/core/parent_watch.py` (the desktop app starts the sidecar with `python -m api`) and the per-launch token middleware.
+- **`/generateXML` XML fixes (2026-11-21), found by checking the XML with Arelle against the official Ind AS 2017 taxonomy in `data/`:**
+  - The schemaRef and namespaces were invented (`http://www.mca.gov.in/ind-as/2016-03-31`), so no fact belonged to the real taxonomy. They now come from the KB: `meta.schemaRef` = `https://www.mca.gov.in/V3XBRL/2017/07/16/Taxonomy/Ind/in-ci-ent-2017-03-31.xsd` (the address in the MCA-accepted Dixon instance), and `meta.namespaces` = `http://www.icai.org/xbrl/taxonomy/2017-03-31/{in-ca,ind-as,…}`, read from each schema's `targetNamespace` (`src/services/extractors/ind_as.py`).
+  - Every Ind AS hypercube has `xbrldt:contextElement="scenario"`. The generator wrote dimensions in `<xbrli:segment>`, so the director facts were dimensionally invalid. Dimensions now go where the KB says (`meta.dimensionContextElement`).
+  - The director typed member held `DirectorIdentificationNumberOfDirector`. It now uses the axis's `xbrldt:typedDomainRef` (`DirectorsSigningFinancialStatementsDomain`, KB concept field `typedDomain`).
+  - EPS (`perShareItemType`) was written in INR with `decimals="0"` (5.00 → 5). The unit and decimals now follow the item type (INR/share with 2 places, shares, pure). Amounts are rounded with `Decimal` half-up; before, `int()` cut the decimals off.
+  - **His PPE facts:** without the gross / accumulated-depreciation axis, `PropertyPlantAndEquipment` for a class means its **carrying amount**. It was given the gross closing (₹12 lakh while the balance sheet said ₹8 lakh). It is now the net block, and disposals are net of their depreciation.
 - The sidecar defaults `OPENBLAS_NUM_THREADS` / `OMP_NUM_THREADS` to 1: OpenBLAS ran out of memory loading the reranker on a 16-thread laptop.
 
 ### 3. What changes against our earlier plan
@@ -70,7 +76,9 @@ The work is saved as `<Company>_Ind AS_FY yyyy-yy.axbrl` in the projects folder:
 ### 8. Open items
 - [x] Groq model switch on rate limit · [x] template download · [x] UI wiring · [x] ELR-scoped suggestions · [x] cash flow / equity / PPE / notes / text blocks · [x] saving
 - [ ] **AI at decision points in `indas.py`** (path 2) — Vashu's, after he reviews more workbooks.
-- [ ] **His PPE XML** writes 4 facts per class without the gross / accumulated-depreciation axis (`CarryingAmountAccumulatedDepreciationAndGrossCarryingAmountAxis`); Vashu to decide whether to model it fully.
+- [ ] **His PPE XML** writes 4 facts per class without the gross / accumulated-depreciation axis (`CarryingAmountAccumulatedDepreciationAndGrossCarryingAmountAxis`), now as carrying amounts (net block); Vashu to decide whether to model gross and depreciation fully.
+- [ ] **Our MCA checks are a subset of MCA's rules.** `/generateXML` checks the 700300 company fields, statement roots, calculations, non-negatives and PPE roll-forwards. It does not check the other mandatory lists (`mandatoryByELR`: e.g. 110000 wants OtherIntangibleAssets, LoansNoncurrent…; 700400 wants the auditor details table; 700600 the board report items) or the formula linkbase. Decide whether to add them (and zero-fill, doc 15 §5 tab 6) or rely on the MCA Validation Tool.
+- [ ] **Subtotals a statement doesn't print** (e.g. "Financial assets" under current assets): the XBRL calculation then compares a total with only some of its children and fails. The synthetic template prints them; a real workbook may not. Option: derive the missing subtotal deterministically.
 - [ ] **Validation tab with zero-fill** (doc 15 §5 tab 6) — today only the checks inside Generate.
 - [ ] **Old screens** (New filing, tagging grid, validation) still call the removed `/taxonomies` and `/mapping` routes. Decide: remove them, or point them at the new pipeline.
 - [ ] **Index `elr` metadata** (his ingestion) — would let the hybrid search scope too; the KB-based scope works without it.

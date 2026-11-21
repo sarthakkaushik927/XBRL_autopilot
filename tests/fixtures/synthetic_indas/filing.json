@@ -1,0 +1,118 @@
+{
+  "_about": "A SYNTHETIC Ind AS filing (no client data): small, internally consistent FY 2025-26 statements in full rupees, with the correct tag for every line. build_workbook.py writes the standard template from it; tests/test_synthetic_indas_xml.py and ui/e2e/indas-valid-xml.mjs tag it and expect an XML with 0 errors.",
+  "meta": { "nature": "Standalone", "startDate": "2025-04-01", "endDate": "2026-03-31" },
+  "sheets": {
+    "CANONICAL_BS": [
+      { "label": "ASSETS", "breadcrumb": "" },
+      { "label": "Non-current assets", "breadcrumb": "Assets" },
+      { "label": "Property, plant and equipment", "breadcrumb": "Assets > Non-current assets", "note": "3", "cy": 800000, "py": 600000, "concept": "ind-as:PropertyPlantAndEquipment" },
+      { "label": "Total non-current assets", "breadcrumb": "Assets > Non-current assets", "cy": 800000, "py": 600000, "concept": "ind-as:NoncurrentAssets" },
+      { "label": "Current assets", "breadcrumb": "Assets" },
+      { "label": "Inventories", "breadcrumb": "Assets > Current assets", "note": "4", "cy": 300000, "py": 250000, "concept": "ind-as:Inventories" },
+      { "label": "Financial assets", "breadcrumb": "Assets > Current assets" },
+      { "label": "Trade receivables", "breadcrumb": "Assets > Current assets > Financial assets", "note": "5", "cy": 400000, "py": 350000, "concept": "ind-as:TradeReceivablesCurrent" },
+      { "label": "Cash and cash equivalents", "breadcrumb": "Assets > Current assets > Financial assets", "note": "6", "cy": 200000, "py": 150000, "concept": "ind-as:CashAndCashEquivalents" },
+      { "label": "Total current financial assets", "breadcrumb": "Assets > Current assets > Financial assets", "cy": 600000, "py": 500000, "concept": "ind-as:CurrentFinancialAssets" },
+      { "label": "Total current assets", "breadcrumb": "Assets > Current assets", "cy": 900000, "py": 750000, "concept": "ind-as:CurrentAssets" },
+      { "label": "Total assets", "breadcrumb": "Assets", "cy": 1700000, "py": 1350000, "concept": "ind-as:Assets" },
+      { "label": "EQUITY AND LIABILITIES", "breadcrumb": "" },
+      { "label": "Equity", "breadcrumb": "Equity and liabilities" },
+      { "label": "Equity share capital", "breadcrumb": "Equity and liabilities > Equity", "note": "7", "cy": 500000, "py": 500000, "concept": "ind-as:EquityShareCapital" },
+      { "label": "Other equity", "breadcrumb": "Equity and liabilities > Equity", "note": "8", "cy": 650000, "py": 400000, "concept": "ind-as:OtherEquity" },
+      { "label": "Total equity", "breadcrumb": "Equity and liabilities > Equity", "cy": 1150000, "py": 900000, "concept": "ind-as:Equity" },
+      { "label": "Non-current liabilities", "breadcrumb": "Equity and liabilities > Liabilities" },
+      { "label": "Borrowings", "breadcrumb": "Equity and liabilities > Liabilities > Non-current liabilities > Financial liabilities", "note": "9", "cy": 200000, "py": 250000, "concept": "ind-as:BorrowingsNoncurrent" },
+      { "label": "Total non-current financial liabilities", "breadcrumb": "Equity and liabilities > Liabilities > Non-current liabilities > Financial liabilities", "cy": 200000, "py": 250000, "concept": "ind-as:NoncurrentFinancialLiabilities" },
+      { "label": "Total non-current liabilities", "breadcrumb": "Equity and liabilities > Liabilities > Non-current liabilities", "cy": 200000, "py": 250000, "concept": "ind-as:NoncurrentLiabilities" },
+      { "label": "Current liabilities", "breadcrumb": "Equity and liabilities > Liabilities" },
+      { "label": "Trade payables", "breadcrumb": "Equity and liabilities > Liabilities > Current liabilities > Financial liabilities", "note": "10", "cy": 250000, "py": 150000, "concept": "ind-as:TradePayablesCurrent" },
+      { "label": "Total current financial liabilities", "breadcrumb": "Equity and liabilities > Liabilities > Current liabilities > Financial liabilities", "cy": 250000, "py": 150000, "concept": "ind-as:CurrentFinancialLiabilities" },
+      { "label": "Provisions", "breadcrumb": "Equity and liabilities > Liabilities > Current liabilities", "note": "11", "cy": 30000, "py": 20000, "concept": "ind-as:ProvisionsCurrent" },
+      { "label": "Current tax liabilities (net)", "breadcrumb": "Equity and liabilities > Liabilities > Current liabilities", "cy": 70000, "py": 30000, "concept": "ind-as:CurrentTaxLiabilities" },
+      { "label": "Total current liabilities", "breadcrumb": "Equity and liabilities > Liabilities > Current liabilities", "cy": 350000, "py": 200000, "concept": "ind-as:CurrentLiabilities" },
+      { "label": "Total liabilities", "breadcrumb": "Equity and liabilities > Liabilities", "cy": 550000, "py": 450000, "concept": "ind-as:Liabilities" },
+      { "label": "Total equity and liabilities", "breadcrumb": "Equity and liabilities", "cy": 1700000, "py": 1350000, "concept": "ind-as:EquityAndLiabilities" }
+    ],
+    "CANONICAL_PL": [
+      { "label": "Revenue from operations", "breadcrumb": "Income", "note": "12", "cy": 2000000, "py": 1600000, "concept": "ind-as:RevenueFromOperations" },
+      { "label": "Other income", "breadcrumb": "Income", "note": "13", "cy": 50000, "py": 40000, "concept": "ind-as:OtherIncome" },
+      { "label": "Total income", "breadcrumb": "Income", "cy": 2050000, "py": 1640000, "concept": "ind-as:Income" },
+      { "label": "Expenses", "breadcrumb": "" },
+      { "label": "Cost of materials consumed", "breadcrumb": "Expenses", "note": "14", "cy": 900000, "py": 750000, "concept": "ind-as:CostOfMaterialsConsumed" },
+      { "label": "Employee benefits expense", "breadcrumb": "Expenses", "note": "15", "cy": 400000, "py": 350000, "concept": "ind-as:EmployeeBenefitExpense" },
+      { "label": "Finance costs", "breadcrumb": "Expenses", "note": "16", "cy": 30000, "py": 35000, "concept": "ind-as:FinanceCosts" },
+      { "label": "Depreciation and amortisation expense", "breadcrumb": "Expenses", "note": "3", "cy": 100000, "py": 80000, "concept": "ind-as:DepreciationDepletionAndAmortisationExpense" },
+      { "label": "Other expenses", "breadcrumb": "Expenses", "note": "17", "cy": 270000, "py": 225000, "concept": "ind-as:OtherExpenses" },
+      { "label": "Total expenses", "breadcrumb": "Expenses", "cy": 1700000, "py": 1440000, "concept": "ind-as:Expenses" },
+      { "label": "Profit before exceptional items and tax", "breadcrumb": "", "cy": 350000, "py": 200000, "concept": "ind-as:ProfitBeforeExceptionalItemsAndTax" },
+      { "label": "Profit before tax", "breadcrumb": "", "cy": 350000, "py": 200000, "concept": "ind-as:ProfitBeforeTax" },
+      { "label": "Tax expense", "breadcrumb": "" },
+      { "label": "Current tax", "breadcrumb": "Tax expense", "cy": 100000, "py": 60000, "concept": "ind-as:CurrentTax" },
+      { "label": "Total tax expense", "breadcrumb": "Tax expense", "cy": 100000, "py": 60000, "concept": "ind-as:TaxExpense" },
+      { "label": "Profit for the year from continuing operations", "breadcrumb": "", "cy": 250000, "py": 140000, "concept": "ind-as:ProfitLossForPeriodFromContinuingOperations" },
+      { "label": "Profit for the year", "breadcrumb": "", "cy": 250000, "py": 140000, "concept": "ind-as:ProfitLossForPeriod" },
+      { "label": "Earnings per equity share of Rs 10 each", "breadcrumb": "" },
+      { "label": "Basic", "breadcrumb": "Earnings per equity share", "cy": 5.00, "py": 2.80, "concept": "ind-as:BasicEarningsLossPerShare" },
+      { "label": "Diluted", "breadcrumb": "Earnings per equity share", "cy": 5.00, "py": 2.80, "concept": "ind-as:DilutedEarningsLossPerShare" }
+    ],
+    "CANONICAL_CF": [
+      { "label": "Cash flows from operating activities", "breadcrumb": "" },
+      { "label": "Profit before tax", "breadcrumb": "Operating activities", "cy": 350000, "py": 200000, "concept": "ind-as:ProfitBeforeTax" },
+      { "label": "Depreciation and amortisation expense", "breadcrumb": "Operating activities > Adjustments", "cy": 100000, "py": 80000, "concept": "ind-as:AdjustmentsForDepreciationAndAmortisationExpense" },
+      { "label": "Finance costs", "breadcrumb": "Operating activities > Adjustments", "cy": 30000, "py": 35000, "concept": "ind-as:AdjustmentsForFinanceCosts" },
+      { "label": "(Increase) in inventories", "breadcrumb": "Operating activities > Adjustments > Working capital changes", "cy": -50000, "py": -30000, "concept": "ind-as:AdjustmentsForDecreaseIncreaseInInventories" },
+      { "label": "(Increase) in trade receivables", "breadcrumb": "Operating activities > Adjustments > Working capital changes", "cy": -50000, "py": -40000, "concept": "ind-as:AdjustmentsForDecreaseIncreaseInTradeReceivablesCurrent" },
+      { "label": "Increase in trade payables", "breadcrumb": "Operating activities > Adjustments > Working capital changes", "cy": 100000, "py": 20000, "concept": "ind-as:AdjustmentsForIncreaseDecreaseInTradePayablesCurrent" },
+      { "label": "Increase in provisions", "breadcrumb": "Operating activities > Adjustments > Working capital changes", "cy": 10000, "py": 5000, "concept": "ind-as:AdjustmentsForProvisionsCurrent" },
+      { "label": "Total adjustments", "breadcrumb": "Operating activities > Adjustments", "cy": 140000, "py": 70000, "concept": "ind-as:AdjustmentsForReconcileProfitLoss" },
+      { "label": "Cash generated from operations", "breadcrumb": "Operating activities", "cy": 490000, "py": 270000, "concept": "ind-as:CashFlowsFromUsedInOperations" },
+      { "label": "Income taxes paid", "breadcrumb": "Operating activities", "cy": 60000, "py": 50000, "concept": "ind-as:IncomeTaxesPaidRefundClassifiedAsOperatingActivities" },
+      { "label": "Net cash from operating activities", "breadcrumb": "Operating activities", "cy": 430000, "py": 220000, "concept": "ind-as:CashFlowsFromUsedInOperatingActivities" },
+      { "label": "Cash flows from investing activities", "breadcrumb": "" },
+      { "label": "Purchase of property, plant and equipment", "breadcrumb": "Investing activities", "cy": 300000, "py": 150000, "concept": "ind-as:PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities" },
+      { "label": "Net cash used in investing activities", "breadcrumb": "Investing activities", "cy": -300000, "py": -150000, "concept": "ind-as:CashFlowsFromUsedInInvestingActivities" },
+      { "label": "Cash flows from financing activities", "breadcrumb": "" },
+      { "label": "Repayment of long-term borrowings", "breadcrumb": "Financing activities", "cy": 50000, "py": 20000, "concept": "ind-as:RepaymentsOfBorrowingsClassifiedAsFinancingActivities" },
+      { "label": "Interest paid", "breadcrumb": "Financing activities", "cy": 30000, "py": 35000, "concept": "ind-as:InterestPaidClassifiedAsFinancingActivities" },
+      { "label": "Net cash used in financing activities", "breadcrumb": "Financing activities", "cy": -80000, "py": -55000, "concept": "ind-as:CashFlowsFromUsedInFinancingActivities" },
+      { "label": "Net increase in cash and cash equivalents", "breadcrumb": "", "cy": 50000, "py": 15000, "concept": "ind-as:IncreaseDecreaseInCashAndCashEquivalentsBeforeEffectOfExchangeRateChanges" },
+      { "label": "Cash and cash equivalents at the beginning of the year", "breadcrumb": "", "cy": 150000, "py": 135000, "concept": "ind-as:CashAndCashEquivalentsCashFlowStatement", "periodRole": "start" },
+      { "label": "Cash and cash equivalents at the end of the year", "breadcrumb": "", "cy": 200000, "py": 150000, "concept": "ind-as:CashAndCashEquivalentsCashFlowStatement" }
+    ],
+    "CANONICAL_FINANCIAL_NOTES": [
+      { "label": "Balances with banks in current accounts", "note": "6", "breadcrumb": "Cash and cash equivalents", "cy": 180000, "py": 140000, "concept": "ind-as:BalanceWithBanks" },
+      { "label": "Cash on hand", "note": "6", "breadcrumb": "Cash and cash equivalents", "cy": 20000, "py": 10000, "concept": "ind-as:CashOnHand" },
+      { "label": "Total cash and cash equivalents", "note": "6", "breadcrumb": "Cash and cash equivalents", "cy": 200000, "py": 150000, "concept": "ind-as:CashAndCashEquivalents" }
+    ],
+    "CANONICAL_SOCIE": [],
+    "CANONICAL_PPE_SCHEDULE": [
+      {
+        "assetClass": "Plant and equipment", "member": "ind-as:PlantAndEquipmentMember",
+        "amounts": {
+          "Gross_Opening": 900000, "Gross_Additions": 300000, "Gross_Disposals": 0, "Gross_Closing": 1200000,
+          "Dep_Opening": 300000, "Dep_For_Year": 100000, "Dep_Disposals": 0, "Dep_Closing": 400000,
+          "Net_Current_Year": 800000, "Net_Previous_Year": 600000
+        }
+      }
+    ]
+  },
+  "texts": [
+    { "heading": "Significant accounting policies", "concept": "ind-as:DisclosureOfSummaryOfSignificantAccountingPoliciesExplanatory", "content": "The financial statements are prepared under the historical cost convention in accordance with Ind AS." }
+  ],
+  "company": {
+    "NameOfCompany": "Synthetic Test Private Limited",
+    "CorporateIdentityNumber": "U72200KA2010PTC123456",
+    "PermanentAccountNumberOfEntity": "AAACS1234A",
+    "AddressOfRegisteredOfficeOfCompany": "1 Test Street, Bengaluru",
+    "TypeOfIndustry": "Commercial and Industrial",
+    "DateOfBoardMeetingWhenFinalAccountsWereApproved": "2026-05-20",
+    "ContentOfReport": "Financial Statements",
+    "DescriptionOfPresentationCurrency": "INR",
+    "LevelOfRoundingUsedInFinancialStatements": "Actual",
+    "WhetherCompanyIsMaintainingBooksOfAccountAndOtherRelevantBooksAndPapersInElectronicForm": "true"
+  },
+  "signatories": [
+    { "din": "01234567", "name": "Asha Test", "designation": "Director" },
+    { "din": "07654321", "name": "Ravi Test", "designation": "Director" }
+  ]
+}

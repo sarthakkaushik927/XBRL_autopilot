@@ -3,6 +3,7 @@ import os
 import re
 import html
 import xml.etree.ElementTree as ET
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Dict, List, Any, Tuple
 from src.constants import BASE_DIR, INDAS_OUTPUT_JSON_PATH, OUTPUT_DIR
@@ -11,6 +12,14 @@ from .base import Pipeline
 from src.services.statement_lines import merge_lines
 from src.utils.main_utils import save_xml, load_xml
 
+# XBRL item type -> (unit id, decimals). Anything else numeric is an amount in rupees.
+NUMERIC_UNITS: Dict[str, Tuple[str, int]] = {
+    "perShareItemType": ("INR_per_share", 2),
+    "sharesItemType": ("shares", 0),
+    "pureItemType": ("pure", 2),
+    "decimalItemType": ("pure", 2),
+    "percentItemType": ("pure", 2),
+}
 
 
 class IndASValidator:
@@ -297,10 +306,12 @@ class IndASValidator:
 class XbrlXmlGenerator:
     """Compiles validated JSON payload into standard MCA AOC-4 XBRL instance document."""
 
-    def __init__(self, payload: Dict[str, Any], concepts: Dict[str, Any] | None = None):
+    def __init__(self, payload: Dict[str, Any], concepts: Dict[str, Any] | None = None, taxonomy: Dict[str, Any] | None = None):
         self.payload = payload
-        # concept -> KB entry; its periodType decides instant vs duration contexts
+        # concept -> KB entry; its periodType decides instant vs duration contexts, its type the unit
         self.concepts = concepts or {}
+        # the KB's meta: the entry point (schemaRef) and the namespace of every taxonomy prefix
+        self.taxonomy = taxonomy or {}
         self.meta = payload.get("meta", {})
         self.master = payload.get("master", {})
         self.statements = payload.get("statements", {})
@@ -319,6 +330,35 @@ class XbrlXmlGenerator:
 
     def _period_type(self, concept: str, default: str) -> str:
         return (self.concepts.get(concept) or {}).get("periodType") or default
+
+    def _numeric_fact(self, concept: str, ctx: str, value: Any) -> str:
+        """One numeric fact with the unit and decimals its item type needs (per-share amounts in INR/share to 2 places)."""
+        unit, places = NUMERIC_UNITS.get((self.concepts.get(concept) or {}).get("type"), ("INR", 0))
+        amount = Decimal(str(value)).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
+        return f'  <{concept} contextRef="{ctx}" unitRef="{unit}" decimals="{places}">{amount}</{concept}>'
+
+    @property
+    def _cy_duration(self) -> str:
+        return f"<xbrli:startDate>{self.start_date}</xbrli:startDate><xbrli:endDate>{self.end_date}</xbrli:endDate>"
+
+    def _context(self, ctx_id: str, period: str, members: str) -> list[str]:
+        """A dimensional context. The dimensions go where the taxonomy's hypercubes expect them
+        (xbrldt:contextElement; Ind AS 2017: scenario, after the period)."""
+        where = self.taxonomy.get("dimensionContextElement") or "scenario"
+        identifier = f'<xbrli:identifier scheme="http://www.mca.gov.in/CIN">{self.cin}</xbrli:identifier>'
+        segment = f"<xbrli:segment>{members}</xbrli:segment>" if where == "segment" else ""
+        scenario = f"<xbrli:scenario>{members}</xbrli:scenario>" if where == "scenario" else ""
+        return [
+            f'  <xbrli:context id="{ctx_id}">',
+            f"    <xbrli:entity>{identifier}{segment}</xbrli:entity>",
+            f"    <xbrli:period>{period}</xbrli:period>",
+            *([f"    {scenario}"] if scenario else []),
+            "  </xbrli:context>",
+        ]
+
+    def _typed_domain(self, axis: str) -> str:
+        """The element a typed axis's member value is written in (the axis's xbrldt:typedDomainRef)."""
+        return (self.concepts.get(axis) or {}).get("typedDomain") or axis
 
     def _statement_contexts(self, concept: str, role: str | None, default: str) -> tuple[str, str]:
         """(CY, PY) context ids: duration -> the years; instant -> their ends, or their starts for an opening balance."""
@@ -363,14 +403,14 @@ class XbrlXmlGenerator:
         xml = []
         xml.append('<?xml version="1.0" encoding="UTF-8"?>')
         xml.append('<xbrli:xbrl')
-        xml.append('  xmlns:in-ca="http://www.mca.gov.in/in-ca/2016-03-31"')
-        xml.append('  xmlns:ind-as="http://www.mca.gov.in/ind-as/2016-03-31"')
+        for prefix, ns in (self.taxonomy.get("namespaces") or {}).items():
+            xml.append(f'  xmlns:{prefix}="{ns}"')
         xml.append('  xmlns:xbrli="http://www.xbrl.org/2003/instance"')
         xml.append('  xmlns:xlink="http://www.w3.org/1999/xlink"')
         xml.append('  xmlns:link="http://www.xbrl.org/2003/linkbase"')
         xml.append('  xmlns:xbrldi="http://xbrl.org/2006/xbrldi"')
         xml.append('  xmlns:iso4217="http://www.xbrl.org/2003/iso4217">')
-        xml.append('  <link:schemaRef xlink:href="http://www.mca.gov.in/ind-as/2016-03-31/ind-as-2016-03-31.xsd" xlink:type="simple"/>')
+        xml.append(f'  <link:schemaRef xlink:type="simple" xlink:href="{self.taxonomy.get("schemaRef", "")}"/>')
         xml.append('')
 
         # 1. Standard Contexts
@@ -411,47 +451,25 @@ class XbrlXmlGenerator:
                     continue  # generic table row: contexts in section 2b
                 member = row.get("member")
                 clean_m = member.split(":")[-1]
-                # CY Duration Context
-                xml.append(f'  <xbrli:context id="CY_Duration_{clean_m}">')
-                xml.append(f'    <xbrli:entity><xbrli:identifier scheme="http://www.mca.gov.in/CIN">{self.cin}</xbrli:identifier>')
-                xml.append(f'      <xbrli:segment><xbrldi:explicitMember dimension="{axis}">{member}</xbrldi:explicitMember></xbrli:segment>')
-                xml.append('    </xbrli:entity>')
-                xml.append(f'    <xbrli:period><xbrli:startDate>{self.start_date}</xbrli:startDate><xbrli:endDate>{self.end_date}</xbrli:endDate></xbrli:period>')
-                xml.append('  </xbrli:context>')
-                # CY Instant Context
-                xml.append(f'  <xbrli:context id="CY_Instant_{clean_m}">')
-                xml.append(f'    <xbrli:entity><xbrli:identifier scheme="http://www.mca.gov.in/CIN">{self.cin}</xbrli:identifier>')
-                xml.append(f'      <xbrli:segment><xbrldi:explicitMember dimension="{axis}">{member}</xbrldi:explicitMember></xbrli:segment>')
-                xml.append('    </xbrli:entity>')
-                xml.append(f'    <xbrli:period><xbrli:instant>{self.end_date}</xbrli:instant></xbrli:period>')
-                xml.append('  </xbrli:context>')
+                explicit = f'<xbrldi:explicitMember dimension="{axis}">{member}</xbrldi:explicitMember>'
+                xml += self._context(f"CY_Duration_{clean_m}", self._cy_duration, explicit)
+                xml += self._context(f"CY_Instant_{clean_m}", f"<xbrli:instant>{self.end_date}</xbrli:instant>", explicit)
         xml.append('')
 
         # 2b. Dimensional Contexts for generic tables (rows with a concept: changes in equity, ...)
         xml.append('  <!-- 2b. DIMENSIONAL CONTEXTS (GENERIC TABLES) -->')
         for ctx_id, axis, member, period in self._dimensional_contexts():
-            xml.append(f'  <xbrli:context id="{ctx_id}">')
-            xml.append(f'    <xbrli:entity><xbrli:identifier scheme="http://www.mca.gov.in/CIN">{self.cin}</xbrli:identifier>')
-            xml.append(f'      <xbrli:segment><xbrldi:explicitMember dimension="{axis}">{member}</xbrldi:explicitMember></xbrli:segment>')
-            xml.append('    </xbrli:entity>')
-            xml.append(f'    <xbrli:period>{period}</xbrli:period>')
-            xml.append('  </xbrli:context>')
+            xml += self._context(ctx_id, period, f'<xbrldi:explicitMember dimension="{axis}">{member}</xbrldi:explicitMember>')
         xml.append('')
 
-        # 3. Director Signatories Contexts
+        # 3. Director Signatories Contexts (a typed axis: the DIN is written in the axis's typed domain element)
         xml.append('  <!-- 3. DIRECTOR SIGNATORIES CONTEXTS -->')
+        directors_axis = "in-ca:DirectorsSigningFinancialStatementsAxis"
+        directors_domain = self._typed_domain(directors_axis)
         for d in self.master.get("signatories", []):
             din = d.get("din")
-            xml.append(f'  <xbrli:context id="Director_{din}">')
-            xml.append(f'    <xbrli:entity><xbrli:identifier scheme="http://www.mca.gov.in/CIN">{self.cin}</xbrli:identifier>')
-            xml.append('      <xbrli:segment>')
-            xml.append('        <xbrldi:typedMember dimension="in-ca:DirectorsSigningFinancialStatementsAxis">')
-            xml.append(f'          <in-ca:DirectorIdentificationNumberOfDirector>{din}</in-ca:DirectorIdentificationNumberOfDirector>')
-            xml.append('        </xbrldi:typedMember>')
-            xml.append('      </xbrli:segment>')
-            xml.append('    </xbrli:entity>')
-            xml.append(f'    <xbrli:period><xbrli:startDate>{self.start_date}</xbrli:startDate><xbrli:endDate>{self.end_date}</xbrli:endDate></xbrli:period>')
-            xml.append('  </xbrli:context>')
+            typed = f'<xbrldi:typedMember dimension="{directors_axis}"><{directors_domain}>{din}</{directors_domain}></xbrldi:typedMember>'
+            xml += self._context(f"Director_{din}", self._cy_duration, typed)
         xml.append('')
 
         # 4. Units
@@ -459,6 +477,10 @@ class XbrlXmlGenerator:
         xml.append('  <xbrli:unit id="INR"><xbrli:measure>iso4217:INR</xbrli:measure></xbrli:unit>')
         xml.append('  <xbrli:unit id="shares"><xbrli:measure>xbrli:shares</xbrli:measure></xbrli:unit>')
         xml.append('  <xbrli:unit id="pure"><xbrli:measure>xbrli:pure</xbrli:measure></xbrli:unit>')
+        xml.append('  <xbrli:unit id="INR_per_share"><xbrli:divide>'
+                   '<xbrli:unitNumerator><xbrli:measure>iso4217:INR</xbrli:measure></xbrli:unitNumerator>'
+                   '<xbrli:unitDenominator><xbrli:measure>xbrli:shares</xbrli:measure></xbrli:unitDenominator>'
+                   '</xbrli:divide></xbrli:unit>')
         xml.append('')
 
         # 5. Master Facts (Escaped)
@@ -504,7 +526,7 @@ class XbrlXmlGenerator:
                     if r.get(year) is None or (c, ctx) in emitted:
                         continue
                     emitted.add((c, ctx))
-                    xml.append(f'  <{c} contextRef="{ctx}" unitRef="INR" decimals="0">{int(r[year])}</{c}>')
+                    xml.append(self._numeric_fact(c, ctx, r[year]))
             xml.append('')
 
         # 8. PPE Schedule Facts
@@ -516,10 +538,12 @@ class XbrlXmlGenerator:
                 clean_m = row["member"].split(":")[-1]
                 c_dur = f"CY_Duration_{clean_m}"
                 c_inst = f"CY_Instant_{clean_m}"
-                xml.append(f'  <ind-as:PropertyPlantAndEquipment contextRef="{c_inst}" unitRef="INR" decimals="0">{int(row["grossClosing"])}</ind-as:PropertyPlantAndEquipment>')
-                xml.append(f'  <ind-as:AdditionsOtherThanThroughBusinessCombinationsPropertyPlantAndEquipment contextRef="{c_dur}" unitRef="INR" decimals="0">{int(row["grossAdditions"])}</ind-as:AdditionsOtherThanThroughBusinessCombinationsPropertyPlantAndEquipment>')
-                xml.append(f'  <ind-as:DisposalsPropertyPlantAndEquipment contextRef="{c_dur}" unitRef="INR" decimals="0">{int(row["grossDisposals"])}</ind-as:DisposalsPropertyPlantAndEquipment>')
-                xml.append(f'  <ind-as:DepreciationPropertyPlantAndEquipment contextRef="{c_dur}" unitRef="INR" decimals="0">{int(row["depForYear"])}</ind-as:DepreciationPropertyPlantAndEquipment>')
+                # no gross / accumulated-depreciation axis is written, so these facts are the class's carrying
+                # amount (the axis default): the net block, and disposals net of their depreciation
+                xml.append(self._numeric_fact("ind-as:PropertyPlantAndEquipment", c_inst, row["netCurrentYear"]))
+                xml.append(self._numeric_fact("ind-as:AdditionsOtherThanThroughBusinessCombinationsPropertyPlantAndEquipment", c_dur, row["grossAdditions"]))
+                xml.append(self._numeric_fact("ind-as:DisposalsPropertyPlantAndEquipment", c_dur, Decimal(str(row["grossDisposals"])) - Decimal(str(row["depDisposals"]))))
+                xml.append(self._numeric_fact("ind-as:DepreciationPropertyPlantAndEquipment", c_dur, row["depForYear"]))
         xml.append('')
 
         # 8b. Generic table facts (changes in equity, ...): concept x member, contexts from the period type
@@ -533,7 +557,7 @@ class XbrlXmlGenerator:
                 for year in ("cy", "py"):
                     if row.get(year) is not None:
                         ctx_id = self._dimensional_context_id(axis, row["member"], c, row.get("periodRole"), year)[0]
-                        xml.append(f'  <{c} contextRef="{ctx_id}" unitRef="INR" decimals="0">{int(row[year])}</{c}>')
+                        xml.append(self._numeric_fact(c, ctx_id, row[year]))
         xml.append('')
 
         # 9. Notes TextBlock Facts (CDATA XHTML)
@@ -555,7 +579,7 @@ class XMLGenerationPipeline(Pipeline):
         payload = {**payload, "statements": {k: merge_lines(v or []) for k, v in statements.items()}}
         self.payload = payload
         self.validator = IndASValidator(kb_path=INDAS_OUTPUT_JSON_PATH)
-        self.generator = XbrlXmlGenerator(payload=payload, concepts=self.validator.concepts)
+        self.generator = XbrlXmlGenerator(payload=payload, concepts=self.validator.concepts, taxonomy=self.validator.kb.get("meta"))
 
     async def initiate(self, unique_id: str) -> dict[str, Any]:
         with logger.span("pipeline.xml_generation", unique_id=unique_id):

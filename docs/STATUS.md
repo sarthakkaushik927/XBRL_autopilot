@@ -54,6 +54,14 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-21, a valid Ind AS XML end to end ([17](17-team-direction.md) §2):**
+  - **Synthetic filing:** `tests/fixtures/synthetic_indas/filing.json` (small, consistent FY 2025-26 BS / P&L / cash flow / cash note / one PPE class / one text block, each line with its correct tag; no client data). `build_workbook.py` writes it as a filled standard template (`synthetic_indas_template.xlsx`).
+  - **Real XBRL check:** `tests/xbrl_conformance.py` runs Arelle (dev extra) offline against the official Ind AS 2017 taxonomy in `data/`: XBRL 2.1, dimensions, calculations. A broken total is caught (negative control).
+  - **Generator fixes** (it passed our own checks but produced an invalid XML): real schemaRef + ICAI 2017 namespaces from the KB (they were invented); dimensions in `<xbrli:scenario>` (the taxonomy's `contextElement`); the director typed member in its typed domain; EPS in INR/share with 2 decimals; Decimal half-up rounding instead of `int()`; PPE class facts as carrying amounts (net block). The KB extractor now records `meta.schemaRef`, `meta.namespaces`, `meta.dimensionContextElement` and `typedDomain` on typed axes (`knowledge_base/ind_as_knowledge_base.json` regenerated; nothing else in it changed).
+  - **Tests:** `tests/test_synthetic_indas_xml.py` (7, incl. Arelle) + generator 21, template 7, Groq 7, all green (run one file at a time: the full set ran out of memory).
+  - **e2e in the dev app:** `ui/e2e/indas-valid-xml.mjs`: template read as-is → 60/60 lines + PPE class + text block tagged from the fixture → no Difference on BS, P&L, cash flow, notes → Generate saves the XML with **0 MCA problems** → **Arelle: 0 problems** on the saved file. ALL PASSED.
+  - **Gotcha:** a dev app left running on port 9352 makes a new one fail to bind, and the e2e then drives the old app (and its old sidecar code). Stop it first.
+  - **Still open** (doc 17 §8): our checks are a subset of the MCA rules (other `mandatoryByELR` lists, formula linkbase), and statements that don't print a subtotal fail the calculation.
 - **2026-11-21, Vashu's full plan: every sheet tagged, saved projects ([17](17-team-direction.md) §6–7):**
   - **Scoped suggestions (doc 15 §3):** `/recommend` `scope` / `kind` / `contexts` / `use_llm`; `sheet_scope.py`, `scoped_ranker.py`, `llm_picker.py`. HPL BS sample 10/10 with the AI pick.
   - **Generator:** cash flow, note lines, opening balances, generic dimensional tables (changes in equity), duplicate / mismatch handling. `tests/test_indas_scope_and_generator.py` (15).
