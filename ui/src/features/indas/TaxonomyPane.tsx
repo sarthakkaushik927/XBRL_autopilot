@@ -28,7 +28,9 @@ export function TaxonomyPane(props: {
   // folded heads (+ / − as in webXBRL); search shows everything
   const [folded, setFolded] = useState<Set<string>>(new Set())
   const toggle = (q: string) => setFolded((f) => (f.has(q) ? new Set([...f].filter((x) => x !== q)) : new Set([...f, q])))
-  useEffect(() => void loadTree(props.scope, props.kind), [props.scope, props.kind, loadTree])
+  useEffect(() => {
+    void loadTree(props.scope, props.kind)
+  }, [props.scope, props.kind, loadTree])
 
   // a multi-ELR scope (notes) opens the ELR that holds the selected line's concept or suggestion
   const focus = props.current || props.suggested[0] || ''
@@ -58,7 +60,10 @@ export function TaxonomyPane(props: {
   }, [list, active, q, folded])
 
   const focusRef = useRef<HTMLButtonElement | null>(null)
-  useEffect(() => focusRef.current?.scrollIntoView({ block: 'center' }), [focus, active?.elr])
+  // a block body: newer Chromium returns a Promise from scrollIntoView, which an effect must not return
+  useEffect(() => {
+    void focusRef.current?.scrollIntoView({ block: 'center' })
+  }, [focus, active?.elr])
 
   return (
     <aside className="flex min-h-0 flex-col rounded-md border border-border bg-panel" data-testid="indas-taxonomy">

@@ -3,10 +3,10 @@
 // Suggest tags (scoped /indas/recommend, AI pick) → Accept top → company / auditor / signatories (synthetic values)
 // → Save → leave → reopen from Saved projects → Generate (/indas/generateXML): the XML or the MCA problems.
 // AI consent is switched on for the run: only line-item names and headings go to Groq (no amounts, no company data).
-// Usage: node e2e/indas-pipeline.mjs <port> <screenshotDir> <workbook.xls|xlsx>
+// Usage: node e2e/indas-pipeline.mjs <port> <screenshotDir> <workbook.xls|xlsx> [tabs, e.g. balanceSheet,ppe]
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-const [port, outDir, workbook] = process.argv.slice(2)
+const [port, outDir, workbook, onlyTabs] = process.argv.slice(2)
 mkdirSync(outDir, { recursive: true })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 let targets
@@ -49,7 +49,7 @@ await shot('02-financials.png')
 // 2. Tagging: every tab
 await ev(`${S}.setStep('tagging')`)
 const tabs = [['balanceSheet', 'rows'], ['profitLoss', 'rows'], ['cashFlow', 'rows'], ['socie', 'socie'], ['ppe', 'ppe'], ['noteLines', 'rows']]
-for (const [tab, list] of tabs) {
+for (const [tab, list] of tabs.filter(([t]) => !onlyTabs || onlyTabs.split(',').includes(t))) {
   await ev(`${S}.setTab('${tab}')`)
   const filter = list === 'rows' ? `.filter(r => r.statement === '${tab}')` : ''
   const total = await ev(`${S}.${list}${filter}.length`)
@@ -65,7 +65,16 @@ for (const [tab, list] of tabs) {
   await ev(`${S}.acceptTop()`)
   const sample = await ev(`${S}.${list}${filter}.slice(0, 6).map(r => [r.label ?? r.description ?? r.assetClass, r.concept || r.member])`)
   console.log('  ', tab, JSON.stringify(sample.map(([l, q]) => `${String(l).slice(0, 28)} → ${short(q)}`)))
-  await sleep(300)
+  // split view: select a line, the tree opens at its concept; the Difference bar has run
+  const firstId = await ev(`${S}.${list}${filter}[0]?.id`)
+  if (firstId) await ev(`${S}.select(${JSON.stringify(firstId)}, '${tab === 'ppe' ? 'member' : 'concept'}')`)
+  await waitFor(`!!document.querySelector('[data-testid="indas-taxonomy"] button[title]')`, `tree ${tab}`, 30000).catch(() => {})
+  if (['balanceSheet', 'profitLoss', 'cashFlow', 'noteLines'].includes(tab)) {
+    await waitFor(`${S}.check !== null`, `difference ${tab}`, 30000).catch(() => {})
+    const diff = await ev(`${S}.check && [${S}.check.total, ${S}.check.differences.length]`)
+    console.log(`   ${tab} Difference:`, JSON.stringify(diff))
+  }
+  await sleep(500)
   await shot(`03-tagging-${tab}.png`)
 }
 const bs = await ev(`Object.fromEntries(${S}.rows.filter(r => r.statement === 'balanceSheet').map(r => [r.label, r.concept]))`)
