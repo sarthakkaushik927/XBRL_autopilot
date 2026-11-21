@@ -44,6 +44,8 @@ class Statements(BaseModel):
     balanceSheet: list[dict[str, Any]] = []
     profitLoss: list[dict[str, Any]] = []
     cashFlow: list[dict[str, Any]] = []
+    # numeric lines of the notes (CANONICAL_FINANCIAL_NOTES), tagged against the note ELRs
+    noteLines: list[dict[str, Any]] = []
 
 
 class Table(BaseModel):
