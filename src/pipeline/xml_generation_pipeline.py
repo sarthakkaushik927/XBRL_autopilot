@@ -66,12 +66,36 @@ class IndASValidator:
         for st_name, rows in statements.items():
             for row in rows:
                 concept = row.get("concept")
-                if not concept:
+                if not concept or row.get("periodRole") == "start":
                     continue
                 if "cy" in row and row["cy"] is not None:
                     facts_cy[concept] = row["cy"]
                 if "py" in row and row["py"] is not None:
                     facts_py[concept] = row["py"]
+
+        # The same fact twice with different amounts: an opening balance (periodRole "start") is the instant
+        # one year earlier, so the CY opening must equal the PY closing of the same concept.
+        seen_at: Dict[tuple, Any] = {}
+        for st_name, rows in statements.items():
+            for row in rows:
+                concept = row.get("concept")
+                if not concept:
+                    continue
+                start = row.get("periodRole") == "start"
+                for year, when in (("cy", "PY_END" if start else "CY_END"), ("py", "PY2_END" if start else "PY_END")):
+                    v = row.get(year)
+                    if v is None:
+                        continue
+                    key = (concept, when)
+                    if key in seen_at and seen_at[key] != v:
+                        errors.append({
+                            "level": "ERROR",
+                            "type": "OPENING_CLOSING_MISMATCH",
+                            "concept": concept,
+                            "message": f"{concept}: two different amounts for the same date ({seen_at[key]:,} and {v:,}). "
+                                       "An opening balance must equal the previous year's closing balance.",
+                        })
+                    seen_at.setdefault(key, v)
 
         # Notes facts (text blocks)
         for note in payload.get("notes", []):
@@ -271,8 +295,10 @@ class IndASValidator:
 class XbrlXmlGenerator:
     """Compiles validated JSON payload into standard MCA AOC-4 XBRL instance document."""
 
-    def __init__(self, payload: Dict[str, Any]):
+    def __init__(self, payload: Dict[str, Any], concepts: Dict[str, Any] | None = None):
         self.payload = payload
+        # concept -> KB entry; its periodType decides instant vs duration contexts
+        self.concepts = concepts or {}
         self.meta = payload.get("meta", {})
         self.master = payload.get("master", {})
         self.statements = payload.get("statements", {})
@@ -286,6 +312,44 @@ class XbrlXmlGenerator:
         e_year = int(self.end_date.split("-")[0]) - 1
         self.py_start_date = f"{s_year}-04-01"
         self.py_end_date = f"{e_year}-03-31"
+        # an opening balance of the PY is the instant one year earlier
+        self.py2_end_date = f"{e_year - 1}-03-31"
+
+    def _period_type(self, concept: str, default: str) -> str:
+        return (self.concepts.get(concept) or {}).get("periodType") or default
+
+    def _statement_contexts(self, concept: str, role: str | None, default: str) -> tuple[str, str]:
+        """(CY, PY) context ids: duration -> the years; instant -> their ends, or their starts for an opening balance."""
+        if self._period_type(concept, default) == "duration":
+            return "CY_Duration", "PY_Duration"
+        if role == "start":
+            return "PY_Instant", "PY2_Instant"  # the CY starts where the PY ends
+        return "CY_Instant", "PY_Instant"
+
+    def _dimensional_context_id(self, axis: str, member: str, concept: str, role: str | None, year: str) -> tuple[str, str]:
+        """(context id, xbrli:period inner XML) for one table fact."""
+        m = member.split(":")[-1]
+        if self._period_type(concept, "duration") == "duration":
+            start, end = (self.start_date, self.end_date) if year == "cy" else (self.py_start_date, self.py_end_date)
+            return f"{year.upper()}_Duration_{m}", f"<xbrli:startDate>{start}</xbrli:startDate><xbrli:endDate>{end}</xbrli:endDate>"
+        ends = {"cy": self.end_date, "py": self.py_end_date}
+        starts = {"cy": self.py_end_date, "py": self.py2_end_date}
+        instant = starts[year] if role == "start" else ends[year]
+        return f"I{instant.replace('-', '')}_{m}", f"<xbrli:instant>{instant}</xbrli:instant>"
+
+    def _dimensional_contexts(self) -> list[tuple[str, str, str, str]]:
+        """Unique (id, axis, member, period) for every generic table fact."""
+        seen: dict[str, tuple[str, str, str, str]] = {}
+        for tbl in self.payload.get("tables", []):
+            axis = tbl.get("axis", "")
+            for row in tbl.get("rows", []):
+                if "concept" not in row or not row.get("member"):
+                    continue
+                for year in ("cy", "py"):
+                    if row.get(year) is not None:
+                        ctx_id, period = self._dimensional_context_id(axis, row["member"], row["concept"], row.get("periodRole"), year)
+                        seen.setdefault(ctx_id, (ctx_id, axis, row["member"], period))
+        return list(seen.values())
 
     def build(self) -> str:
         with logger.span("xbrl_generator.build", cin=self.cin):
@@ -319,6 +383,12 @@ class XbrlXmlGenerator:
         xml.append(f'    <xbrli:period><xbrli:instant>{self.py_end_date}</xbrli:instant></xbrli:period>')
         xml.append('  </xbrli:context>')
 
+        xml.append('  <xbrli:context id="PY2_Instant">')
+        xml.append(f'    <xbrli:entity><xbrli:identifier scheme="http://www.mca.gov.in/CIN">{self.cin}</xbrli:identifier></xbrli:entity>')
+        xml.append(f'    <xbrli:period><xbrli:instant>{self.py2_end_date}</xbrli:instant></xbrli:period>')
+        xml.append('  </xbrli:context>')
+        xml.append('')
+
         xml.append('  <xbrli:context id="CY_Duration">')
         xml.append(f'    <xbrli:entity><xbrli:identifier scheme="http://www.mca.gov.in/CIN">{self.cin}</xbrli:identifier></xbrli:entity>')
         xml.append(f'    <xbrli:period><xbrli:startDate>{self.start_date}</xbrli:startDate><xbrli:endDate>{self.end_date}</xbrli:endDate></xbrli:period>')
@@ -335,6 +405,8 @@ class XbrlXmlGenerator:
         for tbl in self.payload.get("tables", []):
             axis = tbl.get("axis", "ind-as:ClassesOfPropertyPlantAndEquipmentAxis")
             for row in tbl.get("rows", []):
+                if "concept" in row:
+                    continue  # generic table row: contexts in section 2b
                 member = row.get("member")
                 clean_m = member.split(":")[-1]
                 # CY Duration Context
@@ -351,6 +423,17 @@ class XbrlXmlGenerator:
                 xml.append('    </xbrli:entity>')
                 xml.append(f'    <xbrli:period><xbrli:instant>{self.end_date}</xbrli:instant></xbrli:period>')
                 xml.append('  </xbrli:context>')
+        xml.append('')
+
+        # 2b. Dimensional Contexts for generic tables (rows with a concept: changes in equity, ...)
+        xml.append('  <!-- 2b. DIMENSIONAL CONTEXTS (GENERIC TABLES) -->')
+        for ctx_id, axis, member, period in self._dimensional_contexts():
+            xml.append(f'  <xbrli:context id="{ctx_id}">')
+            xml.append(f'    <xbrli:entity><xbrli:identifier scheme="http://www.mca.gov.in/CIN">{self.cin}</xbrli:identifier>')
+            xml.append(f'      <xbrli:segment><xbrldi:explicitMember dimension="{axis}">{member}</xbrldi:explicitMember></xbrli:segment>')
+            xml.append('    </xbrli:entity>')
+            xml.append(f'    <xbrli:period>{period}</xbrli:period>')
+            xml.append('  </xbrli:context>')
         xml.append('')
 
         # 3. Director Signatories Contexts
@@ -401,32 +484,32 @@ class XbrlXmlGenerator:
             xml.append(f'  <in-ca:DateOfSigningOfFinancialStatementsByDirector contextRef="{ctx}">{signing_date}</in-ca:DateOfSigningOfFinancialStatementsByDirector>')
         xml.append('')
 
-        # 6. Balance Sheet Facts (CY Instant & PY Instant)
-        xml.append('  <!-- 6. BALANCE SHEET FACTS -->')
-        bs_items = self.statements.get("balanceSheet", []) or self.statements.get("balance_sheet", [])
-        for r in bs_items:
-            c = r["concept"]
-            if "cy" in r and r["cy"] is not None:
-                xml.append(f'  <{c} contextRef="CY_Instant" unitRef="INR" decimals="0">{int(r["cy"])}</{c}>')
-            if "py" in r and r["py"] is not None:
-                xml.append(f'  <{c} contextRef="PY_Instant" unitRef="INR" decimals="0">{int(r["py"])}</{c}>')
-        xml.append('')
-
-        # 7. Profit & Loss Facts (CY Duration & PY Duration)
-        xml.append('  <!-- 7. PROFIT & LOSS FACTS -->')
-        pnl_items = self.statements.get("profitLoss", []) or self.statements.get("profit_and_loss", []) or self.statements.get("pnl", [])
-        for r in pnl_items:
-            c = r["concept"]
-            if "cy" in r and r["cy"] is not None:
-                xml.append(f'  <{c} contextRef="CY_Duration" unitRef="INR" decimals="0">{int(r["cy"])}</{c}>')
-            if "py" in r and r["py"] is not None:
-                xml.append(f'  <{c} contextRef="PY_Duration" unitRef="INR" decimals="0">{int(r["py"])}</{c}>')
-        xml.append('')
+        # 6-7. Statement Facts (Balance Sheet, Profit & Loss, Cash Flow)
+        sections = (
+            ("6. BALANCE SHEET FACTS", ("balanceSheet", "balance_sheet"), "instant"),
+            ("7. PROFIT & LOSS FACTS", ("profitLoss", "profit_and_loss", "pnl"), "duration"),
+            ("7b. CASH FLOW FACTS", ("cashFlow", "cash_flow"), "duration"),
+        )
+        emitted: set[tuple[str, str]] = set()  # (concept, context): an opening balance can repeat the PY closing
+        for title, keys, default_period in sections:
+            xml.append(f'  <!-- {title} -->')
+            rows = next((self.statements.get(k) for k in keys if self.statements.get(k)), []) or []
+            for r in rows:
+                c = r["concept"]
+                cy_ctx, py_ctx = self._statement_contexts(c, r.get("periodRole"), default_period)
+                for year, ctx in (("cy", cy_ctx), ("py", py_ctx)):
+                    if r.get(year) is None or (c, ctx) in emitted:
+                        continue
+                    emitted.add((c, ctx))
+                    xml.append(f'  <{c} contextRef="{ctx}" unitRef="INR" decimals="0">{int(r[year])}</{c}>')
+            xml.append('')
 
         # 8. PPE Schedule Facts
         xml.append('  <!-- 8. PPE SCHEDULE FACTS -->')
         for tbl in self.payload.get("tables", []):
             for row in tbl.get("rows", []):
+                if "concept" in row:
+                    continue
                 clean_m = row["member"].split(":")[-1]
                 c_dur = f"CY_Duration_{clean_m}"
                 c_inst = f"CY_Instant_{clean_m}"
@@ -434,6 +517,20 @@ class XbrlXmlGenerator:
                 xml.append(f'  <ind-as:AdditionsOtherThanThroughBusinessCombinationsPropertyPlantAndEquipment contextRef="{c_dur}" unitRef="INR" decimals="0">{int(row["grossAdditions"])}</ind-as:AdditionsOtherThanThroughBusinessCombinationsPropertyPlantAndEquipment>')
                 xml.append(f'  <ind-as:DisposalsPropertyPlantAndEquipment contextRef="{c_dur}" unitRef="INR" decimals="0">{int(row["grossDisposals"])}</ind-as:DisposalsPropertyPlantAndEquipment>')
                 xml.append(f'  <ind-as:DepreciationPropertyPlantAndEquipment contextRef="{c_dur}" unitRef="INR" decimals="0">{int(row["depForYear"])}</ind-as:DepreciationPropertyPlantAndEquipment>')
+        xml.append('')
+
+        # 8b. Generic table facts (changes in equity, ...): concept x member, contexts from the period type
+        xml.append('  <!-- 8b. TABLE FACTS (GENERIC) -->')
+        for tbl in self.payload.get("tables", []):
+            axis = tbl.get("axis", "")
+            for row in tbl.get("rows", []):
+                if "concept" not in row or not row.get("member"):
+                    continue
+                c = row["concept"]
+                for year in ("cy", "py"):
+                    if row.get(year) is not None:
+                        ctx_id = self._dimensional_context_id(axis, row["member"], c, row.get("periodRole"), year)[0]
+                        xml.append(f'  <{c} contextRef="{ctx_id}" unitRef="INR" decimals="0">{int(row[year])}</{c}>')
         xml.append('')
 
         # 9. Notes TextBlock Facts (CDATA XHTML)
@@ -452,7 +549,7 @@ class XMLGenerationPipeline(Pipeline):
     def __init__(self, payload: dict[str, Any]):
         self.payload = payload
         self.validator = IndASValidator(kb_path=INDAS_OUTPUT_JSON_PATH)
-        self.generator = XbrlXmlGenerator(payload=payload)
+        self.generator = XbrlXmlGenerator(payload=payload, concepts=self.validator.concepts)
 
     async def initiate(self, unique_id: str) -> dict[str, Any]:
         with logger.span("pipeline.xml_generation", unique_id=unique_id):

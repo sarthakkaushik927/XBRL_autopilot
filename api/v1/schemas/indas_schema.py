@@ -5,6 +5,14 @@ class RecommendSchema(BaseModel):
     keys: list[str]
     filter: Optional[dict] = None
     top_k: int = 3
+    # docs/15 §3 ELR scoping: a canonical sheet name (CANONICAL_BS, ...); None = whole taxonomy
+    scope: Optional[str] = None
+    # "member" = suggest members of the sheet's table axis (SOCIE components, PPE classes)
+    kind: Literal["concept", "member"] = "concept"
+    # each key's headings (breadcrumb), shown to the LLM
+    contexts: Optional[list[str]] = None
+    # let the LLM pick among each line's best scoped candidates (line names + headings only are sent)
+    use_llm: bool = False
 
 
 class Meta(BaseModel):
@@ -32,8 +40,10 @@ class Master(BaseModel):
 
 
 class Statements(BaseModel):
+    # each row: {concept, cy, py, periodRole?}; periodRole "start" = an opening balance (instant concepts only)
     balanceSheet: list[dict[str, Any]] = []
     profitLoss: list[dict[str, Any]] = []
+    cashFlow: list[dict[str, Any]] = []
 
 
 class Table(BaseModel):

@@ -70,9 +70,16 @@ async def recommend_taxonomies(payload: RecommendSchema):
                 collection=IND_AS_TAXONOMY_VDB,
                 top_k=payload.top_k,
                 filter=payload.filter,
+                scope=payload.scope,
+                kind=payload.kind,
+                contexts=payload.contexts,
+                use_llm=payload.use_llm,
             )
             logger.info("indas.recommend_taxonomies_completed", count=len(data) if data else 0)
             return success_response(data=data, message="taxonomies taged returned", status_code=200)
+        except ValueError as e:
+            logger.warning("indas.recommend_bad_scope", error=str(e))
+            return error_response(message=str(e), status_code=400)
         except TimeoutError as e:
             logger.error("indas.recommend_taxonomies_timeout", error=str(e))
             return error_response(message="timeout", status_code=500, errors=e)
