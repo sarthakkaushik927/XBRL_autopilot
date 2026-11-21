@@ -208,3 +208,13 @@ describe('split view helpers', () => {
     expect(checkRows(rows, 'profitLoss')).toEqual([])
   })
 })
+
+describe('PPE amounts', () => {
+  it('sends disposals as positive amounts and blanks as 0', async () => {
+    const { ppeAmount } = await import('../src/features/indas/model')
+    expect(ppeAmount('Gross_Disposals', -81718)).toBe(81718)
+    expect(ppeAmount('Dep_Disposals', -35000)).toBe(35000)
+    expect(ppeAmount('Gross_Additions', -5)).toBe(-5)
+    expect(ppeAmount('Gross_Opening', null)).toBe(0)
+  })
+})

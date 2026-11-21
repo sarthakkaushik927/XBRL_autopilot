@@ -133,9 +133,9 @@ def test_validator_flags_an_opening_balance_that_differs_from_the_prior_closing(
     payload = _payload()
     payload["statements"]["cashFlow"][0]["cy"] = 11  # CY opening 11, but PY closing says 10
     _, errors = IndASValidator(INDAS_OUTPUT_JSON_PATH).validate(payload)
-    assert any(e["type"] == "OPENING_CLOSING_MISMATCH" for e in errors)
+    assert any(e["type"] == "DUPLICATE_FACT_CONFLICT" for e in errors)
     _, ok_errors = IndASValidator(INDAS_OUTPUT_JSON_PATH).validate(_payload())
-    assert not any(e["type"] == "OPENING_CLOSING_MISMATCH" for e in ok_errors)
+    assert not any(e["type"] == "DUPLICATE_FACT_CONFLICT" for e in ok_errors)
 
 
 def test_text_block_scope_is_the_notes_narrative_concepts(kb):
@@ -201,3 +201,47 @@ def test_difference_check_sums_tagged_children_exactly(kb):
     assert res["total"] == "209.90"
 
     assert all(d["year"] != "PY" or d["concept"] != "ind-as:Assets" for d in res["differences"] if d["label"].startswith("Balance"))
+
+
+
+def test_same_concept_lines_of_a_statement_are_added_like_webxbrl_add():
+    from src.services.statement_lines import merge_lines
+
+    rows = [
+        {"concept": "ind-as:OtherAdjustmentsForNoncashItems", "cy": -324825, "py": 271898},
+        {"concept": "ind-as:ProfitBeforeTax", "cy": 10, "py": 9},
+        {"concept": "ind-as:OtherAdjustmentsForNoncashItems", "cy": "-68559.50", "py": None},
+        {"concept": "ind-as:CashAndCashEquivalentsCashFlowStatement", "cy": 5, "py": 4, "periodRole": "start"},
+        {"concept": "ind-as:CashAndCashEquivalentsCashFlowStatement", "cy": 7, "py": 5},
+        {"concept": "", "cy": 1, "py": 1},
+    ]
+    out = merge_lines(rows)
+    assert [(r["concept"].split(":")[1], r.get("periodRole")) for r in out] == [
+        ("OtherAdjustmentsForNoncashItems", None), ("ProfitBeforeTax", None),
+        ("CashAndCashEquivalentsCashFlowStatement", "start"), ("CashAndCashEquivalentsCashFlowStatement", None),
+    ]
+    assert out[0]["cy"] == -393384.5 and out[0]["py"] == 271898
+
+
+def test_generate_adds_same_concept_cash_flow_lines_instead_of_reporting_a_conflict(concepts):
+    from src.pipeline.xml_generation_pipeline import XMLGenerationPipeline
+
+    p = _payload()
+    p["statements"]["cashFlow"] += [
+        {"concept": "ind-as:OtherAdjustmentsForNoncashItems", "cy": 3, "py": 1},
+        {"concept": "ind-as:OtherAdjustmentsForNoncashItems", "cy": 4, "py": 2},
+    ]
+    pipe = XMLGenerationPipeline(p)
+    _, errors = pipe.validator.validate(pipe.payload)
+    assert not any(e["type"] == "DUPLICATE_FACT_CONFLICT" for e in errors)
+    x = pipe.generator.build()
+    assert '<ind-as:OtherAdjustmentsForNoncashItems contextRef="CY_Duration" unitRef="INR" decimals="0">7<' in x
+
+
+def test_ppe_checks_allow_one_rupee_of_rounding():
+    payload = _payload(tables=[{"table": "ind-as:PropertyPlantAndEquipmentTable", "axis": "ind-as:ClassesOfPropertyPlantAndEquipmentAxis", "rows": [
+        {"member": "ind-as:ComputerEquipmentsMember", "grossOpening": 100, "grossAdditions": 50, "grossDisposals": 0, "grossClosing": 150,
+         "depOpening": 10, "depForYear": 5, "depDisposals": 0, "depClosing": 16, "netCurrentYear": 134},
+    ]}])
+    _, errors = IndASValidator(INDAS_OUTPUT_JSON_PATH).validate(payload)
+    assert not any(e["type"].startswith("PPE_") for e in errors)  # depreciation off by 1 INR: tolerated

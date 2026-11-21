@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Tuple
 from src.constants import BASE_DIR, INDAS_OUTPUT_JSON_PATH, OUTPUT_DIR
 from src.core.logger import logger
 from .base import Pipeline
+from src.services.statement_lines import merge_lines
 from src.utils.main_utils import save_xml, load_xml
 
 
@@ -90,10 +91,11 @@ class IndASValidator:
                     if key in seen_at and seen_at[key] != v:
                         errors.append({
                             "level": "ERROR",
-                            "type": "OPENING_CLOSING_MISMATCH",
+                            "type": "DUPLICATE_FACT_CONFLICT",
                             "concept": concept,
-                            "message": f"{concept}: two different amounts for the same date ({seen_at[key]:,} and {v:,}). "
-                                       "An opening balance must equal the previous year's closing balance.",
+                            "message": f"{concept} is reported twice for the same {'year' if when.endswith('END') and not start else 'date'} "
+                                       f"with different amounts ({seen_at[key]:,} and {v:,}) — e.g. a line in two statements, "
+                                       "or an opening balance that differs from the previous year's closing. Re-tag one of them.",
                         })
                     seen_at.setdefault(key, v)
 
@@ -253,7 +255,7 @@ class IndASValidator:
                     g_add = row.get("grossAdditions", 0)
                     g_disp = row.get("grossDisposals", 0)
                     g_close = row.get("grossClosing", 0)
-                    if g_open + g_add - g_disp != g_close:
+                    if abs(g_open + g_add - g_disp - g_close) > 1.0:  # MCA 1 INR rounding tolerance
                         errors.append({
                             "level": "ERROR",
                             "type": "PPE_GROSS_ROLLFORWARD_MISMATCH",
@@ -266,7 +268,7 @@ class IndASValidator:
                     d_year = row.get("depForYear", 0)
                     d_disp = row.get("depDisposals", 0)
                     d_close = row.get("depClosing", 0)
-                    if d_open + d_year - d_disp != d_close:
+                    if abs(d_open + d_year - d_disp - d_close) > 1.0:
                         errors.append({
                             "level": "ERROR",
                             "type": "PPE_DEP_ROLLFORWARD_MISMATCH",
@@ -276,7 +278,7 @@ class IndASValidator:
 
                     # Net Block: Net CY == Gross Closing - Dep Closing
                     net_cy = row.get("netCurrentYear", 0)
-                    if g_close - d_close != net_cy:
+                    if abs(g_close - d_close - net_cy) > 1.0:
                         errors.append({
                             "level": "ERROR",
                             "type": "PPE_NET_BLOCK_MISMATCH",
@@ -548,6 +550,9 @@ class XbrlXmlGenerator:
 
 class XMLGenerationPipeline(Pipeline):
     def __init__(self, payload: dict[str, Any]):
+        # one fact per concept per statement: same-concept lines are added (statement_lines.merge_lines)
+        statements = payload.get("statements") or {}
+        payload = {**payload, "statements": {k: merge_lines(v or []) for k, v in statements.items()}}
         self.payload = payload
         self.validator = IndASValidator(kb_path=INDAS_OUTPUT_JSON_PATH)
         self.generator = XbrlXmlGenerator(payload=payload, concepts=self.validator.concepts)

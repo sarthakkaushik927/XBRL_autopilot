@@ -9,6 +9,8 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from src.services.statement_lines import merge_lines
+
 TOLERANCE = Decimal("1")  # MCA's 1 INR rounding tolerance, as in the validator
 
 
@@ -23,7 +25,7 @@ def _dec(v: Any) -> Decimal | None:
 
 def _facts(rows: list[dict[str, Any]], year: str) -> dict[str, Decimal]:
     out: dict[str, Decimal] = {}
-    for r in rows:
+    for r in merge_lines(rows, as_decimal=True):
         if r.get("concept") and r.get("periodRole") != "start":
             v = _dec(r.get(year))
             if v is not None:

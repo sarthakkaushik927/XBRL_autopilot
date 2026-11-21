@@ -31,6 +31,9 @@ const short = (q) => (q || '').split(':')[1] || '—'
 
 await send('Runtime.enable')
 await send('Page.enable')
+// start clean: a reload drops whatever an earlier run left on screen
+await send('Page.reload')
+await sleep(2000)
 await waitFor(`!!window.__xap_test__?.indas && !!document.querySelector('[data-testid="welcome-indas-start"]')`, 'start screen', 120000)
 await waitFor(`window.xap.sidecar.status().then(s => s.state === 'ready')`, 'sidecar ready', 180000)
 await ev(`window.xap.settings.update({ aiConsent: true }).then(() => true)`)

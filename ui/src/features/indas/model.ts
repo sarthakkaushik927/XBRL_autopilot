@@ -204,10 +204,15 @@ export function buildGenerateInput(s: FilingDraft & { companyNameField?: string 
   const socieRows = s.socie
     .filter((r) => r.concept && r.member)
     .map((r) => ({ member: r.member, concept: r.concept, cy: r.cy, py: r.py, ...(r.periodRole === 'start' ? { periodRole: 'start' } : {}) }))
-  // his PPE checks do arithmetic on every field: a blank schedule cell is 0
+  // his PPE checks do arithmetic on every field: a blank schedule cell is 0. Disposals are a reduction his
+  // roll-forward subtracts (opening + additions - disposals = closing), so they go as positive amounts even when
+  // the schedule prints them with a minus sign.
   const ppeRows = s.ppe
     .filter((r) => r.member)
-    .map((r) => ({ member: r.member, ...Object.fromEntries(Object.entries(PPE_FIELDS).map(([col, field]) => [field, r.amounts[col] ?? 0])) }))
+    .map((r) => ({
+      member: r.member,
+      ...Object.fromEntries(Object.entries(PPE_FIELDS).map(([col, field]) => [field, ppeAmount(col, r.amounts[col] ?? null)])),
+    }))
   const notes: NoteText[] = s.texts.filter((t) => t.concept && t.content.trim()).map((t) => ({ concept: t.concept, content: t.content }))
   const nameKey = s.companyNameField ?? Object.keys(s.company).find((k) => k.endsWith(':NameOfCompany')) ?? ''
   return {
@@ -277,4 +282,10 @@ export function groupByNote(rows: TagRow[]): { note: string; rows: TagRow[] }[] 
 /** The tagged lines of a statement, as the Difference check takes them. */
 export function checkRows(rows: TagRow[], statement: StatementKey) {
   return rows.filter((r) => r.statement === statement && r.concept).map((r) => ({ concept: r.concept, cy: r.cy, py: r.py, periodRole: r.periodRole }))
+}
+
+/** A PPE schedule amount as /generateXML's roll-forward expects it: blank = 0, disposals positive. */
+export function ppeAmount(column: string, v: number | null): number {
+  if (v === null) return 0
+  return /Disposals$/.test(column) ? Math.abs(v) : v
 }
