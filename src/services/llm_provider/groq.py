@@ -37,8 +37,9 @@ DEFAULT_FALLBACK_MODELS: tuple[str, ...] = (
     "llama-3.1-8b-instant",
 )
 
-# A 429 should switch models quickly instead of backing off on the same model.
-RETRIES_PER_MODEL = 1
+# A 429 must switch models at once: the groq client otherwise sleeps for the server's retry-after
+# (36 s seen on 2026-11-21) before the fallback runs. Other errors are not retried here either.
+RETRIES_PER_MODEL = 0
 
 
 def fallback_chain(primary: str, fallbacks: Iterable[str]) -> list[str]:

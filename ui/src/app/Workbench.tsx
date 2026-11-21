@@ -26,9 +26,11 @@ export function Workbench() {
   const hasProject = useProject((s) => s.summary !== null)
   const showingDocument = useNotes((s) => s.activeDoc !== null)
   const indasOpen = useIndas((s) => s.open)
+  // the Ind AS screen is a full-width workspace: no filing explorer, no engine log panel
+  const indasFocus = indasOpen && !hasProject
   return (
     <Group orientation="horizontal" className="min-w-0 flex-1">
-      {sidebarOpen && (
+      {sidebarOpen && !indasFocus && (
         <>
           <Panel id="side" defaultSize="20%" minSize="12%" maxSize="40%">
             <SidePanel />
@@ -55,7 +57,7 @@ export function Workbench() {
               <WelcomeScreen />
             )}
           </Panel>
-          {bottomOpen && (
+          {bottomOpen && !indasFocus && (
             <>
               <VSep />
               <Panel id="bottom" defaultSize="28%" minSize="10%" maxSize="70%">

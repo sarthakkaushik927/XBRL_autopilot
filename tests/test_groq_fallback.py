@@ -57,3 +57,10 @@ def test_single_model_is_returned_as_is():
 def test_bind_applies_to_every_model_in_the_chain():
     llm = with_rate_limit_fallback([RateLimitedModel(responses=["x"]), FakeListChatModel(responses=["bound"])])
     assert llm.bind(stop=["\n"]).invoke("hi").content == "bound"
+
+
+def test_a_rate_limit_switches_without_waiting_on_the_same_model():
+    from src.services.llm_provider.groq import RETRIES_PER_MODEL, _chat_groq
+
+    assert RETRIES_PER_MODEL == 0
+    assert _chat_groq("openai/gpt-oss-20b").max_retries == 0
