@@ -58,16 +58,25 @@ Start screen → **Start Ind AS filing** (or **Download standard template**). Fo
 
 Code: `IndasPipelineService` (Electron-free), `IndasController` (dialogs, progress), `SidecarManager.upload / download`, IPC `indas:*`.
 
-### 6. Open items
-- [x] **Groq model switch on rate limit** — done 2026-11-21: `get_llm()` chains the chosen model with fallbacks (`GROQ_FALLBACK_MODELS`, default gpt-oss-120b → llama-3.3-70b → gpt-oss-20b → llama-3.1-8b). A `groq.RateLimitError` retries the same call on the next model; `with_structured_output` / `bind` apply to the whole chain.
-- [x] **Template download** (path 1) — `/indas/template` + start-screen and step-1 buttons.
-- [x] **UI wiring** to the `/indas/*` routes — the screen above.
+### 6. Tagging every sheet (docs/15 §3, §5) ✅ 2026-11-21
+- **ELR scoping:** `/recommend` takes `scope` (a canonical sheet): candidates are only that sheet's ELR concepts (BS 110000: 57 instead of 5,647; P&L 141; CF 105; notes 1,843), or with `kind: "member"` the sheet's table-axis members (equity components 400200, PPE classes 400600). `src/services/sheet_scope.py` takes them from the knowledge base, because the vector index has no `elr` metadata yet.
+- **Ranking:** local embedding (all-mpnet) + FlashRank, fused. **AI pick** (`use_llm`, only with the user's AI consent): one Groq call per batch picks a concept per line from the allowed scope; only line names and headings are sent; a pick outside the scope is dropped. HPL BS sample: 10/10 right with the AI pick, 7/10 without.
+- **Generator:** `statements.cashFlow` and `statements.noteLines`; contexts from each concept's `periodType`; opening balances (`periodRole: "start"`) at the prior instant (`PY2_Instant`); generic dimensional table rows `{member, concept, cy, py}` (changes in equity); his PPE table rows unchanged; an identical repeated fact is written once, different amounts for the same fact = `OPENING_CLOSING_MISMATCH`.
+- **Screen:** one tab per sheet: Balance Sheet, Profit & Loss, Cash Flow, Notes [L]; Changes in Equity [T] (movement concept × component member); Fixed Assets [T] (class member, columns map to his PPE fields); Notes text [E] (heading + pasted text → text block, `TEXT_BLOCKS` scope). Instant concepts get Closing / Opening. The AI's pick is marked "AI pick — check it"; nothing is tagged until accepted.
+
+### 7. Saving (2026-11-21) ✅
+The work is saved as `<Company>_Ind AS_FY yyyy-yy.axbrl` in the projects folder: `manifest.json` (`kind: "indas"`) + `indas.json` (canonical rows, tags, tables, text blocks, masters). Save button; leaving the screen saves first; the start screen's Saved projects marks Ind AS projects and reopens them in the Ind AS screen. Another project's file is never overwritten (" (2)").
+
+### 8. Open items
+- [x] Groq model switch on rate limit · [x] template download · [x] UI wiring · [x] ELR-scoped suggestions · [x] cash flow / equity / PPE / notes / text blocks · [x] saving
 - [ ] **AI at decision points in `indas.py`** (path 2) — Vashu's, after he reviews more workbooks.
-- [ ] **Save the Ind AS work in a project file:** the screen's state (canonical rows, tags, masters) is lost when you leave it. It needs a format in the projects folder.
-- [ ] **CF, SOCIE, PPE and notes** in `/generateXML`: today it takes only `balanceSheet` / `profitLoss` statements (plus `tables` / `notes`, which the screen doesn't fill yet).
+- [ ] **His PPE XML** writes 4 facts per class without the gross / accumulated-depreciation axis (`CarryingAmountAccumulatedDepreciationAndGrossCarryingAmountAxis`); Vashu to decide whether to model it fully.
+- [ ] **Validation tab with zero-fill** (doc 15 §5 tab 6) — today only the checks inside Generate.
 - [ ] **Old screens** (New filing, tagging grid, validation) still call the removed `/taxonomies` and `/mapping` routes. Decide: remove them, or point them at the new pipeline.
+- [ ] **Index `elr` metadata** (his ingestion) — would let the hybrid search scope too; the KB-based scope works without it.
 
 ## Log
+- **2026-11-21** — Done: ELR-scoped suggestions with the AI pick, tagging of all six sheets + text blocks, cash flow / equity / notes in the generator, saving and reopening Ind AS projects. Line-item names may go to the AI (Sarthak).
 - **2026-11-21** — Done on `integrate/vashu-main`: Groq model switch on 429, standard template (`/indas/template`), the app's 4-step Ind AS screen over `/indas/*`, plus the fixes listed under §2.
 - **2026-11-21** — Vashu: make an `XBRL_Autopilot` folder in Program Files and save projects there; the start screen shows the saved projects and New filing. Done on `integrate/vashu-main`.
 - **2026-11-21** — Merged Vashu's `main` into branch `integrate/vashu-main` (`main` untouched). Sarthak: Vashu's calls take priority; record them here.

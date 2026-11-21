@@ -26,7 +26,9 @@
 | project | `project:open-folder` | invoke | opens the projects folder in the file manager |
 | indas | `indas:save-template` | invoke | Save dialog → writes `/indas/template` → `Result<path \| null>` (docs/17) |
 | indas | `indas:transform` | invoke | Open dialog → `/indas/transform` (multipart) → `Result<TransformResult \| null>` |
-| indas | `indas:recommend` | invoke | `keys[]` → `/indas/recommend` in batches of 8 → `Result<ConceptSuggestion[][]>` (progress on `indas:progress`) |
+| indas | `indas:recommend` | invoke | `RecommendRequest {keys, contexts?, scope, kind?}` → `/indas/recommend` (scoped to one sheet, `use_llm` = AI consent) in batches of 20 → `Result<ConceptSuggestion[][]>` (progress on `indas:progress`) |
+| indas | `indas:save` | invoke | `IndasSaveRequest` → writes the Ind AS project to the projects folder → `Result<{path, savedAt}>` |
+| indas | `indas:open` | invoke | `.axbrl` path → `Result<{path, projectId, draft}>` |
 | indas | `indas:master-fields` | invoke | → `Result<MasterFields>` |
 | indas | `indas:generate` | invoke | `GenerateXmlInput` → `/indas/generateXML` → `Result<GenerateXmlResult>` (XML saved to the projects folder) |
 | indas | `indas:show-generated` | invoke | shows the last generated XML in Explorer |
