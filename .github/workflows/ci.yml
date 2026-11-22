@@ -27,7 +27,7 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Run tests
+      # - name: Run tests
         # run: uv run pytest -v -n=8
 
   build:
