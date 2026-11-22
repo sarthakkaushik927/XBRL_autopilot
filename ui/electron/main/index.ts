@@ -61,12 +61,14 @@ import { SavedProjectsService } from './services/saved-projects-service'
 import { RecentFilingsService } from './services/recent-filings-service'
 import { DirProjectLister } from './infra/dir-project-lister'
 import { IndasPipelineService } from './services/indas-pipeline-service'
+import { CachedKnowledgeBase } from './services/cached-knowledge-base'
 import { IndasController } from './indas/indas-controller'
 import { IndasProjectService } from './services/indas-project-service'
 import { readIndas, writeIndas } from './project/indas-file'
 import { readManifest } from './project/axbrl'
 import { SettingsService } from './services/settings-service'
 import { BackendClient, backendUrl } from './infra/backend-client'
+import { JsonFileCache } from './infra/json-file-cache'
 import { findProjectArg, parseDotEnv, windowTitle } from './util/launch'
 import { hardenConsole } from './util/safe-console'
 
@@ -161,6 +163,8 @@ const indas = new IndasController(
     { write: (_p, name, text) => new FileOutputWriter(projectsFolder.dir()).write(null, name, text) },
     () => settings.get().aiConsent,
     () => settings.get().parallelAutoTag,
+    // docs/18: kept on disk, used again only when the server answers 304 to its ETag
+    new CachedKnowledgeBase(sidecar, new JsonFileCache(join(userData, 'cache', 'indas-authority.json')), sidecar.baseUrl),
   ),
   getWindow,
   () => projectsFolder.dir(),
