@@ -56,14 +56,14 @@ All under `/api/v1/indas/`:
 - Save / Save as / Open dialogs start in that folder.
 - **Start screen:** New filing, Open, Import XBRL, Recover, Recent filings (already there) + **Saved projects**: every `.axbrl` in the folder, newest first, with a Show folder button (`SavedProjectsService`, IPC `project:saved` / `project:open-folder`).
 
-### 5. The app's Ind AS screen (2026-11-21) ✅
-Start screen → **Start Ind AS filing** (or **Download standard template**). Four steps (`ui/src/features/indas/`):
-1. **Financial statements:** upload .xls / .xlsx → `/transform`; review the six canonical sheets. A badge says whether the file was read exactly (template) or converted automatically.
-2. **Tagging:** Balance Sheet + P&L lines with amounts. **Suggest tags** → `/recommend` (8 keys per call, progress shown; the key is the breadcrumb, else the line item). The user picks a suggestion or types a concept; **Accept top suggestions** fills the untagged lines. The AI only proposes.
-3. **Company & auditor:** the `/master-fields` form (period and nature prefilled from the filing settings) and the signatories (at least 2, 8-digit DIN).
-4. **Generate:** readiness check, then `/generateXML`. The XML is saved to the projects folder (`<Company>_AOC4_<end date>.xml`), or the MCA problems are listed.
+### 5. The app's Ind AS screen: the webXBRL-style editor (2026-11-22) ✅
+Superseded the 4-step wizard of 2026-11-21 ([ADR-0017](decisions/ADR-0017-indas-in-the-editor.md)). An Ind AS filing opens in the same editor as a C&I filing:
+- **New project** (start screen, File → New Project / Ctrl+N, activity bar): company, CIN, Ind AS 2017 (default) / C&I 2016, nature, periods, rounding, decimal places, optionally the client Excel. Saved straight away as `<Company>_<FY>.axbrl` in the projects folder. Filing → Filing Settings… edits the same settings later. They prefill the masters and `/generateXML`'s `meta`.
+- **Filing Explorer** (ELRs of each canonical sheet's scope from `/tree/{scope}`), **Excel pane** = the canonical sheets in Univer (canonical row *i* = grid row *i + 1*, so the cell ↔ tag link is exact), **XBRL Form** (presentation tree, values with cell chips, Difference footer), **XML** / **Preview**, **Problems** / AI Agent / Output, status bar, File / Edit / View / Filing / Tools / Help.
+- The wizard's steps are commands: Open financial statements… (`/transform`), Auto-tag (`/recommend`, proposals only), Company & auditor details…, Generate XML (`/generateXML`).
+- Facts and per-ELR differences come from main in exact decimals (`indas:check` returns `facts` and `byElr`); no new routes, nothing calls the sidecar per edit.
 
-Code: `IndasPipelineService` (Electron-free), `IndasController` (dialogs, progress), `SidecarManager.upload / download`, IPC `indas:*`.
+Code: `IndasPipelineService`, `IndasProjectService` (create / save / open, Electron-free), `IndasController`; renderer `stores/indas.ts`, `app/workspace.ts` (the adapter the shared panes read), `features/indas/*`.
 
 ### 6. Tagging every sheet (docs/15 §3, §5) ✅ 2026-11-21
 - **ELR scoping:** `/recommend` takes `scope` (a canonical sheet): candidates are only that sheet's ELR concepts (BS 110000: 57 instead of 5,647; P&L 141; CF 105; notes 1,843), or with `kind: "member"` the sheet's table-axis members (equity components 400200, PPE classes 400600). `src/services/sheet_scope.py` takes them from the knowledge base, because the vector index has no `elr` metadata yet.
@@ -71,8 +71,8 @@ Code: `IndasPipelineService` (Electron-free), `IndasController` (dialogs, progre
 - **Generator:** `statements.cashFlow` and `statements.noteLines`; contexts from each concept's `periodType`; opening balances (`periodRole: "start"`) at the prior instant (`PY2_Instant`); generic dimensional table rows `{member, concept, cy, py}` (changes in equity); his PPE table rows unchanged; an identical repeated fact is written once, different amounts for the same fact = `OPENING_CLOSING_MISMATCH`.
 - **Screen:** one tab per sheet: Balance Sheet, Profit & Loss, Cash Flow, Notes [L]; Changes in Equity [T] (movement concept × component member); Fixed Assets [T] (class member, columns map to his PPE fields); Notes text [E] (heading + pasted text → text block, `TEXT_BLOCKS` scope). Instant concepts get Closing / Opening. The AI's pick is marked "AI pick — check it"; nothing is tagged until accepted.
 
-### 7. Saving (2026-11-21) ✅
-The work is saved as `<Company>_Ind AS_FY yyyy-yy.axbrl` in the projects folder: `manifest.json` (`kind: "indas"`) + `indas.json` (canonical rows, tags, tables, text blocks, masters). Save button; leaving the screen saves first; the start screen's Saved projects marks Ind AS projects and reopens them in the Ind AS screen. Another project's file is never overwritten (" (2)").
+### 7. Saving (2026-11-21, naming 2026-11-22) ✅
+The work is saved as `<Company>_FY yyyy-yy.axbrl` in the projects folder (from New project on; before 2026-11-22: `<Company>_Ind AS_FY yyyy-yy.axbrl`): `manifest.json` (`kind: "indas"`) + `indas.json` (canonical rows, tags, tables, text blocks, masters). Save button; leaving the screen saves first; the start screen's Saved projects marks Ind AS projects and reopens them in the Ind AS screen. Another project's file is never overwritten (" (2)").
 
 ### 8. Open items
 - [x] Groq model switch on rate limit · [x] template download · [x] UI wiring · [x] ELR-scoped suggestions · [x] cash flow / equity / PPE / notes / text blocks · [x] saving
@@ -81,10 +81,12 @@ The work is saved as `<Company>_Ind AS_FY yyyy-yy.axbrl` in the projects folder:
 - [ ] **Our MCA checks are a subset of MCA's rules.** `/generateXML` checks the 700300 company fields, statement roots, calculations, non-negatives and PPE roll-forwards. It does not check the other mandatory lists (`mandatoryByELR`: e.g. 110000 wants OtherIntangibleAssets, LoansNoncurrent…; 700400 wants the auditor details table; 700600 the board report items) or the formula linkbase. Decide whether to add them (and zero-fill, doc 15 §5 tab 6) or rely on the MCA Validation Tool.
 - [ ] **Subtotals a statement doesn't print** (e.g. "Financial assets" under current assets): the XBRL calculation then compares a total with only some of its children and fails. The synthetic template prints them; a real workbook may not. Option: derive the missing subtotal deterministically.
 - [ ] **Validation tab with zero-fill** (doc 15 §5 tab 6) — today only the checks inside Generate.
-- [ ] **Old screens** (New filing, tagging grid, validation) still call the removed `/taxonomies` and `/mapping` routes. Decide: remove them, or point them at the new pipeline.
+- [ ] **Old screens:** New project now creates Ind AS projects through the new pipeline (ADR-0017). A **C&I** project still opens the engine editor, whose tagging grid and validation call the removed `/taxonomies` and `/mapping` routes. Decide: remove C&I from New project, or point the C&I editor at the new pipeline.
+- [ ] **The client's original workbook in the Excel pane:** today the pane shows the canonical sheets. Showing the client's own workbook needs `/transform` to return where each canonical row came from (sheet / row / columns). Vashu's call.
 - [ ] **Index `elr` metadata** (his ingestion) — would let the hybrid search scope too; the KB-based scope works without it.
 
 ## Log
+- **2026-11-22** — Sarthak: the Ind AS filing uses the webXBRL-style editor (Filing Explorer / Excel / XBRL Form / XML / Preview, Problems, status bar), not the 4-step wizard; one **New project** flow creates `<Company>_<FY>.axbrl`, and its settings prefill the masters. The left pane may show our parsed canonical sheets, since they are our own template. Done on `integrate/vashu-main` ([ADR-0017](decisions/ADR-0017-indas-in-the-editor.md)).
 - **2026-11-22** — Vashu (PR #15 review): notebooks hold only `.ipynb`; `data/canonical_sheets/` is the template's source of truth; no server round trip per cell edit (client-side checks; our plan keeps the TS engine for validation); no `/master-fields` (use `/authority`); no `api/__main__.py`. Done on `integrate/vashu-main`.
 - **2026-11-21** — Done: ELR-scoped suggestions with the AI pick, tagging of all six sheets + text blocks, cash flow / equity / notes in the generator, saving and reopening Ind AS projects. Line-item names may go to the AI (Sarthak).
 - **2026-11-21** — Done on `integrate/vashu-main`: Groq model switch on 429, standard template (`/indas/template`), the app's 4-step Ind AS screen over `/indas/*`, plus the fixes listed under §2.

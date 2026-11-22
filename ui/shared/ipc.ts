@@ -3,10 +3,12 @@ import type {
   ConceptSuggestion,
   GenerateXmlInput,
   GenerateXmlResult,
+  IndasDetails,
   IndasOpened,
   IndasSaved,
   IndasSaveRequest,
   MasterFields,
+  ProjectPick,
   RecommendRequest,
   SheetTree,
   CheckResult,
@@ -108,8 +110,12 @@ export type MenuCommand =
   | 'file:open'
   | 'file:save'
   | 'file:save-as'
+  | 'file:close'
   | 'file:import-excel'
   | 'file:import-xbrl'
+  | 'file:save-template'
+  | 'filing:settings'
+  | 'filing:masters'
   | 'filing:validate'
   | 'filing:generate-xml'
   | 'view:toggle-sidebar'
@@ -237,6 +243,8 @@ export const IPC = {
   indasTree: 'indas:tree',
   indasCheck: 'indas:check',
   indasOpen: 'indas:open',
+  indasCreate: 'indas:create',
+  indasPickProject: 'indas:pick-project',
 } as const
 
 /** The API exposed on window.xap by the preload script. */
@@ -437,6 +445,10 @@ export interface XapApi {
     save(req: IndasSaveRequest): Promise<Result<IndasSaved>>
     /** reopens a saved Ind AS project */
     open(path: string): Promise<Result<IndasOpened>>
+    /** New project: validated (validation problems come back as such), saved in the projects folder, returned opened */
+    create(details: IndasDetails): Promise<Result<IndasOpened>>
+    /** File → Open dialog: the picked project and its kind; null when cancelled */
+    pickProject(): Promise<Result<ProjectPick | null>>
     /** a sheet's taxonomy tree(s) for the split view */
     tree(scope: string, kind?: 'concept' | 'member'): Promise<Result<SheetTree[]>>
     /** the live Difference check of tagged lines */

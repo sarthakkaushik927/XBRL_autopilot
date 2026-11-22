@@ -101,21 +101,27 @@ On the right, the XBRL Form shows the reverse: the source cell ref shows as a ch
 - User-facing model selection dropdown and Groq API key configuration inputs removed from the Settings panel to prevent manual tampering and streamline the accountant workflow.
 
 ## Screens
-1. **Welcome:** New filing · Open… · Import XBRL… · Recent projects (company, FY, last opened) · Recover unsaved work (if any).
-2. **New filing wizard:**
-   1. Taxonomy: C&I 2016 or Ind AS 2017 (cards; AOC-4 XBRL).
+1. **Welcome:** New project · Open… · Import XBRL… · Download standard template · Recent filings · Saved projects (the projects folder; Ind AS projects marked) · Recover unsaved work (if any). Each opens the project in the editor.
+2. **New project** (welcome, File → New Project / Ctrl+N, the activity bar's first button; the same dialog is Filing → Filing Settings…, [ADR-0017](decisions/ADR-0017-indas-in-the-editor.md)):
+   1. Taxonomy: Ind AS 2017 (default) or C&I 2016 (cards; AOC-4 XBRL).
    2. Company name and CIN, validated live against the CIN format.
    3. Report type: standalone / consolidated.
    4. FY dates; first financial year?
-   5. Rounding level (Actual / Thousands / Lakhs / Millions / Crores).
-   6. Import Excel (optional) → **Auto-tag now?**
-3. **Import XBRL instance** (welcome button, File → Import XBRL Instance…; Phase 7):
+   5. Rounding level (Actual / Thousands / Lakhs / Millions / Crores) and decimal places.
+   6. Ind AS: "Open the client's Excel right after creating". The project is saved at once as `<Company>_<FY>.axbrl` in the projects folder; the settings prefill the masters (period, nature, company name, CIN, rounding) and `/generateXML`'s `meta`.
+3. **An Ind AS filing in the editor** ([ADR-0017](decisions/ADR-0017-indas-in-the-editor.md)): the same Workbench as C&I.
+   - **Filing Explorer:** company, CIN, FY · nature · rounding · dp; Statements (BS, P&L, OCI, cash flows, changes in equity), Notes (note ELRs, PPE, Notes text blocks [E]), Disclosures (company, auditor & signatories → the masters dialog). The ELRs come from `/indas/tree/{scope}`, grouped by canonical sheet.
+   - **Excel pane:** the canonical sheets (standard template layout) in Univer: green = tagged, amber = suggestion waiting, blue = the selected line. Toolbar: Open financial statements… / Replace…, Template, Auto-tag. Below: the selected line's inspector (✓ accept / ✗ next suggestion, opening / closing balance).
+   - **XBRL Form:** the ELR's presentation tree, Current year / Previous year with a cell chip per value (click → the cell in Excel); red = mandatory and empty, green = reported. Double-click a concept to tag the line selected in Excel. Toolbar: Empty mandatory → n (zero lines), Mandatory items (n) (the masters dialog), Accept suggestions (this statement), Generate XML. Footer: Difference CY · PY (per ELR, exact decimals). Changes in equity, PPE and text blocks open their tagging grid beside the taxonomy tree.
+   - **XML** tab: the instance `/generateXML` wrote; **Preview:** the tagged statements, MCA-like.
+   - **Problems:** before-generating checks, totals that don't add up (double-click → the statement), the MCA checks' answer. **Side panel:** Taxonomy searches the selected line's sheet scope; Masters summarises and opens the dialog.
+4. **Import XBRL instance** (welcome button, File → Import XBRL Instance…; Phase 7):
    - Choose *Open that filing* (every fact as filed) or *Start next year's filing* (its current year becomes the previous year), then the file.
    - The taxonomy, company and periods come from the file.
    - The **import report** follows: counts, the round-trip proof (every fact regenerated with the same element, period, dimensions, unit, decimals and value), anything not imported, and a "their conventions vs ours" table (generator, context-id style, duplicate contexts, fact ids, units, decimals, footnotes). The report is kept in the project (`import/`).
-4. **Workbench:** the main window above.
-5. **Generate XML dialog:** blocking errors are summarised, with "Fix first" or "Generate anyway". Output path; option to open the MCA tool.
-6. **Settings.**
+5. **Workbench:** the main window above.
+6. **Generate XML dialog:** blocking errors are summarised, with "Fix first" or "Generate anyway". Output path; option to open the MCA tool.
+7. **Settings.**
 
 ## Keyboard shortcuts
 | Keys | Action |

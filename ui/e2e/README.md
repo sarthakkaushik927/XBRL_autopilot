@@ -10,7 +10,11 @@ XAP_USER_DATA="$TEMP/xap-e2e-$RANDOM" env -u ELECTRON_RUN_AS_NODE \
 node e2e/phase4-editor.mjs 9350 <screenshotDir> "../data/sample_financials.xlsx"
 ```
 
-`indas-pipeline.mjs` (dev app, real sidecar; docs/17): start screen → Start Ind AS filing → upload (path argument, no dialog) → `/indas/transform` → Suggest tags (`/indas/recommend`; nothing tagged until accepted) → Accept top → master fields from the KB, synthetic company and 2 signatories → Generate: the XML or the MCA problems; screenshots `01`–`06`. Usage: `node e2e/indas-pipeline.mjs <port> <screenshotDir> <workbook.xls|xlsx>`.
+`indas-valid-xml.mjs` (dev app, real sidecar, synthetic filing, no AI; ADR-0017): New project through the real dialog (`indas-new-project.mjs`) → saved as `<Company>_<FY>.axbrl` → the filled standard template in the Excel pane → every line tagged from `tests/fixtures/synthetic_indas/filing.json` → Excel → Form and Form → Excel → green Difference footer on each statement → masters prefilled from the settings → Generate XML (0 MCA problems, XML tab) → save, close, reopen from Saved projects → Arelle. Run from the repo root: `node ui/e2e/indas-valid-xml.mjs <port> <screenshotDir>`.
+
+`indas-pipeline.mjs` (dev app, real sidecar + Groq AI pick; ADR-0017): New project from the activity bar → open a client workbook (path argument, no dialog) → `/indas/transform` → Auto-tag (`/indas/recommend` for every sheet; nothing tagged until accepted) → Accept suggestions on each statement from the Filing Explorer → masters (synthetic) → save, close, reopen → Generate XML: the XML, or the MCA problems listed in Problems. Usage: `node e2e/indas-pipeline.mjs <port> <screenshotDir> <workbook.xls|xlsx>`.
+
+**Memory:** the dev app with Univer needs ~1.4 GB of free commit (renderer ~750 MB after tagging 60 lines). With little free virtual memory (a full C: drive stops the page file growing) the renderer dies with `renderer gone: oom` when the grid mounts; free memory and run again.
 
 `phase11-tables.mjs` (dev app, Ind AS + DGPL `.xls`, no AI): the steps are
 1. Map as table on FA!B10:F29: real selects for the table, 9 rows (line item, role, year, gross / accumulated member) and 4 class columns; Preview reports 36 ready; Map tags 36 cells.

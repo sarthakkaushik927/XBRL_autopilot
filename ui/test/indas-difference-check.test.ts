@@ -38,7 +38,25 @@ describe('checkDifferences (live Difference bar, client side)', () => {
       { concept: 'ind-as:CurrentFinancialAssets', cy: 999, py: null, periodRole: 'start' },
       { concept: '', cy: 5, py: null },
     ])
-    expect(res).toEqual({ differences: [], total: '0' })
+    expect(res).toMatchObject({ differences: [], total: '0', byElr: {} })
+    // the facts the XBRL Form shows: same-concept lines added, opening balances left out
+    expect(res.facts).toEqual({
+      'ind-as:CurrentAssets': { cy: '100', py: null },
+      'ind-as:Inventories': { cy: '60', py: null },
+      'ind-as:CurrentFinancialAssets': { cy: '40', py: null },
+    })
+  })
+
+  it('sums the differences per ELR and year for the Form footer (exact decimals)', () => {
+    const res = checkDifferences(kb, [
+      { concept: 'ind-as:CurrentAssets', cy: 100.1, py: 70 },
+      { concept: 'ind-as:Inventories', cy: 60.05, py: 50 },
+      { concept: 'ind-as:Assets', cy: 300, py: 50 },
+      { concept: 'ind-as:EquityAndLiabilities', cy: 290, py: 50 },
+    ])
+    // CY: current assets 100.10 vs inventories 60.05 (40.05) + assets 300 vs current assets (199.9) + balance 10
+    // PY: current assets 70 vs 50 (20) + assets 50 vs 70 (|-20|)
+    expect(res.byElr['110000']).toEqual({ cy: '249.95', py: '40', issues: 5 })
   })
 })
 

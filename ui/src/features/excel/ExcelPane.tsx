@@ -14,7 +14,7 @@ import { MappingInspector } from './MappingInspector'
 import { SheetColumnsDialog } from './SheetColumnsDialog'
 
 // Univer is large: load it only when a workbook is shown, keeping app start-up fast.
-const UniverGrid = lazy(() => import('./UniverGrid').then((m) => ({ default: m.UniverGrid })))
+const EditorGrid = lazy(() => import('./EditorGrid').then((m) => ({ default: m.EditorGrid })))
 
 /** Left editor: the source workbook(s) with the tag overlay, and the inspector for the selected cell. */
 export function ExcelPane() {
@@ -52,7 +52,7 @@ export function ExcelPane() {
         {active ? (
           <ErrorBoundary key={active.source} what="The Excel view">
             <Suspense fallback={<EmptyState icon={FileSpreadsheet} title="Loading workbook…" />}>
-              <UniverGrid model={active} />
+              <EditorGrid model={active} />
             </Suspense>
           </ErrorBoundary>
         ) : (

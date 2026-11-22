@@ -154,6 +154,8 @@ const api: XapApi = {
     onProgress: (cb) => subscribe<{ done: number; total: number }>(IPC.indasProgress, cb),
     save: (req) => invoke(IPC.indasSave, req),
     open: (path) => invoke(IPC.indasOpen, path),
+    create: (details) => invoke(IPC.indasCreate, details),
+    pickProject: () => invoke(IPC.indasPickProject),
     tree: (scope, kind) => invoke(IPC.indasTree, scope, kind),
     check: (rows) => invoke(IPC.indasCheck, rows),
   },

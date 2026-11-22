@@ -1,5 +1,6 @@
-import { Building2, FolderTree, Search, Settings, Sparkles, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { Building2, FilePlus2, FolderTree, Search, Settings, Sparkles, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { useProject } from '@/stores/project'
 import { useUi, type Activity } from '@/stores/ui'
 
 const ITEMS: { id: Activity; label: string; icon: LucideIcon }[] = [
@@ -32,6 +33,15 @@ export function ActivityBar() {
   }
   return (
     <nav className="flex w-11 shrink-0 flex-col items-center border-r border-border bg-panel-2">
+      <button
+        title="New project (Ctrl+N)"
+        aria-label="New project"
+        onClick={() => useProject.getState().openNewFiling()}
+        className="flex h-11 w-11 items-center justify-center text-muted hover:text-fg"
+        data-testid="activity-new-project"
+      >
+        <FilePlus2 size={20} strokeWidth={1.75} />
+      </button>
       {ITEMS.map((i) => button(i.id, i.label, i.icon))}
       <div className="flex-1" />
       {button('settings', 'Settings', Settings)}

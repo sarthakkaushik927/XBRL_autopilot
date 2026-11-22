@@ -3,17 +3,22 @@
  * depths, plus the hook that keeps the state per statement.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { FormView } from '@shared/editor'
-
 type TreeRow = { depth: number }
 
+/** What the tree folds: a statement's rows (by depth) and its table grids (a C&I FormView, an Ind AS ELR tree). */
+export interface FoldableForm {
+  elrUri: string
+  rows: readonly TreeRow[]
+  tables: readonly { tableId: string }[]
+}
+
 /** Rows that have rows below them in the tree (a head with + / −). */
-export function parentRows(rows: TreeRow[]): number[] {
+export function parentRows(rows: readonly TreeRow[]): number[] {
   return rows.flatMap((r, i) => (rows[i + 1] && rows[i + 1]!.depth > r.depth ? [i] : []))
 }
 
 /** Per row: hidden because a head above it is collapsed. */
-export function hiddenRows(rows: TreeRow[], collapsed: ReadonlySet<number>): boolean[] {
+export function hiddenRows(rows: readonly TreeRow[], collapsed: ReadonlySet<number>): boolean[] {
   const out: boolean[] = []
   let hideBelow: number | null = null // depth of the collapsed head being skipped
   rows.forEach((r, i) => {
@@ -25,7 +30,7 @@ export function hiddenRows(rows: TreeRow[], collapsed: ReadonlySet<number>): boo
 }
 
 /** The heads that enclose a row (nearest first is not guaranteed; order doesn't matter). */
-export function ancestorRows(rows: TreeRow[], index: number): number[] {
+export function ancestorRows(rows: readonly TreeRow[], index: number): number[] {
   const out: number[] = []
   let depth = rows[index]?.depth ?? 0
   for (let i = index - 1; i >= 0 && depth > 0; i--) {
@@ -41,7 +46,7 @@ export function ancestorRows(rows: TreeRow[], index: number): number[] {
  * The tree state of one statement: collapsed heads and closed table grids, reset when the statement changes.
  * `reveal` opens whatever hides a row or table, then runs `then` once that is rendered (to scroll to it).
  */
-export function useFormTree(form: FormView | null) {
+export function useFormTree(form: FoldableForm | null) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(new Set())
   const [closedTables, setClosedTables] = useState<ReadonlySet<string>>(new Set())
   const pending = useRef<(() => void) | null>(null)

@@ -134,7 +134,7 @@ export class IndasPipelineService {
     if (res.status === 200 && res.data?.success && typeof res.data.data?.xmlContent === 'string') {
       const fileName = xmlFileName(input.companyName, input.meta.endDate)
       const path = await this.output.write(null, fileName, res.data.data.xmlContent)
-      return { ok: true, path, fileName, sizeKb: res.data.data.fileSizeKb ?? 0 }
+      return { ok: true, path, fileName, sizeKb: res.data.data.fileSizeKb ?? 0, xml: res.data.data.xmlContent }
     }
     const errors: GenerateXmlProblem[] = (res.data?.errors ?? []).map((e) => ({ type: e.type ?? null, message: e.message ?? String(e) }))
     if (errors.length === 0) errors.push({ type: null, message: res.data?.message || `XML generation failed (${res.status})` })

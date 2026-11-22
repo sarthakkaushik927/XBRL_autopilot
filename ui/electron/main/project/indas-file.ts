@@ -6,10 +6,12 @@
 import { rename, rm, writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import JSZip from 'jszip'
+import type { IndasDetails } from '@shared/indas'
 import { AXBRL_FORMAT, AXBRL_FORMAT_VERSION, type AxbrlManifest } from './axbrl'
 
 export const INDAS_KIND = 'indas'
-export const INDAS_DRAFT_VERSION = 1
+/** 2: the filing settings moved into `details` (New project); version 1 drafts (`meta`) still open */
+export const INDAS_DRAFT_VERSION = 2
 
 export interface IndasFile {
   manifest: AxbrlManifest
@@ -62,10 +64,9 @@ export function indasManifest(input: {
   appVersion: string
   createdAt: string
   updatedAt: string
-  company: { name: string; cin: string }
-  nature: string
-  cy: { start: string; end: string }
+  details: IndasDetails
 }): AxbrlManifest {
+  const d = input.details
   return {
     format: AXBRL_FORMAT,
     formatVersion: AXBRL_FORMAT_VERSION,
@@ -75,7 +76,7 @@ export function indasManifest(input: {
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
     taxonomy: { id: 'ind_as_taxonomy', authorityHash: null },
-    company: input.company,
-    filing: { reportType: input.nature, cy: input.cy, py: null, firstFinancialYear: false, roundingLevel: 'Actual' },
+    company: { name: d.companyName.trim(), cin: d.cin.trim() },
+    filing: { reportType: d.reportType, cy: d.cy, py: d.py, firstFinancialYear: d.py === null, roundingLevel: d.level },
   }
 }

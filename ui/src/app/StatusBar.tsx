@@ -1,14 +1,12 @@
-import { taxonomyLabel } from '@xap/engine/basics'
 import { cn } from '@/lib/cn'
-import { useProject } from '@/stores/project'
 import { useSidecar } from '@/stores/sidecar'
 import { useUi } from '@/stores/ui'
-import { useValidation } from '@/stores/validation'
+import { useWorkspace } from './workspace'
 
 export function StatusBar() {
   const { status, app } = useSidecar()
-  const filing = useProject((s) => s.summary)
-  const problems = useValidation((s) => s.view?.summary ?? null)
+  const filing = useWorkspace()
+  const problems = filing?.problems ?? null
   const openProblems = useUi((s) => s.setBottomTab)
   const dot =
     status.state === 'ready' ? 'bg-ok' : status.state === 'starting' ? 'bg-warn animate-pulse' : 'bg-err'
@@ -27,15 +25,15 @@ export function StatusBar() {
     <footer className="flex h-6 shrink-0 items-center gap-4 border-t border-border bg-panel-2 px-3 text-[11px] text-muted">
       {filing ? (
         <>
-          <span className="font-mono">{filing.company.cin}</span>
-          <span>{filing.fyLabel}</span>
-          <span>{filing.reportType}</span>
-          <span data-testid="filing-taxonomy">{taxonomyLabel(filing.taxonomy)}</span>
-          <span className={filing.dirty ? 'text-warn' : ''} data-testid="save-state">
-            {filing.readOnlyReason ? 'Read-only' : filing.dirty ? (filing.path ? 'Unsaved changes' : 'Not saved yet') : 'Saved'}
+          <span className="font-mono">{filing.header.cin}</span>
+          <span>{filing.header.fyLabel}</span>
+          <span>{filing.header.nature}</span>
+          <span data-testid="filing-taxonomy">{filing.taxonomy}</span>
+          <span className={filing.saveState === 'Saved' ? '' : 'text-warn'} data-testid="save-state">
+            {filing.saveState}
           </span>
           {problems && (
-            <button className="flex items-center gap-2 hover:text-fg" onClick={() => openProblems('problems')} title="Problems (live validation)" data-testid="status-problems">
+            <button className="flex items-center gap-2 hover:text-fg" onClick={() => openProblems('problems')} title="Problems" data-testid="status-problems">
               <span className={problems.errors ? 'text-err' : ''}>{problems.errors} errors</span>
               <span className={problems.warnings ? 'text-warn' : ''}>{problems.warnings} warnings</span>
             </button>

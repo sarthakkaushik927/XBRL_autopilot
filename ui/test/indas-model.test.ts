@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import type { ConceptSuggestion, MasterField, TransformResult } from '@shared/indas'
+import type { ConceptSuggestion, IndasDetails, MasterField, TransformResult } from '@shared/indas'
 import {
   acceptTopSuggestions,
   amount,
   buildGenerateInput,
+  detailsFromLegacy,
   fieldKind,
+  knownMasters,
+  metaOf,
   prefillMasters,
+  withoutKnown,
+  zeroRows,
   readinessProblems,
   isInstant,
   ppeFromTransform,
@@ -28,6 +33,18 @@ const transform: TransformResult = {
     CANONICAL_PL: [{ Row_Index: 1, Line_Item: 'Revenue from operations', Breadcrumb_Hierarchy: 'Income', Note_No: '18', Current_Year_Amount: 9000000, Previous_Year_Amount: null }],
   },
 }
+
+const details = (over: Partial<IndasDetails> = {}): IndasDetails => ({
+  taxonomy: 'ind-as-2017',
+  companyName: 'Acme Pvt Ltd',
+  cin: 'U72200KA2010PTC123456',
+  reportType: 'Standalone',
+  cy: { start: '2025-04-01', end: '2026-03-31' },
+  py: { start: '2024-04-01', end: '2025-03-31' },
+  level: 'Lakhs',
+  statementPlaces: 2,
+  ...over,
+})
 
 const field = (qname: string, type = 'stringItemType'): MasterField => ({ qname, label: qname.split(':')[1], type })
 const sug = (qname: string, periodType: string | null = null): ConceptSuggestion => ({ qname, label: '', score: 0.9, type: null, periodType, balance: null, pickedBy: null })
@@ -74,14 +91,37 @@ describe('acceptTopSuggestions', () => {
 })
 
 describe('prefillMasters', () => {
-  const meta = { nature: 'Consolidated' as const, startDate: '2025-04-01', endDate: '2026-03-31' }
-  it('fills period and nature fields the app already knows, keeping what the user typed', () => {
-    const fields = [field('in-ca:DateOfStartOfReportingPeriod', 'dateItemType'), field('in-ca:DateOfEndOfReportingPeriod', 'dateItemType'), field('in-ca:NatureOfReportStandaloneConsolidated'), field('in-ca:NameOfCompany')]
-    expect(prefillMasters(fields, meta, { 'in-ca:DateOfEndOfReportingPeriod': '2026-03-30' })).toEqual({
+  const known = knownMasters(details({ reportType: 'Consolidated' }))
+  it('fills period, nature, company name and CIN from the filing settings, keeping what the user typed', () => {
+    const fields = [
+      field('in-ca:DateOfStartOfReportingPeriod', 'dateItemType'),
+      field('in-ca:DateOfEndOfReportingPeriod', 'dateItemType'),
+      field('in-ca:NatureOfReportStandaloneConsolidated'),
+      field('in-ca:NameOfCompany'),
+      field('in-ca:CorporateIdentityNumber', 'CINNumber'),
+      field('in-ca:PermanentAccountNumberOfEntity'),
+    ]
+    expect(prefillMasters(fields, known, { 'in-ca:DateOfEndOfReportingPeriod': '2026-03-30' })).toEqual({
       'in-ca:DateOfStartOfReportingPeriod': '2025-04-01',
       'in-ca:DateOfEndOfReportingPeriod': '2026-03-30',
       'in-ca:NatureOfReportStandaloneConsolidated': 'Consolidated',
+      'in-ca:NameOfCompany': 'Acme Pvt Ltd',
+      'in-ca:CorporateIdentityNumber': 'U72200KA2010PTC123456',
     })
+  })
+
+  it('a settings change drops the values the settings own, so they are filled again', () => {
+    const values = { 'in-ca:NameOfCompany': 'Old name', 'in-ca:PermanentAccountNumberOfEntity': 'AAACS1234A' }
+    expect(withoutKnown(values, known)).toEqual({ 'in-ca:PermanentAccountNumberOfEntity': 'AAACS1234A' })
+  })
+
+  it('gives /generateXML its period and nature', () => {
+    expect(metaOf(details())).toEqual({ nature: 'Standalone', startDate: '2025-04-01', endDate: '2026-03-31' })
+  })
+
+  it('reads an old draft\'s period and company into settings', () => {
+    const d = detailsFromLegacy({ nature: 'Consolidated', startDate: '2025-04-01', endDate: '2026-03-31' }, { 'in-ca:NameOfCompany': 'Acme', 'in-ca:CorporateIdentityNumber': 'U1' })
+    expect(d).toMatchObject({ companyName: 'Acme', cin: 'U1', reportType: 'Consolidated', cy: { start: '2025-04-01', end: '2026-03-31' }, taxonomy: 'ind-as-2017' })
   })
 })
 
@@ -95,14 +135,13 @@ describe('fieldKind', () => {
 })
 
 describe('readinessProblems and buildGenerateInput', () => {
-  const meta = { nature: 'Standalone' as const, startDate: '2025-04-01', endDate: '2026-03-31' }
   const rows = rowsFromTransform(transform).map((r, i) => (i === 0 ? { ...r, concept: 'ind-as:EquityShareCapital' } : r))
   const companyFields = [field('in-ca:NameOfCompany'), field('in-ca:CorporateIdentityNumber')]
 
   it('lists what would make generation fail', () => {
-    const p = readinessProblems({ rows: rowsFromTransform(transform), meta: { ...meta, endDate: '' }, signatories: [{ din: '123', name: '', designation: 'Director' }], companyFields, company: { 'in-ca:NameOfCompany': 'Acme' } })
+    const p = readinessProblems({ rows: rowsFromTransform(transform), details: details({ cy: { start: '2025-04-01', end: '' } }), signatories: [{ din: '123', name: '', designation: 'Director' }], companyFields, company: { 'in-ca:NameOfCompany': 'Acme' } })
     expect(p).toEqual([
-      'Enter the financial year start and end dates.',
+      'Enter the financial year start and end dates (Filing → Filing settings).',
       'Tag at least one statement line.',
       'Fill the company details: CorporateIdentityNumber.',
       'Add at least 2 signatory directors.',
@@ -115,13 +154,20 @@ describe('readinessProblems and buildGenerateInput', () => {
       { din: '01234567', name: 'A', designation: 'Director' },
       { din: '76543210', name: 'B', designation: 'Director' },
     ]
-    expect(readinessProblems({ rows, meta, signatories, companyFields, company: { 'in-ca:NameOfCompany': 'Acme', 'in-ca:CorporateIdentityNumber': 'U1' } })).toEqual([])
+    expect(readinessProblems({ rows, details: details(), signatories, companyFields, company: { 'in-ca:NameOfCompany': 'Acme', 'in-ca:CorporateIdentityNumber': 'U1' } })).toEqual([])
   })
 
-  it('sends only accepted tags, per statement, and names the file after the company', () => {
-    const input = buildGenerateInput({ rows, socie: [], ppe: [], texts: [], meta, company: { 'in-ca:NameOfCompany': 'Acme Pvt Ltd' }, auditor: {}, signatories: [] })
+  it('sends only accepted tags, per statement, and names the file after the company (filing settings first)', () => {
+    const input = buildGenerateInput({ rows, socie: [], ppe: [], texts: [], details: details({ companyName: ' ' }), company: { 'in-ca:NameOfCompany': 'Acme Pvt Ltd' }, auditor: {}, signatories: [] })
     expect(input.statements).toEqual({ balanceSheet: [{ concept: 'ind-as:EquityShareCapital', cy: 417830, py: 390220, periodRole: 'end' }], profitLoss: [], cashFlow: [], noteLines: [] })
     expect(input.companyName).toBe('Acme Pvt Ltd')
+    expect(buildGenerateInput({ rows, socie: [], ppe: [], texts: [], details: details(), company: {}, auditor: {}, signatories: [] }).companyName).toBe('Acme Pvt Ltd')
+  })
+
+  it('reports empty mandatory amounts as zero lines, once', () => {
+    const zeros = zeroRows('balanceSheet', [{ qname: 'ind-as:Goodwill', label: 'Goodwill' }], [])
+    expect(zeros).toEqual([expect.objectContaining({ id: 'zero:balanceSheet:ind-as:Goodwill', statement: 'balanceSheet', concept: 'ind-as:Goodwill', cy: 0, py: 0 })])
+    expect(zeroRows('balanceSheet', [{ qname: 'ind-as:Goodwill', label: 'Goodwill' }], zeros)).toEqual([])
   })
 })
 
@@ -172,7 +218,7 @@ describe('every canonical sheet (docs/15 §5)', () => {
       { id: 'text:2', heading: 'Untagged', content: 'x', suggestions: [], concept: '' },
     ]
     const cf = rowsFromTransform(t).map((r) => ({ ...r, concept: r.statement === 'cashFlow' ? 'ind-as:CashAndCashEquivalentsCashFlowStatement' : '', periodRole: 'start' as const }))
-    const input = buildGenerateInput({ rows: cf, socie, ppe, texts, meta: { nature: 'Standalone', startDate: '2025-04-01', endDate: '2026-03-31' }, company: {}, auditor: {}, signatories: [] })
+    const input = buildGenerateInput({ rows: cf, socie, ppe, texts, details: details(), company: {}, auditor: {}, signatories: [] })
     expect(input.statements.cashFlow).toEqual([{ concept: 'ind-as:CashAndCashEquivalentsCashFlowStatement', cy: 10, py: 8, periodRole: 'start' }])
     expect(input.tables[0]).toEqual({
       table: 'ind-as:StatementOfChangesInEquityTable',

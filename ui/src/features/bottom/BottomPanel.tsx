@@ -1,6 +1,9 @@
-import { RotateCw } from 'lucide-react'
+import { RotateCw, Sparkles } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { useWorkspace } from '@/app/workspace'
+import { EmptyState } from '@/components/EmptyState'
 import { Tabs } from '@/components/Tabs'
+import { IndasProblemsPanel } from '@/features/indas/IndasProblemsPanel'
 import { cn } from '@/lib/cn'
 import { useSidecar } from '@/stores/sidecar'
 import { useUi } from '@/stores/ui'
@@ -33,7 +36,10 @@ function OutputLog() {
 
 export function BottomPanel() {
   const { bottomTab, setBottomTab } = useUi()
-  const errors = useValidation((s) => s.view?.summary.errors ?? 0)
+  const ws = useWorkspace()
+  const indas = ws?.kind === 'indas'
+  const ciErrors = useValidation((s) => s.view?.summary.errors ?? 0)
+  const errors = indas ? (ws.problems?.errors ?? 0) : ciErrors
   const toReview = useAi((s) => openCards(s.view).length)
   return (
     <section className="flex h-full flex-col bg-panel" aria-label="Bottom panel">
@@ -42,7 +48,7 @@ export function BottomPanel() {
         onChange={setBottomTab}
         tabs={[
           { id: 'problems', label: 'Problems', badge: errors },
-          { id: 'ai', label: 'AI Agent', badge: toReview },
+          { id: 'ai', label: 'AI Agent', badge: indas ? 0 : toReview },
           { id: 'output', label: 'Output' },
         ]}
         right={
@@ -58,8 +64,15 @@ export function BottomPanel() {
         }
       />
       <div className="min-h-0 flex-1">
-        {bottomTab === 'problems' && <ProblemsPanel />}
-        {bottomTab === 'ai' && <AiPanel />}
+        {bottomTab === 'problems' && (indas ? <IndasProblemsPanel /> : <ProblemsPanel />)}
+        {bottomTab === 'ai' &&
+          (indas ? (
+            <EmptyState icon={Sparkles} title="AI fix proposals">
+              For an Ind AS filing the AI proposes tags (Auto-tag in the Excel pane); fixes for the MCA problems are proposed for C&amp;I filings only for now.
+            </EmptyState>
+          ) : (
+            <AiPanel />
+          ))}
         {bottomTab === 'output' && <OutputLog />}
       </div>
     </section>

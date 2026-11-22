@@ -2,10 +2,11 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { IndasSaveRequest } from '@shared/indas'
+import type { IndasDetails, IndasSaveRequest } from '@shared/indas'
 import { readManifest } from '../electron/main/project/axbrl'
 import { IndasFileError, readIndas, unpackIndas, writeIndas } from '../electron/main/project/indas-file'
 import { IndasProjectService, indasFileStem } from '../electron/main/services/indas-project-service'
+import { ValidationError } from '../electron/main/services/errors'
 import { SavedProjectsService } from '../electron/main/services/saved-projects-service'
 import { DirProjectLister } from '../electron/main/infra/dir-project-lister'
 import { fromDraft, projectCompanyName, toDraft, type IndasWork } from '../src/features/indas/model'
@@ -14,13 +15,23 @@ const realStore = { write: writeIndas, read: readIndas, manifestOf: async (p: st
 const dir = () => mkdtempSync(join(tmpdir(), 'xap-indas-proj-'))
 const clock = (iso: string) => () => new Date(iso)
 
+const details = (over: Partial<IndasDetails> = {}): IndasDetails => ({
+  taxonomy: 'ind-as-2017',
+  companyName: 'Acme Pvt Ltd',
+  cin: 'U72200KA2010PTC123456',
+  reportType: 'Standalone',
+  cy: { start: '2025-04-01', end: '2026-03-31' },
+  py: { start: '2024-04-01', end: '2025-03-31' },
+  level: 'Lakhs',
+  statementPlaces: 2,
+  ...over,
+})
+
 const req = (over: Partial<IndasSaveRequest> = {}): IndasSaveRequest => ({
   projectId: 'p-1',
   path: null,
-  draft: { version: 1, rows: [{ id: 'balanceSheet:0', concept: 'ind-as:Inventories' }] },
-  company: { name: 'Acme Pvt Ltd', cin: 'U1' },
-  nature: 'Standalone',
-  cy: { start: '2025-04-01', end: '2026-03-31' },
+  draft: { version: 2, rows: [{ id: 'balanceSheet:0', concept: 'ind-as:Inventories' }] },
+  details: details(),
   ...over,
 })
 
@@ -29,9 +40,9 @@ describe('IndasProjectService', () => {
     const d = dir()
     const svc = new IndasProjectService(realStore, () => d, '0.1.0', clock('2026-11-21T10:00:00Z'))
     const saved = await svc.save(req())
-    expect(saved.path).toBe(join(d, 'Acme Pvt Ltd_Ind AS_FY 2025-26.axbrl'))
+    expect(saved.path).toBe(join(d, 'Acme Pvt Ltd_FY 2025-26.axbrl'))
     const opened = await svc.open(saved.path)
-    expect(opened).toMatchObject({ path: saved.path, projectId: 'p-1', draft: { version: 1, rows: [{ concept: 'ind-as:Inventories' }] } })
+    expect(opened).toMatchObject({ path: saved.path, projectId: 'p-1', draft: { version: 2, rows: [{ concept: 'ind-as:Inventories' }] } })
   })
 
   it('saving again keeps the file and its creation date', async () => {
@@ -47,13 +58,52 @@ describe('IndasProjectService', () => {
     const svc = new IndasProjectService(realStore, () => d, '0.1.0')
     await svc.save(req({ projectId: 'p-1' }))
     const other = await svc.save(req({ projectId: 'p-2' }))
-    expect(other.path).toBe(join(d, 'Acme Pvt Ltd_Ind AS_FY 2025-26 (2).axbrl'))
+    expect(other.path).toBe(join(d, 'Acme Pvt Ltd_FY 2025-26 (2).axbrl'))
     await expect(svc.save(req({ projectId: 'p-3', path: other.path }))).rejects.toThrow('another project')
   })
 
   it('names files safely', () => {
-    expect(indasFileStem('A/B: "Co"', { start: '2025-04-01', end: '2026-03-31' })).toBe('AB Co_Ind AS_FY 2025-26')
-    expect(indasFileStem(' ', { start: '', end: '' })).toBe('Untitled company_Ind AS_FY FY')
+    expect(indasFileStem('A/B: "Co"', { start: '2025-04-01', end: '2026-03-31' })).toBe('AB Co_FY 2025-26')
+    expect(indasFileStem(' ', { start: '', end: '' })).toBe('Untitled company_FY')
+  })
+})
+
+describe('New project (IndasProjectService.create)', () => {
+  const ids = () => 'p-new'
+
+  it('validates the settings, saves an empty project as <Company>_<FY>.axbrl and returns it opened', async () => {
+    const d = dir()
+    const svc = new IndasProjectService(realStore, () => d, '0.1.0', clock('2026-11-22T09:00:00Z'), ids)
+    const opened = await svc.create(details({ companyName: '  Acme Pvt Ltd ', cin: 'u72200ka2010ptc123456' }))
+    expect(opened.path).toBe(join(d, 'Acme Pvt Ltd_FY 2025-26.axbrl'))
+    expect(opened.projectId).toBe('p-new')
+    expect(opened.draft).toMatchObject({ version: 2, details: { companyName: 'Acme Pvt Ltd', cin: 'U72200KA2010PTC123456', level: 'Lakhs', statementPlaces: 2 } })
+    const m = await readManifest(opened.path)
+    expect(m).toMatchObject({
+      kind: 'indas',
+      projectId: 'p-new',
+      company: { name: 'Acme Pvt Ltd', cin: 'U72200KA2010PTC123456' },
+      filing: { reportType: 'Standalone', cy: { start: '2025-04-01', end: '2026-03-31' }, py: { start: '2024-04-01', end: '2025-03-31' }, firstFinancialYear: false, roundingLevel: 'Lakhs' },
+    })
+    expect(await svc.kindOf(opened.path)).toBe('indas')
+  })
+
+  it('refuses invalid settings with the problems to show, writing nothing', async () => {
+    const d = dir()
+    const svc = new IndasProjectService(realStore, () => d, '0.1.0', clock('2026-11-22T09:00:00Z'), ids)
+    const err = await svc.create(details({ companyName: ' ', cin: 'BAD', taxonomy: 'ci-2016' })).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ValidationError)
+    expect((err as ValidationError).problems).toEqual([
+      'Enter the company name.',
+      'Enter a valid 21-character CIN (e.g. U72200KA2010PTC123456).',
+      'This project type is for Ind AS 2017 filings.',
+    ])
+  })
+
+  it('a first financial year has no previous year in the manifest', async () => {
+    const d = dir()
+    const opened = await new IndasProjectService(realStore, () => d, '0.1.0', undefined, ids).create(details({ py: null }))
+    expect((await readManifest(opened.path))?.filing).toMatchObject({ py: null, firstFinancialYear: true })
   })
 })
 
@@ -83,7 +133,7 @@ describe('draft round trip', () => {
     socie: [],
     ppe: [],
     texts: [{ id: 'text:1', heading: 'Policies', content: 'Text', suggestions: [], concept: 'ind-as:X' }],
-    meta: { nature: 'Standalone', startDate: '2025-04-01', endDate: '2026-03-31' },
+    details: details(),
     company: {},
     auditor: {},
     signatories: [{ din: '01234567', name: 'A', designation: 'Director' }],
@@ -93,12 +143,15 @@ describe('draft round trip', () => {
     expect(fromDraft(JSON.parse(JSON.stringify(toDraft(work))))).toEqual(work)
   })
 
-  it('an older draft missing parts opens with them empty', () => {
+  it('an older draft missing parts opens with them empty; its meta becomes the settings', () => {
     expect(fromDraft({ version: 1 }).rows).toEqual([])
+    const old = fromDraft({ version: 1, meta: { nature: 'Consolidated', startDate: '2024-04-01', endDate: '2025-03-31' }, company: { 'in-ca:NameOfCompany': 'Old Co' } })
+    expect(old.details).toMatchObject({ companyName: 'Old Co', reportType: 'Consolidated', cy: { start: '2024-04-01', end: '2025-03-31' } })
   })
 
-  it('names the project after the company field, else the workbook', () => {
-    expect(projectCompanyName(work)).toBe('HPL financials')
-    expect(projectCompanyName({ ...work, company: { 'in-ca:NameOfCompany': ' Acme ' } })).toBe('Acme')
+  it('names the project after the settings, else the company field, else the workbook', () => {
+    expect(projectCompanyName(work)).toBe('Acme Pvt Ltd')
+    expect(projectCompanyName({ ...work, details: details({ companyName: '' }) })).toBe('HPL financials')
+    expect(projectCompanyName({ ...work, details: details({ companyName: '' }), company: { 'in-ca:NameOfCompany': ' Acme ' } })).toBe('Acme')
   })
 })

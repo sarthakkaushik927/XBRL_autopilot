@@ -1,5 +1,5 @@
 /** Project-level types shared by main, preload and renderer. See docs/03-project-file-axbrl.md. */
-import type { ReportType, RoundingLevel, TaxonomyId } from '@xap/engine/basics'
+import { isFilingTaxonomy, isValidCin, maxDisplayPlaces, ROUNDING_LEVELS, validateFilingPeriods, type ReportType, type RoundingLevel, type TaxonomyId } from '@xap/engine/basics'
 
 export type { ReportType, RoundingLevel, TaxonomyId }
 
@@ -148,4 +148,22 @@ export interface SettingsState extends AppSettings {
   /** true when the key comes from the dev .env (no key stored in Settings) */
   groqKeyFromEnv: boolean
   canEncrypt: boolean
+}
+
+/** Pure validation of the New Filing form; returns user-facing problems. */
+export function validateNewFiling(input: NewFilingInput): string[] {
+  const problems: string[] = []
+  if (input.taxonomy !== undefined && !isFilingTaxonomy(input.taxonomy)) problems.push('Choose a taxonomy: C&I 2016 or Ind AS 2017.')
+  if (!input.companyName?.trim()) problems.push('Enter the company name.')
+  if (!isValidCin(input.cin ?? '')) problems.push('Enter a valid 21-character CIN (e.g. U72200KA2010PTC123456).')
+  if (input.reportType !== 'Standalone' && input.reportType !== 'Consolidated') problems.push('Choose Standalone or Consolidated.')
+  if (!ROUNDING_LEVELS.includes(input.level)) problems.push('Choose a level of rounding.')
+  else if (input.statementPlaces !== undefined) {
+    const max = maxDisplayPlaces(input.level)
+    if (!Number.isInteger(input.statementPlaces) || input.statementPlaces < 0 || input.statementPlaces > max) {
+      problems.push(`Decimal places as presented must be a whole number from 0 to ${max} for amounts in ${input.level}.`)
+    }
+  }
+  problems.push(...validateFilingPeriods(input.cy, input.py))
+  return problems
 }

@@ -1,5 +1,7 @@
-import { Sparkles, TriangleAlert } from 'lucide-react'
+import { TriangleAlert } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
+import { IndasMastersSummary, IndasTaxonomyPanel } from '@/features/indas/IndasSidePanels'
+import { IndasProblemsPanel } from '@/features/indas/IndasProblemsPanel'
 import { AiChatPanel } from '@/features/ai-chat/AiChatPanel'
 import { FilingExplorer } from '@/features/explorer/FilingExplorer'
 import { MastersPanel } from '@/features/masters/MastersPanel'
@@ -7,6 +9,7 @@ import { SettingsPanel } from '@/features/settings/SettingsPanel'
 import { TaxonomyPanel } from '@/features/taxonomy/TaxonomyPanel'
 import { cn } from '@/lib/cn'
 import { useUi, type Activity } from '@/stores/ui'
+import { useWorkspace } from './workspace'
 
 const TITLES: Record<Activity, string> = {
   explorer: 'Filing explorer',
@@ -19,6 +22,7 @@ const TITLES: Record<Activity, string> = {
 
 export function SidePanel() {
   const activity = useUi((s) => s.activity)
+  const indas = useWorkspace()?.kind === 'indas'
   return (
     <aside className="flex h-full flex-col bg-panel">
       <header className="flex h-8 shrink-0 items-center border-b border-border px-3 text-[11px] font-semibold uppercase tracking-wide text-muted">
@@ -26,14 +30,17 @@ export function SidePanel() {
       </header>
       <div className={cn('min-h-0 flex-1', activity === 'ai' ? 'flex flex-col overflow-hidden' : 'overflow-auto')}>
         {activity === 'explorer' && <FilingExplorer />}
-        {activity === 'taxonomy' && <TaxonomyPanel />}
-        {activity === 'problems' && (
-          <EmptyState icon={TriangleAlert} title="No problems" phase="Phase 6">
-            Validation errors, warnings and MCA tool messages will be grouped by statement here.
-          </EmptyState>
-        )}
+        {activity === 'taxonomy' && (indas ? <IndasTaxonomyPanel /> : <TaxonomyPanel />)}
+        {activity === 'problems' &&
+          (indas ? (
+            <IndasProblemsPanel />
+          ) : (
+            <EmptyState icon={TriangleAlert} title="No problems" phase="Phase 6">
+              Validation errors, warnings and MCA tool messages will be grouped by statement here.
+            </EmptyState>
+          ))}
         {activity === 'ai' && <AiChatPanel />}
-        {activity === 'masters' && <MastersPanel />}
+        {activity === 'masters' && (indas ? <IndasMastersSummary /> : <MastersPanel />)}
         {activity === 'settings' && <SettingsPanel />}
       </div>
     </aside>

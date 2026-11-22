@@ -7,7 +7,7 @@
  * Assets vs Equity and liabilities. Totals with no tagged children are not checked (nothing to compare).
  */
 import { decimal as Dec } from '@xap/engine'
-import type { CheckResult, Difference, StatementLine } from '@shared/indas'
+import type { CheckResult, Difference, ElrDifference, FactValue, StatementLine } from '@shared/indas'
 import { conceptLabel, type IndasKnowledgeBase, type KbCalculation } from './indas-knowledge-base'
 
 type Dec = ReturnType<typeof Dec.parse>
@@ -51,10 +51,11 @@ function byParent(eqs: readonly KbCalculation[]): Map<string, KbCalculation[]> {
   return out
 }
 
-/** Tagged lines → the totals that don't tie (amounts as decimal strings) and Σ |difference|. */
+/** Tagged lines → the facts they make, the totals that don't tie (amounts as decimal strings) and Σ |difference|. */
 export function checkDifferences(kb: IndasKnowledgeBase, rows: readonly StatementLine[]): CheckResult {
   const differences: Difference[] = []
   const gaps: Dec[] = []
+  const factValues: Record<string, FactValue> = {}
   const push = (d: Omit<Difference, 'reported' | 'calculated' | 'difference'>, reported: Dec, calculated: Dec) => {
     const gap = Dec.sub(reported, calculated)
     gaps.push(gap)
@@ -64,6 +65,7 @@ export function checkDifferences(kb: IndasKnowledgeBase, rows: readonly Statemen
   for (const year of ['cy', 'py'] as const) {
     const label: Difference['year'] = year === 'cy' ? 'CY' : 'PY'
     const f = facts(rows, year)
+    for (const [concept, v] of f) (factValues[concept] ??= { cy: null, py: null })[year] = Dec.toString(v)
     const seen = new Set<string>()
     for (const [elr, eqs] of Object.entries(kb.calculation ?? {})) {
       for (const [parent, children] of byParent(eqs)) {
@@ -93,5 +95,19 @@ export function checkDifferences(kb: IndasKnowledgeBase, rows: readonly Statemen
       )
     }
   }
-  return { differences, total: Dec.toString(Dec.sum(gaps.map(abs))) }
+  return { differences, total: Dec.toString(Dec.sum(gaps.map(abs))), facts: factValues, byElr: perElr(differences) }
+}
+
+/** Σ |difference| per ELR and year, and the number of totals that don't add up. */
+function perElr(differences: readonly Difference[]): Record<string, ElrDifference> {
+  const sums = new Map<string, { cy: Dec; py: Dec; issues: number }>()
+  for (const d of differences) {
+    const s = sums.get(d.elr) ?? { cy: Dec.parse('0'), py: Dec.parse('0'), issues: 0 }
+    const gap = abs(Dec.parse(d.difference))
+    if (d.year === 'CY') s.cy = Dec.add(s.cy, gap)
+    else s.py = Dec.add(s.py, gap)
+    s.issues++
+    sums.set(d.elr, s)
+  }
+  return Object.fromEntries([...sums].map(([elr, s]) => [elr, { cy: Dec.toString(s.cy), py: Dec.toString(s.py), issues: s.issues }]))
 }

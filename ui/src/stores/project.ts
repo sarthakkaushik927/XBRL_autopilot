@@ -14,6 +14,8 @@ interface ProjectState {
   /** project id the ELR list belongs to (each project may use another taxonomy) */
   elrsFor: string | null
   newFilingOpen: boolean
+  /** the New project dialog creates a project, or edits the open Ind AS filing's settings (Filing settings…) */
+  newFilingMode: 'new' | 'settings'
   importXbrlOpen: boolean
   /** shown after an XBRL instance import */
   importReport: ImportReportView | null
@@ -21,6 +23,8 @@ interface ProjectState {
   refreshLists(): Promise<void>
   openProjectsFolder(): Promise<void>
   openNewFiling(): void
+  /** Filing → Filing settings: the same dialog, filled with the open filing's settings */
+  openFilingSettings(): void
   closeNewFiling(): void
   /** returns form problems on validation failure, [] on success */
   create(input: NewFilingInput): Promise<string[]>
@@ -66,6 +70,7 @@ export const useProject = create<ProjectState>((set, get) => {
     elrs: [],
     elrsFor: null,
     newFilingOpen: false,
+    newFilingMode: 'new',
     importXbrlOpen: false,
     importReport: null,
 
@@ -89,7 +94,8 @@ export const useProject = create<ProjectState>((set, get) => {
 
     openProjectsFolder: () => api().openFolder(),
 
-    openNewFiling: () => set({ newFilingOpen: true }),
+    openNewFiling: () => set({ newFilingOpen: true, newFilingMode: 'new' }),
+    openFilingSettings: () => set({ newFilingOpen: true, newFilingMode: 'settings' }),
     closeNewFiling: () => set({ newFilingOpen: false }),
 
     create: async (input) => {

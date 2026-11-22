@@ -101,7 +101,7 @@ describe('IndasPipelineService', () => {
     const out = writer()
     const { sidecar, calls } = fakeSidecar({ '/api/v1/indas/generateXML': () => ok({ xmlContent: '<xbrl/>', fileSizeKb: 1.2 }) })
     const r = await new IndasPipelineService(sidecar, out).generate(input())
-    expect(r).toEqual({ ok: true, path: 'C:/Projects/Acme Pvt Ltd_AOC4_2026-03-31.xml', fileName: 'Acme Pvt Ltd_AOC4_2026-03-31.xml', sizeKb: 1.2 })
+    expect(r).toEqual({ ok: true, path: 'C:/Projects/Acme Pvt Ltd_AOC4_2026-03-31.xml', fileName: 'Acme Pvt Ltd_AOC4_2026-03-31.xml', sizeKb: 1.2, xml: '<xbrl/>' })
     expect(out.written).toEqual([{ name: 'Acme Pvt Ltd_AOC4_2026-03-31.xml', text: '<xbrl/>' }])
     expect(calls[0].body).toEqual(toPayload(input()))
   })
@@ -172,7 +172,7 @@ describe('split view calls', () => {
       { concept: 'ind-as:NoncurrentAssets', cy: 7, py: null },
     ]
     expect(await svc.check(rows)).toMatchObject({ total: '3', differences: [{ concept: 'ind-as:Assets', label: 'Assets', reported: '10', calculated: '7' }] })
-    expect(await svc.check([{ concept: 'ind-as:Assets', cy: 1, py: null }])).toEqual({ differences: [], total: '0' })
+    expect(await svc.check([{ concept: 'ind-as:Assets', cy: 1, py: null }])).toEqual({ differences: [], total: '0', facts: { 'ind-as:Assets': { cy: '1', py: null } }, byElr: {} })
     expect((await svc.masterFields()).company).toEqual([{ qname: 'in-ca:NameOfCompany', label: 'Name of company', type: 'stringItemType' }])
     expect(calls.map((c) => [c.method, c.path])).toEqual([
       ['GET', '/api/v1/indas/tree/CANONICAL_PPE_SCHEDULE?kind=member'],

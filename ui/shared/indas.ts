@@ -3,6 +3,8 @@
  * driven through the sidecar's /api/v1/indas/* routes. Every canonical sheet is tagged (docs/15 §5).
  */
 
+import type { NewFilingInput } from './project'
+
 /** One canonical row as the sidecar returns it (column → value; blank cells are null). */
 export type CanonicalRow = Record<string, string | number | boolean | null>
 
@@ -146,7 +148,8 @@ export interface GenerateXmlProblem {
 }
 
 export type GenerateXmlResult =
-  | { ok: true; path: string; fileName: string; sizeKb: number }
+  /** `xml` = the instance as written (the XML tab shows it) */
+  | { ok: true; path: string; fileName: string; sizeKb: number; xml: string }
   | { ok: false; errors: GenerateXmlProblem[] }
 
 // ---------------------------------------------------------------- saving the work (docs/17 projects folder)
@@ -154,14 +157,24 @@ export type GenerateXmlResult =
 /** The screen's work as saved in the project file (opaque to main; `version` guards old apps). */
 export type IndasDraft = { version: number } & Record<string, unknown>
 
+/**
+ * The filing settings of an Ind AS project (New project / Filing settings…): company, CIN, nature, periods,
+ * rounding. The same shape as the C&I New filing form, so one dialog and one validation serve both.
+ */
+export type IndasDetails = NewFilingInput
+
 export interface IndasSaveRequest {
   projectId: string
   /** null = a new file in the projects folder, named after the company and year */
   path: string | null
   draft: IndasDraft
-  company: { name: string; cin: string }
-  nature: string
-  cy: { start: string; end: string }
+  details: IndasDetails
+}
+
+/** A project file picked in File → Open, with the kind its manifest declares. */
+export interface ProjectPick {
+  path: string
+  kind: 'indas' | 'filing'
 }
 
 export interface IndasSaved {
@@ -210,8 +223,24 @@ export interface Difference {
   children: string[]
 }
 
+/** One concept's reported value per year: the tagged lines added up exactly (decimal strings; null = no line). */
+export interface FactValue {
+  cy: string | null
+  py: string | null
+}
+
 export interface CheckResult {
   differences: Difference[]
   /** Σ |difference| as a decimal string; "0" = everything ties */
   total: string
+  /** the facts the tagged lines make (closing balances / period amounts), by concept: what the XBRL Form shows */
+  facts: Record<string, FactValue>
+  /** per ELR: Σ |difference| per year (decimal strings) and how many totals don't add up (the Form's footer) */
+  byElr: Record<string, ElrDifference>
+}
+
+export interface ElrDifference {
+  cy: string
+  py: string
+  issues: number
 }

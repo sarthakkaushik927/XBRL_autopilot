@@ -27,5 +27,8 @@
     "shared/**/*.ts",
     "test/**/*.ts",
     "vitest.config.mts"
+  ],
+  "exclude": [
+    "test/**/*.renderer.test.ts"
   ]
 }

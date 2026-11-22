@@ -9,10 +9,12 @@ import type {
   ConceptSuggestion,
   GenerateXmlInput,
   GenerateXmlResult,
+  IndasDetails,
   IndasOpened,
   IndasSaved,
   IndasSaveRequest,
   MasterFields,
+  ProjectPick,
   RecommendRequest,
   SheetTree,
   CheckResult,
@@ -21,9 +23,11 @@ import type {
 } from '@shared/indas'
 import type { IndasPipelineService } from '../services/indas-pipeline-service'
 import type { IndasProjectService } from '../services/indas-project-service'
+import { AXBRL_EXTENSION } from '../project/axbrl'
 
 export const TEMPLATE_FILE_NAME = 'XBRL_Autopilot_Standard_Template.xlsx'
 const EXCEL_FILTERS = [{ name: 'Excel workbook', extensions: ['xlsx', 'xls'] }]
+const PROJECT_FILTERS = [{ name: 'XBRL Autopilot project', extensions: [AXBRL_EXTENSION.slice(1)] }]
 
 export class IndasController {
   private lastGenerated: string | null = null
@@ -42,6 +46,20 @@ export class IndasController {
 
   open(path: string): Promise<IndasOpened> {
     return this.projects.open(path)
+  }
+
+  /** New project (File → New project): saved straight away in the projects folder. */
+  create(details: IndasDetails): Promise<IndasOpened> {
+    return this.projects.create(details)
+  }
+
+  /** File → Open: asks for a project file and says which editor it belongs to. `null` = cancelled. */
+  async pickProject(): Promise<ProjectPick | null> {
+    const opts = { title: 'Open project', properties: ['openFile' as const], filters: PROJECT_FILTERS, defaultPath: this.projectsDir() }
+    const win = this.getWindow()
+    const { canceled, filePaths } = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    const path = canceled ? undefined : filePaths[0]
+    return path ? { path, kind: await this.projects.kindOf(path) } : null
   }
 
   /** Asks where to save the standard template and writes it. `null` = cancelled. */

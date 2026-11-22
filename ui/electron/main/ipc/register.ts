@@ -8,7 +8,7 @@ import type { AppSettings, NewFilingInput } from '@shared/project'
 import { PREVIEW_SPACINGS, type PreviewFormat } from '@xap/engine/basics'
 import type { ProjectController } from '../project/project-controller'
 import type { IndasController } from '../indas/indas-controller'
-import type { GenerateXmlInput, IndasSaveRequest, RecommendRequest, StatementLine } from '@shared/indas'
+import type { GenerateXmlInput, IndasDetails, IndasSaveRequest, RecommendRequest, StatementLine } from '@shared/indas'
 import type { SavedProjectsService } from '../services/saved-projects-service'
 import type { AutoTagService } from '../services/auto-tag-service'
 import type { ColumnPeriodService } from '../services/column-period-service'
@@ -371,6 +371,9 @@ function registerIndasIpc({ indas }: IpcDeps): void {
   handleQuery(IPC.indasShowGenerated, () => indas.showGenerated())
   handleResult(IPC.indasSave, (_e, req: unknown) => indas.save(requireSaveRequest(req)))
   handleResult(IPC.indasOpen, (_e, path: unknown) => indas.open(requireProjectPath(path)))
+  // the service validates the settings (ValidationError → the dialog's problem list)
+  handleResult(IPC.indasCreate, (_e, details: unknown) => indas.create(requireDetails(details)))
+  handleResult(IPC.indasPickProject, () => indas.pickProject())
   handleResult(IPC.indasTree, (_e, scope: unknown, kind?: unknown) => {
     const s = requireString(scope, 'scope')
     if (!/^[A-Z_]{1,40}$/.test(s) || (kind !== undefined && kind !== 'concept' && kind !== 'member')) throw new Error('Invalid tree request')
@@ -391,16 +394,27 @@ function requireSaveRequest(v: unknown): IndasSaveRequest {
     /^[a-zA-Z0-9-]{1,64}$/.test(r.projectId) &&
     (r.path === null || (typeof r.path === 'string' && r.path.toLowerCase().endsWith('.axbrl'))) &&
     !!r.draft &&
-    typeof r.draft.version === 'number' &&
-    !!r.company &&
-    typeof r.company.name === 'string' &&
-    typeof r.company.cin === 'string' &&
-    typeof r.nature === 'string' &&
-    !!r.cy &&
-    typeof r.cy.start === 'string' &&
-    typeof r.cy.end === 'string'
+    typeof r.draft.version === 'number'
   if (!ok) throw new Error('Invalid project data')
-  return r
+  return { ...r, details: requireDetails(r.details) }
+}
+
+/** The shape of the filing settings; their meaning (CIN, dates …) is validated by the service. */
+function requireDetails(v: unknown): IndasDetails {
+  const d = v as IndasDetails
+  const period = (p: unknown) => !!p && typeof (p as { start?: unknown }).start === 'string' && typeof (p as { end?: unknown }).end === 'string'
+  const ok =
+    !!d &&
+    typeof d === 'object' &&
+    typeof d.companyName === 'string' &&
+    typeof d.cin === 'string' &&
+    typeof d.reportType === 'string' &&
+    typeof d.level === 'string' &&
+    period(d.cy) &&
+    (d.py === null || period(d.py)) &&
+    (d.statementPlaces === undefined || typeof d.statementPlaces === 'number')
+  if (!ok) throw new Error('Invalid filing settings')
+  return d
 }
 
 function requireProjectPath(v: unknown): string {
