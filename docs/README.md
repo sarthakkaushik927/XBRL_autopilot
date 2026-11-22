@@ -27,6 +27,7 @@ Read the doc that matches the task. Keep docs short, factual and current. When c
 | 19 | [XBRL pipeline architecture](16-target-architecture.md) | **Start here for the design**: the planned pipeline stage by stage (has / wrong / add), our pipeline (Ingest → Normalize → Tag → Assure → File), contracts, routes and build order ([ADR-0016](decisions/ADR-0016-canonical-financial-package.md)) |
 | 17 | [Team direction](17-team-direction.md) | **Priority:** Vashu's current decisions (input paths, `/indas/*` routes, what overrides doc 16 / ADRs) and open items |
 | 18 | [Performance](18-performance.md) | What made the app hang and how it was fixed (in plain words), and the ordered list of next optimisations |
+| 19 | [Ind AS Fix with AI](19-indas-fix-with-ai.md) | Fix with AI in the Problems panel: how to use it, what goes to the AI, safety rails, live results |
 | — | [decisions/](decisions/) | Why a big choice was made (ADRs; e.g. [ADR-0014](decisions/ADR-0014-qdrant-vector-db-and-inmemory-chat-integration.md) for Qdrant, in-memory chat, & hybrid reranking) |
 
 **Discussion docs (2026-11-17).** Where they disagree with doc 16 or an ADR, the ADR wins.

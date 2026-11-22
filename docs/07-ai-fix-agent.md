@@ -8,6 +8,8 @@
 > 3. **Sidecar Status:** The endpoint `/api/v1/fix/propose` remains a stub returning `503 Service Unavailable`. Development effort is concentrated on frontend spreadsheet interaction, tag workflows, and deterministic validation.
 
 ## Ind AS: Fix with AI (2026-11-22)
+How to use it, safety rails and results in plain words: [19](19-indas-fix-with-ai.md).
+
 The Ind AS editor (ADR-0017) has its own, smaller fix path for the totals that don't add up (the live Difference check):
 - **Where:** Problems → **✦ Fix with AI** on a Difference row, or **✦ Fix all with AI** (top of the list). Readiness, company and DIN problems get no AI button (they open the dialog). The answer appears in the left **AI chat** as a message with one **card per change** (line → concept / opening balance / no tag, the reason, and the dry run's effect). **Accept** / **Reject** each, or **Accept all**. Accept goes through `useIndas.setConcept` / `setPeriodRole`, so the Difference check re-runs at once; a card whose line was retagged meanwhile turns stale and is never applied.
 - **Backend** `POST /api/v1/indas/fix` (`src/services/indas_fix.py`, stateless): the prompt holds each problem with the KB calculation around its concept (`total = ± part …` with labels), the lines (id, line item, headings, CY, PY, tag) and the allowed concepts (the sheet scope when ≤ 80, else the problems' calculation neighbourhood). Structured output (`FixAnswer`) via `get_llm()` (Groq fallback chain).
