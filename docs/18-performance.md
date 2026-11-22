@@ -33,7 +33,7 @@ Ordered by expected gain. Points 1–3 come from numbers measured on 2026-11-22;
 
 1. **Faster Auto-tag (the biggest remaining wait: 31–209 s without AI, 173 s with it).**
    - **Parallel batches:** lines go in batches of 20, one batch at a time. Sending 3–4 batches at once should divide the time by about 3–4; the limit is Groq's rate limit, and we already switch models on a 429. The change is in `IndasPipelineService.recommend`.
-   - **Lighter models:** convert the embedding model and the reranker to ONNX or a quantized form. Usually 2–4× faster at nearly the same quality.
+   - **Lighter models (Vashu's, 2026-11-22):** convert the embedding model and the reranker to ONNX or a quantized form. Usually 2–4× faster at nearly the same quality. **It changes the tag suggestions** (another or compressed model ranks differently), so it is left to Vashu: measure the quality first on the DGPL / HPL answer keys.
    - **Cache the concepts' embeddings:** the taxonomy never changes, so compute them once and save them. Check first whether `rank_scope` already caches.
 2. **Less memory on the CA's laptop.** During testing the machine had about 375 MB of free memory left, and everything slows down when memory runs out.
    - **Python backend (~1.1 GB):** moving it to the hosted server frees that on the laptop. Done; it takes effect once the server is up.
@@ -43,7 +43,7 @@ Ordered by expected gain. Points 1–3 come from numbers measured on 2026-11-22;
 5. **Faster first open.** The app downloads the whole knowledge base (`/authority`) on first open.
    - ✅ **Compress responses (2026-11-22):** gzip on the server (`GZipMiddleware` in `api/app.py`, responses ≥ 1 KB, streamed chat left as is). `/indas/authority` goes from **4.3 MB to 356 KB** (12× smaller). The app's `fetch` asks for gzip and unpacks it by itself, so no app change was needed. Test: `tests/test_gzip.py`.
    - **Cache it on disk:** download again only when the server's version changes.
-6. **Fewer round trips to the remote server.** Send a whole sheet in one request and stream the progress back, instead of many small requests.
+6. **Fewer round trips to the remote server (needs Vashu's review first, 2026-11-22).** Send a whole sheet in one request and stream the progress back, instead of many small requests. It changes the backend API (his routes), so the design goes to him before any code.
 7. **Keep it fast.** Run `ui/e2e/indas-perf.mjs` in CI, so a change that makes any action slower than its limit fails before it ships.
 
 **Suggested first step:** 1 (parallel Auto-tag batches): one service file, and it should cut Auto-tag time several-fold.
