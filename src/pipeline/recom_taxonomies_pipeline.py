@@ -1,3 +1,4 @@
+import asyncio
 
 from typing import Any, List, Literal, Optional
 from langchain_core.documents import Document
@@ -36,7 +37,9 @@ async def _scoped(
     qnames = axis_members(kb, scope) if kind == "member" else scope_concepts(kb, scope)
     docs = scope_documents(kb, qnames)
     scope_key = f"{scope}:{kind}"
-    ranked = [rank_scope(scope_key, docs, key) if key else [] for key in keys]
+    # embedding + reranking is CPU work: off the event loop, so /health and the other routes keep answering while
+    # a sheet is auto-tagged (PR #15 review: the app looked hung / "backend not reachable" during Auto-tag)
+    ranked = await asyncio.to_thread(lambda: [rank_scope(scope_key, docs, key) if key else [] for key in keys])
 
     picks: dict[int, str] = {}
     if use_llm:
@@ -113,7 +116,7 @@ async def RecommendTaxonomies(
                 results.append([])
                 continue
 
-            ranked = reranker.rerank(query=key, candidates=candidates, top_k=top_k)
+            ranked = await asyncio.to_thread(reranker.rerank, query=key, candidates=candidates, top_k=top_k)
             results.append([_clean(r.document, r.score) for r in (ranked or [])[: max(top_k, 1)]])
 
         logger.info("pipeline.recommend_taxonomies.completed", results_count=len(results))

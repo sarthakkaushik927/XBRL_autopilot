@@ -60,11 +60,14 @@ def configured_fallbacks() -> tuple[str, ...]:
 def with_rate_limit_fallback(llms: list[BaseChatModel]) -> Runnable:
     """Runs on the first model; on a rate-limit error retries the same call on the next one.
 
+    A model Groq no longer serves (404, retired from the list) is skipped the same way: on 2026-11-22 a 429 on the
+    chosen model fell through to a retired fallback whose 404 ended the chain, and the AI pick was lost.
+
     `.with_structured_output(...)` / `.bind_tools(...)` on the result apply to every model in the chain.
     """
     if len(llms) == 1:
         return llms[0]
-    return llms[0].with_fallbacks(llms[1:], exceptions_to_handle=(groq.RateLimitError,))
+    return llms[0].with_fallbacks(llms[1:], exceptions_to_handle=(groq.RateLimitError, groq.NotFoundError))
 
 
 def _chat_groq(model: str) -> ChatGroq:

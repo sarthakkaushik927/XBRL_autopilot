@@ -21,6 +21,12 @@ class RateLimitedModel(FakeListChatModel):
         raise _rate_limit()
 
 
+class RetiredModel(FakeListChatModel):
+    def _call(self, *args, **kwargs):
+        req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+        raise groq.NotFoundError("model not found", response=httpx.Response(404, request=req), body=None)
+
+
 class BrokenModel(FakeListChatModel):
     def _call(self, *args, **kwargs):
         raise ValueError("not a rate limit")
@@ -40,6 +46,11 @@ def test_rate_limit_switches_to_the_next_model_mid_run():
 
 def test_walks_the_whole_chain():
     llm = with_rate_limit_fallback([RateLimitedModel(responses=["x"]), RateLimitedModel(responses=["x"]), FakeListChatModel(responses=["third"])])
+    assert llm.invoke("hi").content == "third"
+
+
+def test_a_retired_model_is_skipped_like_a_rate_limited_one():
+    llm = with_rate_limit_fallback([RateLimitedModel(responses=["x"]), RetiredModel(responses=["x"]), FakeListChatModel(responses=["third"])])
     assert llm.invoke("hi").content == "third"
 
 
