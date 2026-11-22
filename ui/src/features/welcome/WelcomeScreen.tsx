@@ -1,6 +1,6 @@
-import { Download, FileCode2, FilePlus2, FolderOpen, FolderTree, History, LifeBuoy, Trash2, X } from 'lucide-react'
+import { Download, FilePlus2, FolderOpen, FolderTree, History, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { openCiFiling, openIndasProject, openProjectFile } from '@/app/filings'
+import { openIndasProject, openProjectFile } from '@/app/filings'
 import { Button } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 import { useIndas } from '@/stores/indas'
@@ -20,13 +20,12 @@ function Card(props: { title: string; icon: ReactNode; children: ReactNode; clas
   )
 }
 
-/** Shown when no filing is open: start, open, recent, saved in the projects folder, recover. */
+/** Shown when no filing is open: New project, Open, the template, Recent filings and Saved projects (Ind AS). */
 export function WelcomeScreen() {
   const { saveTemplate } = useIndas()
-  const { recent, recovery, saved, openNewFiling, openImportXbrl, recover, discardRecovery, forgetRecent, openProjectsFolder } = useProject()
-  // Recent filings don't record their kind: the manifest of a saved project does
-  const kindOf = (path: string) => saved.projects.find((p) => p.path === path)?.kind
-  const openPath = (path: string, kind = kindOf(path)) => void (kind === 'indas' ? openIndasProject(path) : openCiFiling(path))
+  // the current architecture only (Sarthak, 2026-11-22): main lists Ind AS projects in Recent and Saved
+  const { recent, saved, openNewFiling, forgetRecent, openProjectsFolder } = useProject()
+  const openPath = (path: string) => void openIndasProject(path)
   return (
     <div className="h-full overflow-auto bg-bg">
       <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-12">
@@ -46,40 +45,11 @@ export function WelcomeScreen() {
             <Button onClick={() => void openProjectFile()} data-testid="welcome-open">
               <FolderOpen size={15} /> Open…
             </Button>
-            <Button onClick={openImportXbrl} data-testid="welcome-import-xbrl">
-              <FileCode2 size={15} /> Import XBRL…
-            </Button>
             <Button variant="ghost" onClick={() => void saveTemplate()} data-testid="welcome-indas-template">
               <Download size={15} /> Download standard template
             </Button>
           </div>
         </section>
-
-        {recovery.length > 0 && (
-          <Card title="Recover unsaved work" icon={<LifeBuoy size={14} className="text-warn" />} className="border-warn/50">
-            <ul>
-              {recovery.map((r) => (
-                <li key={r.id} className="flex items-center gap-3 rounded px-2 py-2 hover:bg-panel-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px]">
-                      {r.company} · {r.fy}
-                    </div>
-                    <div className="truncate text-[11px] text-muted">
-                      Autosaved {when(r.savedAt)}
-                      {r.originalPath ? ` · ${r.originalPath}` : ' · never saved'}
-                    </div>
-                  </div>
-                  <Button variant="primary" onClick={() => void recover(r.id)}>
-                    Recover
-                  </Button>
-                  <Button variant="ghost" title="Discard this copy" onClick={() => void discardRecovery(r.id)}>
-                    <Trash2 size={14} />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
 
         <Card title="Recent filings" icon={<History size={14} className="text-muted" />}>
           {recent.length === 0 ? (
@@ -127,11 +97,11 @@ export function WelcomeScreen() {
             <ul data-testid="welcome-saved-projects">
               {saved.projects.map((p) => (
                 <li key={p.path}>
-                  <button className="flex w-full items-center gap-3 rounded px-2 py-1.5 text-left hover:bg-panel-2" title={p.path} onClick={() => openPath(p.path, p.kind)}>
+                  <button className="flex w-full items-center gap-3 rounded px-2 py-1.5 text-left hover:bg-panel-2" title={p.path} onClick={() => openPath(p.path)}>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px]">
                         {p.company} <span className="text-muted">· {p.fy}</span>
-                        {p.kind === 'indas' && <span className="ml-2 rounded bg-accent/10 px-1 text-[10px] text-accent">Ind AS</span>}
+                        <span className="ml-2 rounded bg-accent/10 px-1 text-[10px] text-accent">Ind AS</span>
                       </div>
                       <div className="truncate text-[11px] text-muted">
                         {p.fileName} · saved {when(p.updatedAt)}

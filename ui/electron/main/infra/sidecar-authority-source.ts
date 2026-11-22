@@ -4,6 +4,7 @@
  * (GET /api/v1/taxonomies/{id}/engine-rules, ADR-0011).
  */
 import type { TaxonomyId } from '@xap/engine/basics'
+import { OLD_EDITOR_FILING } from '@shared/project'
 import type { AuthorityJson, RuleBundleSource, SidecarClient, TaxonomyAuthoritySource } from '../services/ports'
 import { SidecarCallError, sidecarCall } from './sidecar-call'
 import { KB_TAXONOMY_ID } from './sidecar-taxonomy-catalog'
@@ -29,8 +30,7 @@ export class SidecarAuthoritySource implements TaxonomyAuthoritySource {
 }
 
 /** Shown when an engine (C&I editor) filing is opened but the sidecar no longer serves the engine's taxonomy routes. */
-export const ENGINE_ROUTES_REMOVED =
-  'This filing was made with the earlier editor, which needs the engine taxonomy routes (/taxonomies) that the Ind AS pipeline removed, so it cannot be opened in this version. For an Ind AS filing, use New project and open the financial statements.'
+export const ENGINE_ROUTES_REMOVED = OLD_EDITOR_FILING
 
 /** A taxonomy without built rules (404, e.g. Costing) gets null, which means an empty rule model. */
 export class SidecarRuleBundleSource implements RuleBundleSource {

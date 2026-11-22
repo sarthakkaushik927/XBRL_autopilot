@@ -58,6 +58,7 @@ import { ProjectService } from './services/project-service'
 import { ProjectsFolder, projectsFolderCandidates } from './services/projects-folder'
 import { FsWritableDirProbe } from './infra/fs-writable-dir-probe'
 import { SavedProjectsService } from './services/saved-projects-service'
+import { RecentFilingsService } from './services/recent-filings-service'
 import { DirProjectLister } from './infra/dir-project-lister'
 import { IndasPipelineService } from './services/indas-pipeline-service'
 import { IndasController } from './indas/indas-controller'
@@ -110,7 +111,10 @@ const projectsFolder = new ProjectsFolder(
   projectsFolderCandidates({ programFiles: process.env.ProgramFiles, documents: app.getPath('documents'), userData }, join),
   new FsWritableDirProbe(),
 )
-const savedProjects = new SavedProjectsService(() => projectsFolder.dir(), new DirProjectLister())
+const savedProjects = new SavedProjectsService(() => projectsFolder.dir(), new DirProjectLister(), (kind) => kind === 'indas')
+const projectManifest = (p: string) => (existsSync(p) ? readManifest(p) : Promise.resolve(null))
+// the start screen shows the current architecture only (Sarthak, 2026-11-22): Ind AS projects
+const recentFilings = new RecentFilingsService(db, projectManifest)
 const projectController = new ProjectController(projects, getWindow, new InstanceImportService(authorities, projects), () => projectsFolder.dir())
 const autosave = new AutosaveScheduler(projects, () => settings.get().autosaveSeconds)
 
@@ -158,10 +162,11 @@ const indas = new IndasController(
   () => projectsFolder.dir(),
   (done, total) => mainWindow?.webContents.send(IPC.indasProgress, { done, total }),
   new IndasProjectService(
-    { write: writeIndas, read: readIndas, manifestOf: (p) => (existsSync(p) ? readManifest(p) : Promise.resolve(null)) },
+    { write: writeIndas, read: readIndas, manifestOf: projectManifest },
     () => projectsFolder.dir(),
     app.getVersion(),
   ),
+  recentFilings,
 )
 const preview = new PreviewService(projects, app.getVersion())
 const pdfExport = new PdfExportService(preview, new ElectronPdfRenderer(), (path, data) => writeFile(path, data))
@@ -315,6 +320,7 @@ if (!app.requestSingleInstanceLock()) {
       projects,
       projectController,
       savedProjects,
+      recentFilings,
       indas,
       openProjectsFolder: () => shell.openPath(projectsFolder.dir()).then(() => undefined),
       settings,

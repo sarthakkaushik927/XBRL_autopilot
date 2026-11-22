@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  FILING_TAXONOMIES,
   defaultStatementPlaces,
   defaultReportingYear,
   fyLabel,
@@ -14,12 +13,12 @@ import {
   type TaxonomyId,
 } from '@xap/engine/basics'
 import type { NewFilingInput } from '@shared/project'
-import { createIndasProject, openCiFilingNew } from '@/app/filings'
-import { Button, Checkbox, ChoiceCards, Dialog, Field, Input, Section, Select } from '@/components/ui/primitives'
+import { createIndasProject } from '@/app/filings'
+import { Button, Checkbox, Dialog, Field, Input, Section, Select } from '@/components/ui/primitives'
 import { useIndas } from '@/stores/indas'
 import { useProject } from '@/stores/project'
 
-/** New projects are Ind AS by default (v1 focus, docs/17); C&I 2016 stays available. */
+/** New projects are Ind AS 2017 (the current architecture only, Sarthak 2026-11-22; C&I's editor needs removed routes). */
 export const NEW_PROJECT_TAXONOMY: TaxonomyId = 'ind-as-2017'
 
 interface FormState {
@@ -81,8 +80,8 @@ export function toInput(f: FormState): NewFilingInput {
 
 /**
  * New project (File → New project, Ctrl+N, start screen, activity bar) and Filing settings (Filing menu): one dialog.
- * Ind AS projects are created by main (validated, saved straight away as `<Company>_<FY>.axbrl` in the projects
- * folder); C&I filings go through the engine project path. In settings mode it edits the open Ind AS filing.
+ * Projects are Ind AS, created by main (validated, saved straight away as `<Company>_<FY>.axbrl` in the projects
+ * folder). In settings mode it edits the open Ind AS filing.
  */
 export function NewFilingDialog() {
   const { newFilingOpen, newFilingMode, closeNewFiling } = useProject()
@@ -118,7 +117,6 @@ export function NewFilingDialog() {
   const nameError = submitted && !f.companyName.trim() ? 'Enter the company name' : null
   const canSubmit = Boolean(f.companyName.trim() && isValidCin(f.cin) && periodErrors.length === 0)
 
-  const isIndas = f.taxonomy === NEW_PROJECT_TAXONOMY
   const submit = async () => {
     setSubmitted(true)
     if (!canSubmit) return
@@ -128,15 +126,13 @@ export function NewFilingDialog() {
         const problems = useIndas.getState().updateDetails(input)
         setServerProblems(problems)
         if (!problems.length) closeNewFiling()
-      } else if (isIndas) {
+      } else {
         const problems = await createIndasProject(input)
         setServerProblems(problems)
         if (!problems.length) {
           closeNewFiling()
           if (f.openWorkbook) void useIndas.getState().upload()
         }
-      } else {
-        setServerProblems(await openCiFilingNew(input))
       }
     } finally {
       setBusy(false)
@@ -146,7 +142,7 @@ export function NewFilingDialog() {
   return (
     <Dialog
       open={newFilingOpen}
-      title={editing ? 'Filing settings' : 'New project — AOC-4 XBRL'}
+      title={editing ? 'Filing settings' : 'New project — AOC-4 XBRL (Ind AS 2017)'}
       onClose={closeNewFiling}
       width={620}
       footer={
@@ -167,11 +163,6 @@ export function NewFilingDialog() {
           void submit()
         }}
       >
-        {!editing && (
-          <Section title="Taxonomy">
-            <ChoiceCards label="Taxonomy" value={f.taxonomy} options={FILING_TAXONOMIES} onChange={(taxonomy) => patch({ taxonomy })} testIdPrefix="taxonomy" />
-          </Section>
-        )}
 
         <Section title="Company">
           <div className="grid grid-cols-2 gap-3">
@@ -249,7 +240,7 @@ export function NewFilingDialog() {
           </Field>
         </Section>
 
-        {!editing && isIndas && (
+        {!editing && (
           <Section title="Financial statements">
             <Checkbox
               checked={f.openWorkbook}

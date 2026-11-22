@@ -45,8 +45,6 @@ function runCommand(cmd: MenuCommand): void {
       return ind ? toast.info('Ind AS projects are saved in the projects folder (Save).') : void (project.summary ? project.saveAs() : undefined)
     case 'file:close':
       return void closeFiling()
-    case 'file:import-xbrl':
-      return project.openImportXbrl()
     case 'file:import-excel':
       if (ind) return void indas.upload()
       return void (project.summary ? useEditor.getState().importWorkbook() : project.openNewFiling())

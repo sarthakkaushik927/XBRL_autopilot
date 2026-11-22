@@ -11,6 +11,8 @@ export class SavedProjectsService {
   constructor(
     private readonly dir: () => string,
     private readonly lister: ProjectFileLister,
+    /** which kinds of project to list (all by default) */
+    private readonly include: (kind: SavedProject['kind']) => boolean = () => true,
   ) {}
 
   /** Readable projects in the folder, newest first; files that aren't projects are skipped. */
@@ -19,9 +21,11 @@ export class SavedProjectsService {
     const projects: SavedProject[] = []
     for (const { path, manifest } of await this.lister.list(dir)) {
       if (!manifest) continue
+      const kind = manifest.kind === 'indas' ? 'indas' : 'filing'
+      if (!this.include(kind)) continue
       projects.push({
         path,
-        kind: manifest.kind === 'indas' ? 'indas' : 'filing',
+        kind,
         fileName: basename(path),
         company: manifest.company.name || '(unnamed company)',
         cin: manifest.company.cin,

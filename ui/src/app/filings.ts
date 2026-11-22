@@ -1,13 +1,14 @@
 /**
- * Opening, creating and closing filings of either kind (ADR-0017). Only one filing is open at a time: a C&I engine
- * filing (useProject) or an Ind AS filing (useIndas). Each use case closes the other kind first (which saves an
- * Ind AS filing's work, or asks Save / Don't save for a C&I filing).
+ * Opening, creating and closing filings (ADR-0017). The UI offers the current architecture only (Sarthak,
+ * 2026-11-22): Ind AS projects. A C&I engine filing can still be open (e.g. a double-clicked .axbrl), so the use
+ * cases close it first; a file saved by the earlier editor gets OLD_EDITOR_FILING instead of a failed open.
  */
 import type { IndasDetails } from '@shared/indas'
-import type { NewFilingInput } from '@shared/project'
+import { OLD_EDITOR_FILING } from '@shared/project'
 import { unwrap } from '@/lib/result'
 import { useIndas } from '@/stores/indas'
 import { useProject } from '@/stores/project'
+import { toast } from '@/stores/toast'
 
 /** Closes the C&I filing; false when the user cancelled. */
 async function closeCi(): Promise<boolean> {
@@ -25,22 +26,12 @@ export async function openIndasProject(path: string): Promise<void> {
   if (await closeCi()) await useIndas.getState().openSaved(path)
 }
 
-/** A C&I filing through the engine project path; returns the form's problems ([] = created). */
-export async function openCiFilingNew(input: NewFilingInput): Promise<string[]> {
-  if (!(await useIndas.getState().close())) return ['Save or close the open Ind AS filing first.']
-  return useProject.getState().create(input)
-}
-
-export async function openCiFiling(path?: string): Promise<void> {
-  if (await useIndas.getState().close()) await useProject.getState().open(path)
-}
-
-/** File → Open: one dialog for both kinds; the file's manifest says which editor opens it. */
+/** File → Open: a project from the projects folder (or anywhere); its manifest says whether this version can open it. */
 export async function openProjectFile(): Promise<void> {
   const picked = await unwrap(window.xap.indas.pickProject())
   if (!picked) return
   if (picked.kind === 'indas') await openIndasProject(picked.path)
-  else await openCiFiling(picked.path)
+  else toast.error(OLD_EDITOR_FILING)
 }
 
 /** File → Close: back to the start screen (an Ind AS filing's work is saved first). */

@@ -18,7 +18,6 @@ export function buildMenu(getWindow: () => BrowserWindow | null, isDev: boolean)
         { type: 'separator' },
         { label: 'Open Financial Statements…', accelerator: 'CmdOrCtrl+I', click: send('file:import-excel') },
         { label: 'Save Standard Template…', click: send('file:save-template') },
-        { label: 'Import XBRL Instance…', click: send('file:import-xbrl') },
         { type: 'separator' },
         { label: 'Settings', accelerator: 'CmdOrCtrl+,', click: send('tools:settings') },
         { type: 'separator' },

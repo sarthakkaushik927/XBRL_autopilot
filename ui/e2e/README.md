@@ -10,6 +10,8 @@ XAP_USER_DATA="$TEMP/xap-e2e-$RANDOM" env -u ELECTRON_RUN_AS_NODE \
 node e2e/phase4-editor.mjs 9350 <screenshotDir> "../data/sample_financials.xlsx"
 ```
 
+Since 2026-11-22 the start screen has no Import XBRL / Recover and New project is Ind AS only, so the older C&I scripts (`phase3`–`phase11`, `linkage-follow`) need the engine editor back before they can run.
+
 `indas-valid-xml.mjs` (dev app, real sidecar, synthetic filing, no AI; ADR-0017): New project through the real dialog (`indas-new-project.mjs`) → saved as `<Company>_<FY>.axbrl` → the filled standard template in the Excel pane → every line tagged from `tests/fixtures/synthetic_indas/filing.json` → Excel → Form and Form → Excel → green Difference footer on each statement → masters prefilled from the settings → Generate XML (0 MCA problems, XML tab) → save, close, reopen from Saved projects → Arelle. Run from the repo root: `node ui/e2e/indas-valid-xml.mjs <port> <screenshotDir>`.
 
 `indas-pipeline.mjs` (dev app, real sidecar + Groq AI pick; ADR-0017): New project from the activity bar → open a client workbook (path argument, no dialog) → `/indas/transform` → Auto-tag (`/indas/recommend` for every sheet; nothing tagged until accepted) → Accept suggestions on each statement from the Filing Explorer → masters (synthetic) → save, close, reopen → Generate XML: the XML, or the MCA problems listed in Problems. Usage: `node e2e/indas-pipeline.mjs <port> <screenshotDir> <workbook.xls|xlsx>`.

@@ -38,19 +38,27 @@ export class IndasController {
     private readonly projectsDir: () => string,
     private readonly onProgress: (done: number, total: number) => void,
     private readonly projects: IndasProjectService,
+    /** Recent filings: the project goes on top when it is created, opened or saved */
+    private readonly recent: { remember(path: string): Promise<void> } = { remember: async () => {} },
   ) {}
 
-  save(req: IndasSaveRequest): Promise<IndasSaved> {
-    return this.projects.save(req)
+  async save(req: IndasSaveRequest): Promise<IndasSaved> {
+    const saved = await this.projects.save(req)
+    await this.recent.remember(saved.path)
+    return saved
   }
 
-  open(path: string): Promise<IndasOpened> {
-    return this.projects.open(path)
+  async open(path: string): Promise<IndasOpened> {
+    const opened = await this.projects.open(path)
+    await this.recent.remember(path)
+    return opened
   }
 
   /** New project (File → New project): saved straight away in the projects folder. */
-  create(details: IndasDetails): Promise<IndasOpened> {
-    return this.projects.create(details)
+  async create(details: IndasDetails): Promise<IndasOpened> {
+    const opened = await this.projects.create(details)
+    await this.recent.remember(opened.path)
+    return opened
   }
 
   /** File → Open: asks for a project file and says which editor it belongs to. `null` = cancelled. */

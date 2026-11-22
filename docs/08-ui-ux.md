@@ -102,9 +102,9 @@ On the right, the XBRL Form shows the reverse: the source cell ref shows as a ch
 - User-facing model selection dropdown and Groq API key configuration inputs removed from the Settings panel to prevent manual tampering and streamline the accountant workflow.
 
 ## Screens
-1. **Welcome:** New project · Open… · Import XBRL… · Download standard template · Recent filings · Saved projects (the projects folder; Ind AS projects marked) · Recover unsaved work (if any). Each opens the project in the editor.
+1. **Welcome:** New project · Open… · Download standard template · Recent filings · Saved projects (the projects folder). Both lists show Ind AS projects only, and each opens the project in the editor. Old-architecture entries are hidden for now (Sarthak, 2026-11-22): filings saved by the earlier engine editor, Import XBRL and Recover unsaved work. File → Open on such a file explains why it can't open.
 2. **New project** (welcome, File → New Project / Ctrl+N, the activity bar's first button; the same dialog is Filing → Filing Settings…, [ADR-0017](decisions/ADR-0017-indas-in-the-editor.md)):
-   1. Taxonomy: Ind AS 2017 (default) or C&I 2016 (cards; AOC-4 XBRL).
+   1. Taxonomy: Ind AS 2017 (the C&I choice is hidden while the C&I editor needs the removed routes).
    2. Company name and CIN, validated live against the CIN format.
    3. Report type: standalone / consolidated.
    4. FY dates; first financial year?

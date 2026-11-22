@@ -167,3 +167,7 @@ export function validateNewFiling(input: NewFilingInput): string[] {
   problems.push(...validateFilingPeriods(input.cy, input.py))
   return problems
 }
+
+/** A filing saved by the earlier engine editor: its `/taxonomies` routes were removed with the Ind AS pipeline (docs/17 §3). */
+export const OLD_EDITOR_FILING =
+  'This filing was made with the earlier editor, which needs the engine taxonomy routes (/taxonomies) that the Ind AS pipeline removed, so it cannot be opened in this version. For an Ind AS filing, use New project and open the financial statements.'
