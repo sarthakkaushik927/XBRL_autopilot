@@ -51,8 +51,26 @@ function byParent(eqs: readonly KbCalculation[]): Map<string, KbCalculation[]> {
   return out
 }
 
-/** Tagged lines → the facts they make, the totals that don't tie (amounts as decimal strings) and Σ |difference|. */
-export function checkDifferences(kb: IndasKnowledgeBase, rows: readonly StatementLine[]): CheckResult {
+/**
+ * The totals the check compares: reported, with at least one tagged part (either year). A dry run keeps checking
+ * them after a change (`keepChecking`), so removing a total's last tagged part can't hide its difference.
+ */
+export function checkedTotals(kb: IndasKnowledgeBase, rows: readonly StatementLine[]): Set<string> {
+  const out = new Set<string>()
+  for (const year of ['cy', 'py'] as const) {
+    const f = facts(rows, year)
+    for (const eqs of Object.values(kb.calculation ?? {})) {
+      for (const [parent, children] of byParent(eqs)) if (f.has(parent) && children.some((ch) => f.has(ch.to))) out.add(parent)
+    }
+  }
+  return out
+}
+
+/**
+ * Tagged lines → the facts they make, the totals that don't tie (amounts as decimal strings) and Σ |difference|.
+ * A total in `keepChecking` is compared even when none of its parts is tagged (their sum is then 0).
+ */
+export function checkDifferences(kb: IndasKnowledgeBase, rows: readonly StatementLine[], keepChecking: ReadonlySet<string> = new Set()): CheckResult {
   const differences: Difference[] = []
   const gaps: Dec[] = []
   const factValues: Record<string, FactValue> = {}
@@ -72,7 +90,7 @@ export function checkDifferences(kb: IndasKnowledgeBase, rows: readonly Statemen
         const reported = f.get(parent)
         if (reported === undefined || seen.has(parent)) continue
         const present = children.filter((ch) => f.has(ch.to))
-        if (present.length === 0) continue
+        if (present.length === 0 && !keepChecking.has(parent)) continue
         seen.add(parent)
         const total = Dec.sum(present.map((ch) => Dec.mul(f.get(ch.to)!, Dec.parse(ch.weight))))
         if (!beyondTolerance(Dec.sub(reported, total))) continue

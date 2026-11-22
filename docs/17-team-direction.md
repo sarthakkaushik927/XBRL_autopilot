@@ -49,6 +49,7 @@ All under `/api/v1/indas/`:
 - **Removed on Vashu's `main`:** `/taxonomies` and `/mapping` routes, the engine authority / engine rules builders and their `knowledge_base/*_engine_*.json` outputs, the Dixon and Rebel instances. The old UI and engine tests that use them will break; that is accepted during the rework (see CLAUDE.md → Branching).
 - **Client workbooks in `notebooks/`** are accepted by the team; don't flag them.
 - **AI and client fixtures (2026-11-21, Sarthak):** line-item names and headings from the client workbooks (e.g. HPL) may be sent to Groq for the AI tag pick and in the Ind AS e2e run. Amounts, company names, CINs and whole workbooks are never sent. (Replaces CLAUDE.md's old "never send them to an AI service".)
+- **Amounts may go to the AI (2026-11-22, Sarthak):** for Ind AS Fix with AI, line items, headings, amounts and tags are sent. Identity data (company name, CIN, PAN, DINs) never is; company / DIN problems open the details dialog, not the AI. The workbooks in `data/` and `notebooks/user_data/` are team sample data, not client data: live AI runs on them are fine.
 
 ### 4. Projects folder (decided 2026-11-21) ✅
 - Filings are saved by default to **`<Program Files>\XBRL_Autopilot\Projects`**. The per-machine installer creates it and makes it writable for every user (`ui/build/installer.nsh`).
@@ -86,6 +87,7 @@ The work is saved as `<Company>_FY yyyy-yy.axbrl` in the projects folder (from N
 - [ ] **Index `elr` metadata** (his ingestion) — would let the hybrid search scope too; the KB-based scope works without it.
 
 ## Log
+- **2026-11-22** — Sarthak: Fix with AI for the Ind AS Problems panel, as cards in the left AI chat, accepted one by one (plus Accept all); a Fix with AI button on each total that doesn't add up and Fix all. Amounts may go to the AI (see §3). Done on `feat/indas-fix-with-ai`.
 - **2026-11-22** — Vashu (chat): CI/CD deploys the backend; after the merge it is served at `http://13.127.205.133:7860` (http, not https). `make build-ui` bakes that URL into packaged builds (`XAP_API_URL`); local development uses `make dev-server` (`127.0.0.1:7860`).
 - **2026-11-22** — Vashu (PR #15 review + chat), done on `integrate/vashu-main` ([ADR-0018](decisions/ADR-0018-hosted-backend-and-responsive-editor.md)):
   - **Hosted backend:** the app never starts or stops the Python backend. It connects to `XAP_API_URL`; local dev runs `make dev-server`, then `pnpm dev`.

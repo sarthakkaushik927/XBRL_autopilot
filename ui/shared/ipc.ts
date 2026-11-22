@@ -1,6 +1,8 @@
 /** Shared IPC contract between main, preload and renderer. See docs/09-ipc-and-sidecar-api.md. */
 import type {
   ConceptSuggestion,
+  FixProposal,
+  FixRequest,
   GenerateXmlInput,
   GenerateXmlResult,
   IndasDetails,
@@ -246,6 +248,7 @@ export const IPC = {
   indasOpen: 'indas:open',
   indasCreate: 'indas:create',
   indasPickProject: 'indas:pick-project',
+  indasFix: 'indas:fix',
 } as const
 
 /** The API exposed on window.xap by the preload script. */
@@ -457,6 +460,8 @@ export interface XapApi {
     tree(scope: string, kind?: 'concept' | 'member'): Promise<Result<SheetTree[]>>
     /** the live Difference check of tagged lines */
     check(rows: StatementLine[]): Promise<Result<CheckResult>>
+    /** Fix with AI: proposed tag changes for totals that don't add up, each dry-run by the Difference check */
+    fix(req: FixRequest): Promise<Result<FixProposal>>
     onProgress(cb: (p: { done: number; total: number }) => void): () => void
   }
 }

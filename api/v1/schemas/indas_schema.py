@@ -66,3 +66,32 @@ class GenerateXML(BaseModel):
     tables: list[Table] = []
     notes: list[Note] = []
     unique_id: Optional[str] = None
+
+
+# ---------------------------------------------------------------- Fix with AI (Problems panel)
+class FixProblem(BaseModel):
+    id: str = Field(max_length=200)
+    message: str = Field(max_length=1000)
+    concept: str = Field(max_length=300)
+    elr: Optional[str] = Field(default=None, max_length=40)
+    year: Optional[Literal["CY", "PY"]] = None
+    statement: Optional[str] = Field(default=None, max_length=40)
+
+
+class FixLine(BaseModel):
+    id: str = Field(max_length=300)
+    statement: str = Field(max_length=40)
+    # the canonical sheet (CANONICAL_BS, ...): its scope gives the allowed concepts
+    sheet: str = Field(max_length=40)
+    label: str = Field(max_length=500)
+    headings: str = Field(default="", max_length=1000)
+    cy: Optional[float] = None
+    py: Optional[float] = None
+    concept: str = Field(default="", max_length=300)
+    periodRole: Literal["start", "end"] = "end"
+
+
+class FixRequest(BaseModel):
+    """The totals that don't add up and the lines of their statements (no company name, CIN or DINs)."""
+    problems: list[FixProblem] = Field(min_length=1, max_length=50)
+    lines: list[FixLine] = Field(min_length=1, max_length=600)

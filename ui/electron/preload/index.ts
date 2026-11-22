@@ -159,6 +159,7 @@ const api: XapApi = {
     pickProject: () => invoke(IPC.indasPickProject),
     tree: (scope, kind) => invoke(IPC.indasTree, scope, kind),
     check: (rows) => invoke(IPC.indasCheck, rows),
+    fix: (req) => invoke(IPC.indasFix, req),
   },
 }
 

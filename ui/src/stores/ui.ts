@@ -44,6 +44,8 @@ interface UiState extends Layout {
   rightTab: RightTab
   bottomTab: BottomTab
   setActivity(a: Activity): void
+  /** shows an activity's side panel (never collapses it, unlike clicking the activity bar) */
+  showActivity(a: Activity): void
   toggleSidebar(): void
   toggleBottom(): void
   setRightTab(t: RightTab): void
@@ -66,6 +68,10 @@ export const useUi = create<UiState>((set, get) => {
       if (get().activity === a && get().sidebarOpen) return layout({ sidebarOpen: false })
       set({ activity: a })
       layout({ sidebarOpen: true })
+    },
+    showActivity: (a) => {
+      set({ activity: a })
+      if (!get().sidebarOpen) layout({ sidebarOpen: true })
     },
     toggleSidebar: () => layout({ sidebarOpen: !get().sidebarOpen }),
     toggleBottom: () => layout({ bottomOpen: !get().bottomOpen }),

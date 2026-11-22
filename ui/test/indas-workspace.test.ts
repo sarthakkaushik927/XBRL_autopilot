@@ -179,7 +179,14 @@ describe('Problems', () => {
     })
     expect(out).toEqual([
       { severity: 'warning', source: 'readiness', message: 'Add at least 2 signatory directors.', target: { kind: 'masters' } },
-      { severity: 'error', source: 'difference', message: 'Balance Sheet · CY: Assets 300 ≠ 100.1 (difference 199.9)', target: { kind: 'concept', concept: 'ind-as:Assets', elr: '110000' } },
+      {
+        severity: 'error',
+        source: 'difference',
+        message: 'Balance Sheet · CY: Assets 300 ≠ 100.1 (difference 199.9)',
+        target: { kind: 'concept', concept: 'ind-as:Assets', elr: '110000' },
+        // Fix with AI: only totals that don't add up carry it
+        fix: { id: 'balanceSheet:CY:ind-as:Assets:Assets', message: 'Balance Sheet · CY: Assets 300 ≠ 100.1 (difference 199.9)', concept: 'ind-as:Assets', elr: '110000', year: 'CY', statement: 'balanceSheet' },
+      },
       { severity: 'error', source: 'mca', message: 'MANDATORY: PAN missing', target: null },
     ])
   })

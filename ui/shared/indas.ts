@@ -250,3 +250,55 @@ export interface ElrDifference {
   py: string
   issues: number
 }
+
+// ---------------------------------------------------------------- Fix with AI (Problems panel)
+
+/** A total that doesn't add up, as Fix with AI sends it (`id` is stable: statement, year and concept). */
+export interface FixProblem {
+  id: string
+  message: string
+  concept: string
+  elr: string | null
+  year: 'CY' | 'PY'
+  statement: StatementKey
+}
+
+/** A line of the problems' statements as the AI sees it: no company name, CIN or DINs (amounts may go). */
+export interface FixLine {
+  id: string
+  statement: StatementKey
+  label: string
+  headings: string
+  cy: number | null
+  py: number | null
+  concept: string
+  periodRole: PeriodRole
+}
+
+export interface FixRequest {
+  problems: FixProblem[]
+  lines: FixLine[]
+}
+
+/** One proposed tag change: the line gets another concept ('' = no tag) and/or becomes an opening / closing balance. */
+export interface FixChange {
+  id: string
+  problemId: string
+  rowId: string
+  /** the line's tag when the AI was asked */
+  fromConcept: string
+  concept: string
+  conceptLabel: string
+  periodRole?: PeriodRole
+  reason: string
+  /**
+   * The app's own dry run of this change alone on its statement (the live Difference check): how many totals don't
+   * add up before and after, Σ |difference| before and after (decimal strings), and whether that is better.
+   */
+  effect: { before: number; after: number; totalBefore: string; totalAfter: string; better: boolean }
+}
+
+export interface FixProposal {
+  explanation: string
+  changes: FixChange[]
+}

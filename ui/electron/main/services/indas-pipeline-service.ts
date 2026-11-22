@@ -16,12 +16,15 @@ import type {
   RecommendRequest,
   SheetTree,
   CheckResult,
+  FixProposal,
+  FixRequest,
   StatementLine,
   TransformResult,
 } from '@shared/indas'
 import { LINE_SHEETS, RECOMMEND_CANCELLED } from '@shared/indas'
 import { sidecarCall } from '../infra/sidecar-call'
 import { checkDifferences } from './indas-difference-check'
+import { dryRun, type ProposedChange } from './indas-fix-dry-run'
 import type { IndasKnowledgeBase } from './indas-knowledge-base'
 import { masterFieldsOf } from './indas-master-fields'
 import type { OutputWriter } from './mca-tool-service'
@@ -113,6 +116,25 @@ export class IndasPipelineService {
   /** The live Difference bar: totals vs their tagged children, balance sheet balance (exact decimals, no sidecar call). */
   async check(rows: StatementLine[]): Promise<CheckResult> {
     return checkDifferences(await this.knowledgeBase(), rows)
+  }
+
+  /**
+   * Fix with AI (Problems panel): the backend's AI proposes tag changes for the totals that don't add up, and each
+   * one is dry-run here with the Difference check. Needs the user's AI consent (Settings): amounts go to the AI,
+   * never the company name, CIN or DINs (the request has no field for them). Nothing is applied here.
+   */
+  async proposeFix(req: FixRequest): Promise<FixProposal> {
+    if (!this.aiAllowed()) throw new Error('Fix with AI sends line items and amounts to the AI: allow AI in Settings first.')
+    const sheetOf = new Map<string, string>(LINE_SHEETS.map((s) => [s.key, s.sheet]))
+    const [kb, answer] = await Promise.all([
+      this.knowledgeBase(),
+      sidecarCall<{ explanation: string; changes: ProposedChange[] }>(this.sidecar, 'POST', `${BASE}/fix`, {
+        body: { problems: req.problems, lines: req.lines.map((l) => ({ ...l, sheet: sheetOf.get(l.statement) ?? l.statement })) },
+        timeoutMs: SLOW_MS,
+        what: 'Fix with AI',
+      }),
+    ])
+    return { explanation: answer.explanation, changes: dryRun(kb, req.lines, answer.changes ?? []) }
   }
 
   /** The mandatory company and auditor fields for the masters form. */

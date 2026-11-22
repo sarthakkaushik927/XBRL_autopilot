@@ -17,6 +17,7 @@ import {
   TEXT_BLOCKS_SCOPE,
   type CheckResult,
   type FactValue,
+  type FixProblem,
   type GenerateXmlResult,
   type IndasDetails,
   type MasterFields,
@@ -226,6 +227,8 @@ export interface IndasProblem {
   source: 'readiness' | 'difference' | 'mca'
   message: string
   target: ProblemTarget | null
+  /** what Fix with AI sends about it: only totals that don't add up (company / DIN problems open the dialog) */
+  fix?: FixProblem
 }
 
 /** The tagged lines the problems can point at. */
@@ -256,11 +259,13 @@ export function problemsOf(input: {
   const out: IndasProblem[] = input.readiness.map((r) => ({ severity: 'warning' as const, source: 'readiness' as const, message: r.message, target: r.fix ? { kind: r.fix } : null }))
   for (const st of LINE_SHEETS) {
     for (const d of input.checks[st.key]?.differences ?? []) {
+      const message = `${st.title} · ${d.year}: ${d.label} ${formatIndian(d.reported)} ≠ ${formatIndian(d.calculated)} (difference ${formatIndian(d.difference)})`
       out.push({
         severity: 'error',
         source: 'difference',
-        message: `${st.title} · ${d.year}: ${d.label} ${formatIndian(d.reported)} ≠ ${formatIndian(d.calculated)} (difference ${formatIndian(d.difference)})`,
+        message,
         target: conceptTarget(input.lines, d.concept, d.year === 'CY' ? 'cy' : 'py', d.elr, st.key),
+        fix: { id: `${st.key}:${d.year}:${d.concept}:${d.label}`, message, concept: d.concept, elr: d.elr, year: d.year, statement: st.key },
       })
     }
   }

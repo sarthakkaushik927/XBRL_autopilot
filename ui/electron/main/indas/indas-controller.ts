@@ -18,6 +18,8 @@ import type {
   RecommendRequest,
   SheetTree,
   CheckResult,
+  FixProposal,
+  FixRequest,
   StatementLine,
   TransformResult,
 } from '@shared/indas'
@@ -117,6 +119,10 @@ export class IndasController {
 
   check(rows: StatementLine[]): Promise<CheckResult> {
     return this.service.check(rows)
+  }
+
+  fix(req: FixRequest): Promise<FixProposal> {
+    return this.service.proposeFix(req)
   }
 
   async generate(input: GenerateXmlInput): Promise<GenerateXmlResult> {

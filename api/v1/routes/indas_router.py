@@ -11,7 +11,7 @@ from src.constants import BASE_DIR, INDAS_OUTPUT_JSON_PATH, IND_AS_TAXONOMY_VDB,
 from src.core.logger import logger
 from src.utils.main_utils import load_file, load_json, save_file
 from src.pipeline.recom_taxonomies_pipeline import RecommendationPipeline
-from api.v1.schemas.indas_schema import RecommendSchema, GenerateXML
+from api.v1.schemas.indas_schema import FixRequest, RecommendSchema, GenerateXML
 from src.pipeline.xml_generation_pipeline import XMLGenerationPipeline
 from api.helper.delete_file import delete_file_after
 from src.pipeline.indas_transformation import IndasTransformationPipeline
@@ -19,6 +19,7 @@ from api.middlewares.multi_middleware import multer_middleware
 from src.transformation.template import TEMPLATE_FILE_NAME, canonical_sheets_workbook
 from src.services.sheet_scope import knowledge_base
 from src.services.sheet_tree import sheet_trees
+from src.services.indas_fix import propose_fix
 recomm_pipeline = RecommendationPipeline()
 router = APIRouter()
 
@@ -90,6 +91,20 @@ async def recommend_taxonomies(payload: RecommendSchema):
         except Exception as e:
             logger.error("indas.recommend_taxonomies_failed", error=str(e))
             return error_response(message=f"Recommendation failed: {str(e)}", status_code=500)
+
+
+@router.post("/fix")
+async def fix_problems(payload: FixRequest):
+    """Fix with AI: tag changes for the totals that don't add up. Stateless; the app dry-runs and the user accepts."""
+    with logger.span("indas.fix", problems=len(payload.problems), lines=len(payload.lines)):
+        body = payload.model_dump()
+        try:
+            kb = await asyncio.to_thread(knowledge_base)
+            data = await propose_fix(kb, body["problems"], body["lines"])
+        except Exception as e:  # no key, network, every model rate limited
+            logger.error("indas.fix_failed", error=str(e))
+            return error_response(message=f"The AI could not propose a fix: {e}", status_code=502)
+        return success_response(data=data, message="fix proposed", status_code=200)
 
 
 @router.post("/generateXML")

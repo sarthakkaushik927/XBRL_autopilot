@@ -3,7 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { Button } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
+import { IndasFixMessages, useHasFixSessions } from '@/features/indas/IndasFixMessages'
 import { useChat, type ChatMessage } from '@/stores/chat'
+import { useIndasFix } from '@/stores/indas-fix'
 import { useSidecar } from '@/stores/sidecar'
 import { toast } from '@/stores/toast'
 
@@ -39,6 +41,9 @@ export function AiChatPanel() {
   const [showThreadPicker, setShowThreadPicker] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  // Fix with AI (Ind AS Problems panel) answers show here as messages with cards
+  const hasFix = useHasFixSessions()
+  const fixSessions = useIndasFix((s) => s.sessions)
 
   useEffect(() => {
     void init()
@@ -47,7 +52,7 @@ export function AiChatPanel() {
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, sending])
+  }, [messages, sending, fixSessions])
 
   const activeThread = threads.find((t) => t.thread_id === activeThreadId)
 
@@ -171,7 +176,7 @@ export function AiChatPanel() {
             <Loader2 size={16} className="animate-spin text-accent" />
             <span className="text-xs">Loading conversation history...</span>
           </div>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !hasFix ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-2 py-6">
             <div className="rounded-full bg-accent/10 p-2.5 text-accent mb-2.5">
               <Sparkles size={20} />
@@ -198,9 +203,12 @@ export function AiChatPanel() {
             </div>
           </div>
         ) : (
-          messages.map((m) => (
-            <MessageItem key={m.id} message={m} />
-          ))
+          <>
+            {messages.map((m) => (
+              <MessageItem key={m.id} message={m} />
+            ))}
+            <IndasFixMessages />
+          </>
         )}
 
         {/* Sending thinking animation */}
