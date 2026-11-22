@@ -5,22 +5,29 @@
  */
 import { Download, FileSpreadsheet, Loader2, Sparkles, Upload } from 'lucide-react'
 import { lazy, Suspense, useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import type { CellRef } from '@shared/workbook'
 import { EmptyState } from '@/components/EmptyState'
+import { Loading } from '@/components/Loading'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 import { useIndas } from '@/stores/indas'
 import type { GridMarks } from '@/features/excel/UniverGrid'
 import { ConceptCell, PeriodRoleSelect } from './ConceptCell'
-import { formatAmount } from './model'
-import { rowCells } from './workspace'
+import { autoTagRemaining, formatAmount } from './model'
+import { rowCells, statusMarks } from './workspace'
 
 // Univer is large: load it only when a workbook is shown
 const UniverGrid = lazy(() => import('@/features/excel/UniverGrid').then((m) => ({ default: m.UniverGrid })))
 
 export function IndasExcelPane() {
-  const { workbook, transform, busy, progress, upload, saveTemplate, autoTag } = useIndas()
+  const { workbook, transform, busy, upload, saveTemplate, autoTag, rows, socie, ppe, texts } = useIndas(
+    useShallow((s) => ({ workbook: s.workbook, transform: s.transform, busy: s.busy, upload: s.upload, saveTemplate: s.saveTemplate, autoTag: s.autoTag, rows: s.rows, socie: s.socie, ppe: s.ppe, texts: s.texts })),
+  )
+  // after a cancelled run some lines have suggestions and some don't: the button continues with the rest
+  const left = useMemo(() => autoTagRemaining({ rows, socie, ppe, texts }), [rows, socie, ppe, texts])
+  const started = rows.some((r) => r.suggestions.length > 0)
   return (
     <section className="flex h-full flex-col bg-panel" aria-label="Excel workbook" data-testid="indas-excel">
       <div className="flex h-8 shrink-0 items-stretch border-b border-border bg-panel-2 text-xs">
@@ -37,9 +44,8 @@ export function IndasExcelPane() {
         )}
         <div className="flex-1" />
         {busy && (
-          <span className="flex items-center gap-1 px-2 text-muted" aria-live="polite" data-testid="indas-busy">
+          <span className="flex shrink-0 items-center gap-1 whitespace-nowrap px-2 text-muted" aria-live="polite" data-testid="indas-busy">
             <Loader2 size={12} className="animate-spin" /> {busy}
-            {progress && ` ${progress.done} / ${progress.total}`}
           </span>
         )}
         <ToolbarButton onClick={() => void upload()} disabled={!!busy} title="Open the client's financial statements (.xls / .xlsx) or a filled standard template" testId="indas-upload">
@@ -49,15 +55,15 @@ export function IndasExcelPane() {
           <Download size={12} /> Template
         </ToolbarButton>
         {transform && (
-          <ToolbarButton onClick={() => void autoTag()} disabled={!!busy} title="Suggest tags for every line (each sheet from its own taxonomy scope). Only line names and headings go to the AI; nothing is tagged until you accept." testId="auto-tag">
-            <Sparkles size={12} /> Auto-tag
+          <ToolbarButton onClick={() => void autoTag()} disabled={!!busy} title="Tag every line (each sheet from its own taxonomy scope): each untagged line takes its best suggestion; change any tag afterwards. Only line names and headings go to the AI." testId="auto-tag">
+            <Sparkles size={12} /> {started && left > 0 ? `Continue auto-tag (${left} left)` : 'Auto-tag'}
           </ToolbarButton>
         )}
       </div>
       <div className="min-h-0 flex-1">
         {workbook ? (
           <ErrorBoundary key={workbook.fileName} what="The Excel view">
-            <Suspense fallback={<EmptyState icon={FileSpreadsheet} title="Loading workbook…" />}>
+            <Suspense fallback={<Loading label="Loading the workbook…" />}>
               <CanonicalGrid />
             </Suspense>
           </ErrorBoundary>
@@ -96,30 +102,26 @@ function ToolbarButton(props: { onClick(): void; disabled?: boolean; title: stri
 
 /** The canonical workbook with the tag overlay: green = tagged, amber = suggestion waiting, blue = the selected line. */
 function CanonicalGrid() {
-  const { workbook, transform, rows, socie, ppe, selection, reveal, selectCell } = useIndas()
-  const marks = useMemo<GridMarks>(() => {
-    const out: GridMarks = { approved: [], suggested: [], linked: [] }
-    if (!transform) return out
-    const add = (id: string, status: 'approved' | 'suggested' | null) => {
-      const c = rowCells(transform, id)
-      if (!c || !status) return
-      out[status].push(...[c.label, c.cy, c.py].filter((x): x is CellRef => !!x))
-    }
-    for (const r of rows) add(r.id, r.concept ? 'approved' : r.suggestions.length ? 'suggested' : null)
-    for (const r of socie) add(r.id, r.concept && r.member ? 'approved' : r.suggestions.length ? 'suggested' : null)
-    for (const r of ppe) add(r.id, r.member ? 'approved' : r.memberSuggestions.length ? 'suggested' : null)
-    const sel = selection ? rowCells(transform, selection.id) : null
-    out.linked = sel ? [sel.label, sel.cy, sel.py].filter((x): x is CellRef => !!x) : []
-    return out
-  }, [transform, rows, socie, ppe, selection])
-  const selected = useMemo(() => (transform && selection ? (rowCells(transform, selection.id)?.label ?? null) : null), [transform, selection])
+  const { workbook, transform, rows, socie, ppe, selection, reveal, selectCell, showSheet } = useIndas(
+    useShallow((s) => ({ workbook: s.workbook, transform: s.transform, rows: s.rows, socie: s.socie, ppe: s.ppe, selection: s.selection, reveal: s.reveal, selectCell: s.selectCell, showSheet: s.showSheet })),
+  )
+  // the status colours don't change with the selection: a click redraws only the selected line's layer
+  const status = useMemo(() => (transform ? statusMarks(transform, rows, socie, ppe) : null), [transform, rows, socie, ppe])
+  const linked = useMemo(() => {
+    const sel = transform && selection ? rowCells(transform, selection.id) : null
+    return sel ? [sel.label, sel.cy, sel.py].filter((x): x is CellRef => !!x) : []
+  }, [transform, selection])
+  const marks = useMemo<GridMarks>(() => ({ approved: status?.approved ?? [], suggested: status?.suggested ?? [], linked }), [status, linked])
+  const selected = linked[0] ?? null
   if (!workbook) return null
-  return <UniverGrid model={workbook} marks={marks} reveal={reveal} selected={selected} onSelect={(cell) => selectCell(cell)} />
+  return <UniverGrid model={workbook} marks={marks} reveal={reveal} selected={selected} onSelect={(cell) => selectCell(cell)} onSheetChange={showSheet} />
 }
 
 /** The selected line: its amounts, its suggestion (✓ accept / ✗ next) and, for an instant concept, opening or closing. */
 function LineInspector() {
-  const { selection, rows, socie, ppe, setConcept, setMember, rejectSuggestion, setPeriodRole } = useIndas()
+  const { selection, rows, socie, ppe, setConcept, setMember, rejectSuggestion, setPeriodRole } = useIndas(
+    useShallow((s) => ({ selection: s.selection, rows: s.rows, socie: s.socie, ppe: s.ppe, setConcept: s.setConcept, setMember: s.setMember, rejectSuggestion: s.rejectSuggestion, setPeriodRole: s.setPeriodRole })),
+  )
   const row = rows.find((r) => r.id === selection?.id)
   const so = socie.find((r) => r.id === selection?.id)
   const pp = ppe.find((r) => r.id === selection?.id)

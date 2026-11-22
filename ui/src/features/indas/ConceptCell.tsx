@@ -16,12 +16,12 @@ export function ConceptCell(props: {
   selected: boolean
 }) {
   if (props.value) {
-    const label = props.suggestions.find((s) => s.qname === props.value)?.label
+    const picked = props.suggestions.find((s) => s.qname === props.value)
     return (
       <div className="flex items-center gap-1.5 rounded border border-ok/40 bg-ok/5 px-1.5 py-1 text-[12px]">
-        <Check size={12} className="shrink-0 text-ok" />
+        {picked?.pickedBy === 'ai' ? <Sparkles size={11} className="shrink-0 text-accent" aria-label="Tagged by the AI: check it" /> : <Check size={12} className="shrink-0 text-ok" />}
         <span className="min-w-0 flex-1 truncate" title={props.value}>
-          {label ?? props.value.split(':')[1] ?? props.value}
+          {picked?.label ?? props.value.split(':')[1] ?? props.value}
         </span>
         <button className="text-muted hover:text-err" title="Untag" onClick={(e) => (e.stopPropagation(), props.onClear())}>
           <X size={12} />

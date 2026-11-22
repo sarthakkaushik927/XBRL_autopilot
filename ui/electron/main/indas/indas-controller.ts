@@ -31,6 +31,8 @@ const PROJECT_FILTERS = [{ name: 'XBRL Autopilot project', extensions: [AXBRL_EX
 
 export class IndasController {
   private lastGenerated: string | null = null
+  /** the running Auto-tag's requests; Cancel aborts them */
+  private recommending = new AbortController()
 
   constructor(
     private readonly service: IndasPipelineService,
@@ -96,7 +98,13 @@ export class IndasController {
   }
 
   recommend(req: RecommendRequest): Promise<ConceptSuggestion[][]> {
-    return this.service.recommend(req, 3, this.onProgress)
+    if (this.recommending.signal.aborted) this.recommending = new AbortController()
+    return this.service.recommend(req, 3, this.onProgress, this.recommending.signal)
+  }
+
+  /** Cancel in the busy overlay: the running recommend calls stop after their current batch. */
+  cancelRecommend(): void {
+    this.recommending.abort()
   }
 
   masterFields(): Promise<MasterFields> {

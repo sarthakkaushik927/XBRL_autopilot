@@ -3,6 +3,7 @@
  * Filing Explorer opens Changes in equity, Fixed assets or Notes text. Their taxonomy tree is the TaxonomyPane beside.
  */
 import { Plus, Trash2 } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { PPE_TABLE, SOCIE_TABLE, TEXT_BLOCKS_SCOPE, type ConceptSuggestion } from '@shared/indas'
 import { Button, Input } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
@@ -27,7 +28,7 @@ export function TableTagging({ kind }: { kind: 'socie' | 'ppe' | 'texts' }) {
 
 /** The right pane follows the selected field (component member or movement concept). */
 function TablePane({ kind }: { kind: 'socie' | 'ppe' | 'texts' }) {
-  const s = useIndas()
+  const s = useIndas(useShallow((x) => ({ selection: x.selection, socie: x.socie, ppe: x.ppe, texts: x.texts })))
   const sel = s.selection
   const tagged = new Map<string, number>()
   const count = (q: string) => q && tagged.set(q, (tagged.get(q) ?? 0) + 1)
@@ -63,7 +64,9 @@ function TablePane({ kind }: { kind: 'socie' | 'ppe' | 'texts' }) {
 }
 
 function Socie() {
-  const { socie, selection, select, revealRow, setConcept, setMember, rejectSuggestion, setPeriodRole } = useIndas()
+  const { socie, selection, select, revealRow, setConcept, setMember, rejectSuggestion, setPeriodRole } = useIndas(
+    useShallow((x) => ({ socie: x.socie, selection: x.selection, select: x.select, revealRow: x.revealRow, setConcept: x.setConcept, setMember: x.setMember, rejectSuggestion: x.rejectSuggestion, setPeriodRole: x.setPeriodRole })),
+  )
   if (socie.length === 0) return <Empty>No changes-in-equity rows with amounts. Open the financial statements first.</Empty>
   return (
     <table className="w-full text-[12px]" data-testid="indas-socie">
@@ -112,7 +115,9 @@ const PPE_COLUMNS: [string, string][] = [
 ]
 
 function Ppe() {
-  const { ppe, selection, revealRow, setMember, rejectSuggestion } = useIndas()
+  const { ppe, selection, revealRow, setMember, rejectSuggestion } = useIndas(
+    useShallow((x) => ({ ppe: x.ppe, selection: x.selection, revealRow: x.revealRow, setMember: x.setMember, rejectSuggestion: x.rejectSuggestion })),
+  )
   if (ppe.length === 0) return <Empty>No fixed-asset classes in this workbook.</Empty>
   return (
     <table className="w-full text-[12px]" data-testid="indas-ppe">
@@ -150,7 +155,9 @@ function Ppe() {
 }
 
 function Texts() {
-  const { texts, addTextBlock, updateTextBlock, removeTextBlock, setConcept, rejectSuggestion, selection, select } = useIndas()
+  const { texts, addTextBlock, updateTextBlock, removeTextBlock, setConcept, rejectSuggestion, selection, select } = useIndas(
+    useShallow((x) => ({ texts: x.texts, addTextBlock: x.addTextBlock, updateTextBlock: x.updateTextBlock, removeTextBlock: x.removeTextBlock, setConcept: x.setConcept, rejectSuggestion: x.rejectSuggestion, selection: x.selection, select: x.select })),
+  )
   return (
     <div className="flex flex-col gap-2 p-2" data-testid="indas-texts">
       {texts.length === 0 && <Empty>No note text yet. Add a note, give it its heading and paste its text from the annual report.</Empty>}

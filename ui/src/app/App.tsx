@@ -34,6 +34,8 @@ function runCommand(cmd: MenuCommand): void {
   const project = useProject.getState()
   const indas = useIndas.getState()
   const ind = indas.open
+  // one long job at a time: a command that would change the filing waits until Auto-tag / Generate is done
+  if (ind && indas.busy && !/^view:|^tools:settings$/.test(cmd)) return toast.info(`${indas.busy.replace(/…$/, '')} is still running. Wait until it is done.`)
   switch (cmd) {
     case 'file:new':
       return project.openNewFiling()

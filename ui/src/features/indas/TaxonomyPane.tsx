@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
+import { Loading } from '@/components/Loading'
 import type { SheetTree } from '@shared/indas'
 import { Input } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
@@ -20,9 +22,8 @@ export function TaxonomyPane(props: {
   /** shown above the tree */
   title: string
 }) {
-  const { trees, loadTree, tagFromTree, selection } = useIndas()
   const key = `${props.scope}:${props.kind}`
-  const list = trees[key]
+  const { list, loadTree, tagFromTree, selection } = useIndas(useShallow((s) => ({ list: s.trees[key], loadTree: s.loadTree, tagFromTree: s.tagFromTree, selection: s.selection })))
   const [query, setQuery] = useState('')
   const [elr, setElr] = useState<string | null>(null)
   // folded heads (+ / − as in webXBRL); search shows everything
@@ -90,7 +91,7 @@ export function TaxonomyPane(props: {
         <div className="text-[11px] text-muted">{selection ? 'Click a concept to tag the selected line.' : 'Select a line on the left, then click its concept here.'}</div>
       </header>
       <div className="min-h-0 flex-1 overflow-auto py-1">
-        {!list && <p className="p-4 text-center text-xs text-muted">Loading the taxonomy…</p>}
+        {!list && <Loading label="Loading the taxonomy…" />}
         {nodes.map((n, i) => {
           const count = props.tagged.get(n.qname) ?? 0
           const isCurrent = n.qname === props.current

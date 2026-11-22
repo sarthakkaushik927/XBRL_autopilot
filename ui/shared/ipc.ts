@@ -235,6 +235,7 @@ export const IPC = {
   indasSaveTemplate: 'indas:save-template',
   indasTransform: 'indas:transform',
   indasRecommend: 'indas:recommend',
+  indasCancelRecommend: 'indas:cancel-recommend',
   indasMasterFields: 'indas:master-fields',
   indasGenerate: 'indas:generate',
   indasShowGenerated: 'indas:show-generated',
@@ -438,6 +439,8 @@ export interface XapApi {
     transform(path?: string): Promise<Result<TransformResult | null>>
     /** tag suggestions per key, in key order, from one sheet's scope (progress arrives through onProgress) */
     recommend(req: RecommendRequest): Promise<Result<ConceptSuggestion[][]>>
+    /** stops the running Auto-tag after its current batch */
+    cancelRecommend(): Promise<void>
     masterFields(): Promise<Result<MasterFields>>
     generate(input: GenerateXmlInput): Promise<Result<GenerateXmlResult>>
     /** shows the last generated XML in Explorer */

@@ -27,7 +27,7 @@ import {
 } from '@shared/indas'
 import type { ElrInfo } from '@shared/project'
 import { columnLetter, type CellModel, type CellRef, type SheetModel, type WorkbookModel } from '@shared/workbook'
-import type { PpeRow, SocieRow, TagRow, TextBlockRow } from './model'
+import type { PpeRow, Readiness, SocieRow, TagRow, TextBlockRow } from './model'
 
 /** The source id of the canonical workbook in the Excel pane. */
 export const CANONICAL_SOURCE = 'canonical'
@@ -98,6 +98,24 @@ export function rowCells(t: TransformResult, id: string): RowCells | null {
     return c < 0 ? null : { workbook: CANONICAL_SOURCE, sheet: def.sheet, ref: `${columnLetter(c)}${p.index + 2}` }
   }
   return { sheet: def.sheet, label: at(def.label), cy: at(def.cy), py: at(def.py) }
+}
+
+/** The grid's tag colours: green = tagged, amber = a suggestion waiting (label, CY and PY cells of each line). */
+export function statusMarks(
+  t: TransformResult,
+  rows: readonly TagRow[],
+  socie: readonly SocieRow[],
+  ppe: readonly PpeRow[],
+): { approved: CellRef[]; suggested: CellRef[] } {
+  const out = { approved: [] as CellRef[], suggested: [] as CellRef[] }
+  const add = (id: string, status: 'approved' | 'suggested' | null) => {
+    const c = status ? rowCells(t, id) : null
+    if (c) out[status!].push(...[c.label, c.cy, c.py].filter((x): x is CellRef => !!x))
+  }
+  for (const r of rows) add(r.id, r.concept ? 'approved' : r.suggestions.length ? 'suggested' : null)
+  for (const r of socie) add(r.id, r.concept && r.member ? 'approved' : r.suggestions.length ? 'suggested' : null)
+  for (const r of ppe) add(r.id, r.member ? 'approved' : r.memberSuggestions.length ? 'suggested' : null)
+  return out
 }
 
 /** The taggable row a clicked cell belongs to (any cell of its grid row), else null. */
@@ -194,24 +212,71 @@ export const showAmount = (v: string | null | undefined) => (v == null ? '' : fo
 
 // ------------------------------------------------------------------------------------------------ Problems
 
+/** Where double-clicking a problem goes (PR #15 review, point 9). */
+export type ProblemTarget =
+  /** the line's cell in Excel (and its fact in the Form) */
+  | { kind: 'line'; rowId: string; which: 'label' | 'cy' | 'py' }
+  /** a concept no line reports yet: its place in the XBRL Form, to tag it */
+  | { kind: 'concept'; concept: string; elr: string | null }
+  | { kind: 'masters' }
+  | { kind: 'settings' }
+
 export interface IndasProblem {
   severity: 'error' | 'warning'
   source: 'readiness' | 'difference' | 'mca'
   message: string
-  /** where to go when clicked */
-  elr?: string
-  concept?: string
+  target: ProblemTarget | null
+}
+
+/** The tagged lines the problems can point at. */
+export interface ProblemLines {
+  rows: readonly Pick<TagRow, 'id' | 'concept' | 'statement'>[]
+  socie: readonly Pick<SocieRow, 'id' | 'concept'>[]
+  ppe: readonly Pick<PpeRow, 'id' | 'member'>[]
+}
+
+const MASTER_PROBLEMS = /^(MANDATORY_COMPANY_INFO_MISSING|INSUFFICIENT_SIGNATORIES|INVALID_DIN)$/
+
+/** A concept's place: the first line tagged with it (preferring the statement's own), else the concept in the Form. */
+function conceptTarget(lines: ProblemLines, concept: string, which: 'label' | 'cy' | 'py', elr: string | null, statement?: StatementKey): ProblemTarget {
+  const row =
+    lines.rows.find((r) => r.concept === concept && (!statement || r.statement === statement)) ??
+    lines.rows.find((r) => r.concept === concept) ??
+    lines.socie.find((r) => r.concept === concept)
+  return row ? { kind: 'line', rowId: row.id, which } : { kind: 'concept', concept, elr }
 }
 
 /** Everything the Problems panel lists: readiness, totals that don't add up (by statement), MCA's answer. */
-export function problemsOf(input: { readiness: string[]; checks: Partial<Record<StatementKey, CheckResult>>; result: GenerateXmlResult | null }): IndasProblem[] {
-  const out: IndasProblem[] = input.readiness.map((message) => ({ severity: 'warning' as const, source: 'readiness' as const, message }))
+export function problemsOf(input: {
+  readiness: readonly Readiness[]
+  checks: Partial<Record<StatementKey, CheckResult>>
+  result: GenerateXmlResult | null
+  lines: ProblemLines
+}): IndasProblem[] {
+  const out: IndasProblem[] = input.readiness.map((r) => ({ severity: 'warning' as const, source: 'readiness' as const, message: r.message, target: r.fix ? { kind: r.fix } : null }))
   for (const st of LINE_SHEETS) {
     for (const d of input.checks[st.key]?.differences ?? []) {
-      out.push({ severity: 'error', source: 'difference', message: `${st.title} · ${d.year}: ${d.label} ${formatIndian(d.reported)} ≠ ${formatIndian(d.calculated)} (difference ${formatIndian(d.difference)})`, elr: d.elr, concept: d.concept })
+      out.push({
+        severity: 'error',
+        source: 'difference',
+        message: `${st.title} · ${d.year}: ${d.label} ${formatIndian(d.reported)} ≠ ${formatIndian(d.calculated)} (difference ${formatIndian(d.difference)})`,
+        target: conceptTarget(input.lines, d.concept, d.year === 'CY' ? 'cy' : 'py', d.elr, st.key),
+      })
     }
   }
-  if (input.result && !input.result.ok) for (const e of input.result.errors) out.push({ severity: 'error', source: 'mca', message: e.type ? `${e.type}: ${e.message}` : e.message })
+  if (input.result && !input.result.ok) {
+    for (const e of input.result.errors) {
+      const member = e.member ? input.lines.ppe.find((r) => r.member === e.member) : undefined
+      const target: ProblemTarget | null = MASTER_PROBLEMS.test(e.type ?? '')
+        ? { kind: 'masters' }
+        : member
+          ? { kind: 'line', rowId: member.id, which: 'label' }
+          : e.concept
+            ? conceptTarget(input.lines, e.concept, 'cy', null)
+            : null
+      out.push({ severity: 'error', source: 'mca', message: e.type ? `${e.type}: ${e.message}` : e.message, target })
+    }
+  }
   return out
 }
 

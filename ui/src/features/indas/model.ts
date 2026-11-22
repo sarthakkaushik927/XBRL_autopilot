@@ -146,6 +146,42 @@ export function acceptTopMembers<T extends { member: string; memberSuggestions: 
   return rows.map((r) => (r.member || !r.memberSuggestions[0] ? r : { ...r, member: r.memberSuggestions[0].qname }))
 }
 
+/**
+ * What Auto-tag still has to ask for: the lines with no suggestions yet. A cancelled run keeps what it got, so running
+ * it again continues with these only.
+ */
+export const autoTagTodo = {
+  lines: (rows: readonly TagRow[], statement: StatementKey) => rows.filter((r) => r.statement === statement && r.suggestions.length === 0 && !r.id.startsWith('zero:')),
+  socie: (socie: readonly SocieRow[]) => socie.filter((r) => r.suggestions.length === 0),
+  components: (socie: readonly SocieRow[]) => [...new Set(socie.filter((r) => r.memberSuggestions.length === 0).map((r) => r.component).filter(Boolean))],
+  ppe: (ppe: readonly PpeRow[]) => ppe.filter((r) => r.memberSuggestions.length === 0),
+  texts: (texts: readonly TextBlockRow[]) => texts.filter((r) => r.heading.trim() && r.suggestions.length === 0),
+}
+
+/** How many lines Auto-tag would still ask for (0 = everything has suggestions). */
+export function autoTagRemaining(w: Pick<FilingDraft, 'rows' | 'socie' | 'ppe' | 'texts'>): number {
+  return (
+    LINE_SHEETS.reduce((n, st) => n + autoTagTodo.lines(w.rows, st.key).length, 0) +
+    autoTagTodo.socie(w.socie).length +
+    autoTagTodo.components(w.socie).length +
+    autoTagTodo.ppe(w.ppe).length +
+    autoTagTodo.texts(w.texts).length
+  )
+}
+
+/**
+ * After Auto-tag, every line the user hasn't tagged takes its top suggestion (PR #15 review, point 8: no "Accept
+ * suggestions" step). Lines tagged by hand are kept; the AI's picks stay marked so they can be checked.
+ */
+export function applyTopSuggestions(w: Pick<FilingDraft, 'rows' | 'socie' | 'ppe' | 'texts'>): Pick<FilingDraft, 'rows' | 'socie' | 'ppe' | 'texts'> & { applied: number } {
+  const rows = acceptTopSuggestions(w.rows)
+  const socie = acceptTopMembers(acceptTopSuggestions(w.socie))
+  const ppe = acceptTopMembers(w.ppe)
+  const texts = acceptTopSuggestions(w.texts)
+  const changed = <T,>(a: readonly T[], b: readonly T[]) => a.filter((x, i) => x !== b[i]).length
+  return { rows, socie, ppe, texts, applied: changed(rows, w.rows) + changed(socie, w.socie) + changed(ppe, w.ppe) + changed(texts, w.texts) }
+}
+
 /** Whether the accepted concept is reported at an instant (then the row can be an opening balance). */
 export function isInstant(concept: string, suggestions: ConceptSuggestion[]): boolean {
   return suggestions.find((s) => s.qname === concept)?.periodType === 'instant'
@@ -218,17 +254,23 @@ export interface FilingDraft {
   signatories: Signatory[]
 }
 
-/** Problems that would make /generateXML refuse, found before sending (the sidecar checks again). */
-export function readinessProblems(input: Pick<FilingDraft, 'rows' | 'details' | 'signatories' | 'company'> & { companyFields: MasterField[] }): string[] {
-  const p: string[] = []
+/** Something Generate still needs, and where it is fixed (double-click in Problems goes there). */
+export interface Readiness {
+  message: string
+  fix: 'settings' | 'masters' | null
+}
+
+/** Problems that would make /generateXML refuse, found before sending (the backend checks again). */
+export function readinessProblems(input: Pick<FilingDraft, 'rows' | 'details' | 'signatories' | 'company'> & { companyFields: MasterField[] }): Readiness[] {
+  const p: Readiness[] = []
   const meta = metaOf(input.details)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(meta.endDate)) p.push('Enter the financial year start and end dates (Filing → Filing settings).')
-  if (!input.rows.some((r) => r.concept)) p.push('Tag at least one statement line.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(meta.endDate)) p.push({ message: 'Enter the financial year start and end dates (Filing → Filing settings).', fix: 'settings' })
+  if (!input.rows.some((r) => r.concept)) p.push({ message: 'Tag at least one statement line.', fix: null })
   const missing = input.companyFields.filter((f) => !(input.company[f.qname] ?? '').trim())
-  if (missing.length) p.push(`Fill the company details: ${missing.map((f) => f.label).join(', ')}.`)
-  if (input.signatories.length < 2) p.push('Add at least 2 signatory directors.')
+  if (missing.length) p.push({ message: `Fill the company details: ${missing.map((f) => f.label).join(', ')}.`, fix: 'masters' })
+  if (input.signatories.length < 2) p.push({ message: 'Add at least 2 signatory directors.', fix: 'masters' })
   input.signatories.forEach((s, i) => {
-    if (!/^\d{8}$/.test(s.din.trim())) p.push(`Signatory ${i + 1}: DIN must be 8 digits.`)
+    if (!/^\d{8}$/.test(s.din.trim())) p.push({ message: `Signatory ${i + 1}: DIN must be 8 digits.`, fix: 'masters' })
   })
   return p
 }

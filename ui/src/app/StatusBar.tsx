@@ -1,4 +1,6 @@
 import { cn } from '@/lib/cn'
+import { ProgressLine } from '@/components/Loading'
+import { useActivity } from '@/stores/activity'
 import { useSidecar } from '@/stores/sidecar'
 import { useUi } from '@/stores/ui'
 import { LayoutToggles } from './LayoutToggles'
@@ -9,6 +11,7 @@ export function StatusBar() {
   const filing = useWorkspace()
   const problems = filing?.problems ?? null
   const openProblems = useUi((s) => s.setBottomTab)
+  const working = useActivity((s) => s.pending > 0)
   const dot =
     status.state === 'ready' ? 'bg-ok' : status.state === 'starting' ? 'bg-warn animate-pulse' : 'bg-err'
   const label =
@@ -17,7 +20,8 @@ export function StatusBar() {
     status.state === 'ready' ? (status.aiEnabled ? `Groq · ${status.model}` : 'AI off (no Groq key)') : null
 
   return (
-    <footer className="flex h-6 shrink-0 items-center gap-4 border-t border-border bg-panel-2 px-3 text-[11px] text-muted">
+    <footer className="relative flex h-6 shrink-0 items-center gap-4 border-t border-border bg-panel-2 px-3 text-[11px] text-muted">
+      <ProgressLine active={working} delayMs={300} className="absolute inset-x-0 -top-px" />
       {filing ? (
         <>
           <span className="font-mono">{filing.header.cin}</span>

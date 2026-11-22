@@ -22,7 +22,7 @@ function Card(props: { title: string; icon: ReactNode; children: ReactNode; clas
 
 /** Shown when no filing is open: New project, Open, the template, Recent filings and Saved projects (Ind AS). */
 export function WelcomeScreen() {
-  const { saveTemplate } = useIndas()
+  const saveTemplate = useIndas((s) => s.saveTemplate)
   // the current architecture only (Sarthak, 2026-11-22): main lists Ind AS projects in Recent and Saved
   const { recent, saved, openNewFiling, forgetRecent, openProjectsFolder } = useProject()
   const openPath = (path: string) => void openIndasProject(path)

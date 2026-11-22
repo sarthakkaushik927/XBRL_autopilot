@@ -368,6 +368,7 @@ function registerIndasIpc({ indas }: IpcDeps): void {
   handleResult(IPC.indasSaveTemplate, () => indas.saveTemplate())
   handleResult(IPC.indasTransform, (_e, path?: unknown) => indas.transform(path === undefined ? undefined : requireString(path, 'path')))
   handleResult(IPC.indasRecommend, (_e, req: unknown) => indas.recommend(requireRecommendRequest(req)))
+  handleQuery(IPC.indasCancelRecommend, () => indas.cancelRecommend())
   handleResult(IPC.indasMasterFields, () => indas.masterFields())
   handleResult(IPC.indasGenerate, (_e, input: unknown) => indas.generate(requireGenerateInput(input)))
   handleQuery(IPC.indasShowGenerated, () => indas.showGenerated())

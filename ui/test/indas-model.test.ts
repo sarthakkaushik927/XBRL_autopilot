@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { ConceptSuggestion, IndasDetails, MasterField, TransformResult } from '@shared/indas'
 import {
   acceptTopSuggestions,
+  applyTopSuggestions,
+  autoTagRemaining,
   amount,
   buildGenerateInput,
   detailsFromLegacy,
@@ -141,12 +143,37 @@ describe('readinessProblems and buildGenerateInput', () => {
   it('lists what would make generation fail', () => {
     const p = readinessProblems({ rows: rowsFromTransform(transform), details: details({ cy: { start: '2025-04-01', end: '' } }), signatories: [{ din: '123', name: '', designation: 'Director' }], companyFields, company: { 'in-ca:NameOfCompany': 'Acme' } })
     expect(p).toEqual([
-      'Enter the financial year start and end dates (Filing → Filing settings).',
-      'Tag at least one statement line.',
-      'Fill the company details: CorporateIdentityNumber.',
-      'Add at least 2 signatory directors.',
-      'Signatory 1: DIN must be 8 digits.',
+      { message: 'Enter the financial year start and end dates (Filing → Filing settings).', fix: 'settings' },
+      { message: 'Tag at least one statement line.', fix: null },
+      { message: 'Fill the company details: CorporateIdentityNumber.', fix: 'masters' },
+      { message: 'Add at least 2 signatory directors.', fix: 'masters' },
+      { message: 'Signatory 1: DIN must be 8 digits.', fix: 'masters' },
     ])
+  })
+
+  it('Auto-tag applies the top suggestion to every untagged line and keeps the ones tagged by hand', () => {
+    const s = (qname: string, pickedBy: 'ai' | null = null) => ({ qname, label: qname, score: 1, type: null, periodType: null, balance: null, pickedBy })
+    const base = rowsFromTransform(transform).slice(0, 3)
+    const lines = [
+      { ...base[0]!, concept: 'ind-as:ByHand', suggestions: [s('ind-as:Other')] },
+      { ...base[1]!, suggestions: [s('ind-as:Inventories', 'ai'), s('ind-as:Other')] },
+      { ...base[2]!, suggestions: [] },
+    ]
+    const ppe = [{ id: 'ppe:0', assetClass: 'Computers', amounts: {}, memberSuggestions: [s('ind-as:ComputerEquipmentsMember')], member: '' }]
+    const out = applyTopSuggestions({ rows: lines, socie: [], ppe, texts: [] })
+    expect(out.rows.map((r) => r.concept)).toEqual(['ind-as:ByHand', 'ind-as:Inventories', ''])
+    expect(out.ppe[0]!.member).toBe('ind-as:ComputerEquipmentsMember')
+    expect(out.applied).toBe(2)
+  })
+
+  it('counts what a cancelled Auto-tag still has to do (Continue asks only for those)', () => {
+    const s = { qname: 'ind-as:X', label: 'X', score: 1, type: null, periodType: null, balance: null, pickedBy: null }
+    const rows = rowsFromTransform(transform)
+    const ppe = [{ id: 'ppe:0', assetClass: 'Computers', amounts: {}, memberSuggestions: [], member: '' }]
+    const all = autoTagRemaining({ rows, socie: [], ppe, texts: [] })
+    expect(all).toBe(rows.length + 1)
+    const half = rows.map((r, i) => (i % 2 ? { ...r, suggestions: [s] } : r))
+    expect(autoTagRemaining({ rows: half, socie: [], ppe, texts: [] })).toBe(rows.filter((_, i) => i % 2 === 0).length + 1)
   })
 
   it('is ready when everything is filled', () => {

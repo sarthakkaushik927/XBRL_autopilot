@@ -1,12 +1,13 @@
 /** The XML tab of an Ind AS filing (ADR-0017): the instance /generateXML wrote. Loaded lazily (Monaco). */
 import { CircleCheck, FileCode2, FolderOpen } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/ui/primitives'
 import { useIndas } from '@/stores/indas'
 import { XmlCode } from '@/features/xbrl/XmlView'
 
 export function IndasXmlView() {
-  const { result, busy, transform, generate } = useIndas()
+  const { result, busy, transform, generate } = useIndas(useShallow((s) => ({ result: s.result, busy: s.busy, transform: s.transform, generate: s.generate })))
   if (!result?.ok) {
     return (
       <EmptyState icon={FileCode2} title={result ? 'The XML was not generated' : 'No XML yet'}>

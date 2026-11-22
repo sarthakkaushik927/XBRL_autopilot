@@ -19,7 +19,7 @@ import type {
   StatementLine,
   TransformResult,
 } from '@shared/indas'
-import { LINE_SHEETS } from '@shared/indas'
+import { LINE_SHEETS, RECOMMEND_CANCELLED } from '@shared/indas'
 import { sidecarCall } from '../infra/sidecar-call'
 import { checkDifferences } from './indas-difference-check'
 import type { IndasKnowledgeBase } from './indas-knowledge-base'
@@ -36,7 +36,7 @@ interface Envelope<T> {
   data: T
   success: boolean
   message: string
-  errors?: { message?: string; type?: string | null }[] | null
+  errors?: { message?: string; type?: string | null; concept?: string | null; member?: string | null }[] | null
 }
 
 interface RawMatch {
@@ -80,10 +80,12 @@ export class IndasPipelineService {
    * scope only (docs/15 §3). The AI picks among the candidates only when the user allowed AI (Settings).
    * `onProgress(done, total)` after each batch.
    */
-  async recommend(req: RecommendRequest, topK = 3, onProgress?: (done: number, total: number) => void): Promise<ConceptSuggestion[][]> {
+  async recommend(req: RecommendRequest, topK = 3, onProgress?: (done: number, total: number) => void, signal?: AbortSignal): Promise<ConceptSuggestion[][]> {
     const { keys } = req
     const out: ConceptSuggestion[][] = []
     for (let i = 0; i < keys.length; i += RECOMMEND_BATCH) {
+      // Cancel (the busy overlay) stops between batches: the batch the backend is ranking finishes first
+      if (signal?.aborted) throw new RecommendCancelled()
       const batch = keys.slice(i, i + RECOMMEND_BATCH)
       const data = await sidecarCall<RawMatch[][]>(this.sidecar, 'POST', `${BASE}/recommend/`, {
         body: {
@@ -136,9 +138,22 @@ export class IndasPipelineService {
       const path = await this.output.write(null, fileName, res.data.data.xmlContent)
       return { ok: true, path, fileName, sizeKb: res.data.data.fileSizeKb ?? 0, xml: res.data.data.xmlContent }
     }
-    const errors: GenerateXmlProblem[] = (res.data?.errors ?? []).map((e) => ({ type: e.type ?? null, message: e.message ?? String(e) }))
+    const errors: GenerateXmlProblem[] = (res.data?.errors ?? []).map((e) => ({
+      type: e.type ?? null,
+      message: e.message ?? String(e),
+      ...(e.concept ? { concept: e.concept } : {}),
+      ...(e.member ? { member: e.member } : {}),
+    }))
     if (errors.length === 0) errors.push({ type: null, message: res.data?.message || `XML generation failed (${res.status})` })
     return { ok: false, errors }
+  }
+}
+
+/** Auto-tag was cancelled by the user (not a failure: the renderer keeps what it got and can continue). */
+export class RecommendCancelled extends Error {
+  constructor() {
+    super(RECOMMEND_CANCELLED)
+    this.name = 'RecommendCancelled'
   }
 }
 

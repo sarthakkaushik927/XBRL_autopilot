@@ -7,6 +7,7 @@ import { create } from 'zustand'
 import {
   LINE_SHEETS,
   PPE_TABLE,
+  RECOMMEND_CANCELLED,
   SOCIE_TABLE,
   TEXT_BLOCKS_SCOPE,
   type CheckResult,
@@ -25,8 +26,9 @@ import {
 import { validateNewFiling } from '@shared/project'
 import type { CellRef, WorkbookModel } from '@shared/workbook'
 import {
-  acceptTopMembers,
-  acceptTopSuggestions,
+  applyTopSuggestions,
+  autoTagRemaining,
+  autoTagTodo,
   buildGenerateInput,
   checkRows,
   fromDraft,
@@ -58,10 +60,12 @@ import {
   treeOf,
   TREE_SCOPES,
   type IndasElr,
+  type ProblemTarget,
   type RowKind,
 } from '@/features/indas/workspace'
 import { unwrap } from '@/lib/result'
 import { toast } from './toast'
+import { useProject } from './project'
 import { useUi } from './ui'
 
 export type SelectField = 'concept' | 'member'
@@ -70,8 +74,10 @@ interface IndasState {
   /** an Ind AS filing is open in the editor */
   open: boolean
   details: IndasDetails | null
-  /** what is running ('Converting…'), null when idle */
+  /** what is running ('Converting…'), null when idle; the editor is blocked meanwhile */
   busy: string | null
+  /** the running work's current step, e.g. the sheet being auto-tagged */
+  step: string | null
   progress: { done: number; total: number } | null
   transform: TransformResult | null
   /** the canonical sheets as the Excel pane shows them (same identity until the sheets change) */
@@ -121,16 +127,21 @@ interface IndasState {
   select(id: string, field?: SelectField): void
   /** shows a line's cell in the Excel pane */
   revealRow(id: string, which?: 'label' | 'cy' | 'py'): void
+  /** the Excel pane shows another sheet: the XBRL Form follows it (a statement of that sheet) */
+  showSheet(sheet: string): void
+  /** double-click in Problems: the line's cell and fact, the concept in the Form, or the dialog that fixes it */
+  goToProblem(target: ProblemTarget): void
 
   tagFromTree(node: TreeNode): void
   rejectSuggestion(id: string, field?: SelectField): void
   setConcept(id: string, concept: string): void
   setMember(id: string, member: string): void
   setPeriodRole(id: string, role: PeriodRole): void
-  /** Auto-tag: suggestions for every line that has none (all sheets, each from its own scope) */
+  /** Auto-tag: suggestions for every line that has none (all sheets, each from its own scope), then each untagged
+   * line takes its top suggestion (PR #15 review, point 8). After a Cancel, running it again continues. */
   autoTag(): Promise<void>
-  /** accepts the top suggestion on the untagged lines of the open statement */
-  acceptTop(): void
+  /** Cancel in the busy overlay: Auto-tag stops after the current batch and keeps what it got */
+  cancelAutoTag(): void
   /** reports the open statement's empty mandatory amounts as 0 */
   fillMandatoryZeros(): void
   runCheck(): void
@@ -163,6 +174,7 @@ const closed = () => ({
   open: false,
   details: null as IndasDetails | null,
   busy: null,
+  step: null as string | null,
   progress: null,
   transform: null as TransformResult | null,
   workbook: null as WorkbookModel | null,
@@ -195,43 +207,60 @@ export const useIndas = create<IndasState>((set, get) => {
   /** a change to the filing's work: marks it unsaved */
   const change = (patch: Partial<IndasState>) => set({ ...patch, dirty: true })
 
+  /** One long job at a time; the editor is blocked (BusyOverlay) until it ends. */
   const run = async (label: string, fn: () => Promise<void>) => {
     if (get().busy) return
-    set({ busy: label })
+    set({ busy: label, step: null, progress: null })
     try {
       await fn()
     } finally {
-      set({ busy: null, progress: null })
+      set({ busy: null, step: null, progress: null })
     }
   }
 
-  /** Asks for suggestions (with progress); null when the call failed (a toast says why). */
-  const recommend = async (req: RecommendRequest): Promise<ConceptSuggestion[][] | null> => {
+  /** Auto-tag's progress over every request of the run (`done` keys of `total`) and whether the user cancelled it. */
+  const tally = { offset: 0, total: 0, cancelled: false }
+
+  /** Asks for suggestions (with progress); null when the call failed (a toast says why) or was cancelled. */
+  const recommend = async (req: RecommendRequest, step: string): Promise<ConceptSuggestion[][] | null> => {
     if (req.keys.length === 0) return []
-    const off = api().onProgress((p) => set({ progress: p }))
+    if (tally.cancelled) return null
+    set({ step, progress: { done: tally.offset, total: tally.total } })
+    const off = api().onProgress((p) => set({ progress: { done: tally.offset + p.done, total: tally.total } }))
     try {
-      return (await unwrap(api().recommend(req))) ?? null
+      // a cancelled call is not an error: no toast
+      let cancelled = false
+      const found = await unwrap(api().recommend(req), { quietWhen: (e) => (cancelled = e.message === RECOMMEND_CANCELLED) })
+      if (cancelled) tally.cancelled = true
+      return found ?? null
     } finally {
       off()
+      tally.offset += req.keys.length
     }
   }
 
+  const todoLines = (statement: StatementKey) => autoTagTodo.lines(get().rows, statement)
+  const todoSocie = () => autoTagTodo.socie(get().socie)
+  const todoComponents = () => autoTagTodo.components(get().socie)
+  const todoPpe = () => autoTagTodo.ppe(get().ppe)
+  const todoTexts = () => autoTagTodo.texts(get().texts)
+
   const suggestLines = async (statement: StatementKey) => {
-    const sheet = LINE_SHEETS.find((s) => s.key === statement)!.sheet
-    const todo = get().rows.filter((r) => r.statement === statement && r.suggestions.length === 0 && !r.id.startsWith('zero:'))
-    const found = await recommend({ keys: todo.map(suggestionKey), contexts: todo.map((r) => r.breadcrumb), scope: sheet })
+    const { sheet, title } = LINE_SHEETS.find((s) => s.key === statement)!
+    const todo = todoLines(statement)
+    const found = await recommend({ keys: todo.map(suggestionKey), contexts: todo.map((r) => r.breadcrumb), scope: sheet }, title)
     if (!found) return
     const byId = new Map(todo.map((r, i) => [r.id, found[i] ?? []]))
     change({ rows: get().rows.map((r) => (byId.has(r.id) ? { ...r, suggestions: byId.get(r.id)! } : r)) })
   }
 
   const suggestSocie = async () => {
-    const todo = get().socie.filter((r) => r.suggestions.length === 0)
-    const concepts = await recommend({ keys: todo.map((r) => r.description), contexts: todo.map((r) => r.component), scope: SOCIE_TABLE.sheet })
+    const todo = todoSocie()
+    const concepts = await recommend({ keys: todo.map((r) => r.description), contexts: todo.map((r) => r.component), scope: SOCIE_TABLE.sheet }, 'Changes in equity')
     if (!concepts) return
     // members: one request per distinct equity component
-    const components = [...new Set(get().socie.filter((r) => r.memberSuggestions.length === 0).map((r) => r.component).filter(Boolean))]
-    const members = await recommend({ keys: components, scope: SOCIE_TABLE.sheet, kind: 'member' })
+    const components = todoComponents()
+    const members = await recommend({ keys: components, scope: SOCIE_TABLE.sheet, kind: 'member' }, 'Changes in equity — components')
     const byComponent = new Map(components.map((c, i) => [c, members?.[i] ?? []]))
     const byId = new Map(todo.map((r, i) => [r.id, concepts[i] ?? []]))
     change({
@@ -244,16 +273,16 @@ export const useIndas = create<IndasState>((set, get) => {
   }
 
   const suggestPpe = async () => {
-    const todo = get().ppe.filter((r) => r.memberSuggestions.length === 0)
-    const found = await recommend({ keys: todo.map((r) => r.assetClass), scope: PPE_TABLE.sheet, kind: 'member' })
+    const todo = todoPpe()
+    const found = await recommend({ keys: todo.map((r) => r.assetClass), scope: PPE_TABLE.sheet, kind: 'member' }, 'Fixed assets — classes')
     if (!found) return
     const byId = new Map(todo.map((r, i) => [r.id, found[i] ?? []]))
     change({ ppe: get().ppe.map((r) => (byId.has(r.id) ? { ...r, memberSuggestions: byId.get(r.id)! } : r)) })
   }
 
   const suggestTexts = async () => {
-    const todo = get().texts.filter((r) => r.heading.trim() && r.suggestions.length === 0)
-    const found = await recommend({ keys: todo.map((r) => r.heading), scope: TEXT_BLOCKS_SCOPE })
+    const todo = todoTexts()
+    const found = await recommend({ keys: todo.map((r) => r.heading), scope: TEXT_BLOCKS_SCOPE }, 'Notes text blocks')
     if (!found) return
     const byId = new Map(todo.map((r, i) => [r.id, found[i] ?? []]))
     change({ texts: get().texts.map((r) => (byId.has(r.id) ? { ...r, suggestions: byId.get(r.id)! } : r)) })
@@ -382,6 +411,31 @@ export const useIndas = create<IndasState>((set, get) => {
       set({ selection: { id, field: kind === 'ppe' ? 'member' : 'concept' }, ...(cell ? { reveal: { cell, seq: ++seq } } : {}) })
     },
 
+    showSheet: (sheet) => {
+      if (activeEntry()?.scope === sheet) return
+      const first = get().elrs().find((e) => e.scope === sheet)
+      if (first) set({ activeElr: first.uri })
+    },
+
+    goToProblem: (target) => {
+      const s = get()
+      useUi.getState().setRightTab('form')
+      if (target.kind === 'masters') return s.setMastersOpen(true)
+      if (target.kind === 'settings') return useProject.getState().openFilingSettings()
+      if (target.kind === 'line') {
+        const kind = kindOfRow(s, target.rowId)
+        const concept = kind ? (taggedOf(kind, s).find((r) => r.id === target.rowId)?.concept ?? '') : ''
+        // the statement first, so the sheet change the reveal causes keeps it (showSheet sees its own sheet)
+        const elr = kind ? elrOfConcept(s.elrs(), s.trees, kind, concept) : null
+        if (elr) set({ activeElr: elr.uri })
+        if (concept) set({ focus: { concept, seq: ++seq } })
+        return s.revealRow(target.rowId, target.which)
+      }
+      const holder = s.elrs().find((e) => (target.elr ? e.code === target.elr : treeOf(s.trees, e)?.nodes.some((n) => n.qname === target.concept)) && e.kind !== 'texts')
+      if (holder) set({ activeElr: holder.uri })
+      set({ focus: { concept: target.concept, seq: ++seq } })
+    },
+
     tagFromTree: (node) => {
       const sel = get().selection
       if (!sel || node.abstract) return
@@ -438,25 +492,28 @@ export const useIndas = create<IndasState>((set, get) => {
 
     autoTag: () =>
       run('Auto-tagging…', async () => {
+        Object.assign(tally, { offset: 0, total: autoTagRemaining(get()), cancelled: false })
         for (const st of LINE_SHEETS) await suggestLines(st.key)
         await suggestSocie()
         await suggestPpe()
         await suggestTexts()
-        const open = get().rows.filter((r) => !r.concept && r.suggestions.length).length
-        toast.success(`Suggestions ready: ${open} line(s) to review. Nothing is tagged until you accept.`)
+        // a cancelled run still applies what it got; the rest is asked for on Continue
+        set({ step: 'Applying the tags…' })
+        const { applied, ...tagged } = applyTopSuggestions(get())
+        change(tagged)
+        get().runCheck()
+        const ai = get().rows.filter((r) => r.concept && r.suggestions[0]?.qname === r.concept && r.suggestions[0]?.pickedBy === 'ai').length
+        const left = autoTagRemaining(get())
+        const done = `tagged ${applied} line(s)${ai ? `, ${ai} picked by the AI (marked ✦, check them)` : ''}`
+        if (tally.cancelled) toast.info(`Auto-tag cancelled: ${done}. ${left} line(s) left: Continue auto-tag does them.`)
+        else toast.success(`Auto-tag ${done}. Change any tag in the Form or the inspector.`)
       }),
 
-    acceptTop: () => {
-      const kind = activeEntry()?.kind
-      if (!kind || kind === 'masters') return
-      if (kind === 'socie') change({ socie: acceptTopMembers(acceptTopSuggestions(get().socie)) })
-      else if (kind === 'ppe') change({ ppe: acceptTopMembers(get().ppe) })
-      else if (kind === 'texts') change({ texts: acceptTopSuggestions(get().texts) })
-      else {
-        const accepted = new Map(acceptTopSuggestions(get().rows.filter((r) => r.statement === kind)).map((r) => [r.id, r]))
-        change({ rows: get().rows.map((r) => accepted.get(r.id) ?? r) })
-      }
-      get().runCheck()
+    cancelAutoTag: () => {
+      if (get().busy !== 'Auto-tagging…' || tally.cancelled) return
+      tally.cancelled = true
+      set({ step: 'Cancelling — finishing the current batch…' })
+      void api().cancelRecommend()
     },
 
     fillMandatoryZeros: () => {

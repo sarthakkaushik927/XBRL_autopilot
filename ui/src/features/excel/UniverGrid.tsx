@@ -9,7 +9,7 @@ import { createUniver, LocaleType, mergeLocales, type FUniver, type IDisposable 
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
 import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-US'
 import '@univerjs/preset-sheets-core/lib/index.css'
-import { cellKey, MAX_BLOCK_CELLS, MAX_RANGE_CELLS, rangeA1, rangeOf, type CellRef, type WorkbookModel } from '@shared/workbook'
+import { cellKey, compactRanges, MAX_BLOCK_CELLS, MAX_RANGE_CELLS, rangeA1, rangeOf, type CellRef, type WorkbookModel } from '@shared/workbook'
 import { registerTestHook } from '@/lib/test-hooks'
 import { toUniverWorkbook } from './univer-data'
 
@@ -70,13 +70,17 @@ export interface UniverGridProps {
   onSelect(cell: CellRef, block: CellRef | null): void
   /** a double-click on the selected cell */
   onActivate?(cell: CellRef): void
+  /** the user (or a reveal) switched the shown sheet */
+  onSheetChange?(sheet: string): void
 }
 
 export function UniverGrid(props: UniverGridProps) {
   const { model, marks, reveal, selected } = props
   const host = useRef<HTMLDivElement>(null)
   const apiRef = useRef<FUniver | null>(null)
-  const overlays = useRef<IDisposable[]>([])
+  // two overlay layers: the tag status colours, and the selected line (redrawn alone on every click)
+  const statusLayer = useRef<IDisposable[]>([])
+  const linkedLayer = useRef<IDisposable[]>([])
   // Univer's event handlers are registered once per workbook: they read the latest props through this ref
   const latest = useRef(props)
   latest.current = props
@@ -176,7 +180,11 @@ export function UniverGrid(props: UniverGridProps) {
         univerAPI.addEvent(univerAPI.Event.CellPointerUp, onPointerUp),
         univerAPI.addEvent(univerAPI.Event.SelectionMoveEnd, onSelection),
         univerAPI.addEvent(univerAPI.Event.SelectionChanged, onSelection),
-        univerAPI.addEvent(univerAPI.Event.ActiveSheetChanged, () => drawOverlay()),
+        univerAPI.addEvent(univerAPI.Event.ActiveSheetChanged, () => {
+          drawOverlay()
+          const name = univerAPI.getActiveWorkbook()?.getActiveSheet()?.getSheetName()
+          if (name) latest.current.onSheetChange?.(name)
+        }),
       ]
       drawOverlay()
     }, 0)
@@ -184,8 +192,8 @@ export function UniverGrid(props: UniverGridProps) {
       clearTimeout(create)
       if (dblClickCleanup) dblClickCleanup()
       subs.forEach((d) => d.dispose())
-      overlays.current.forEach((d) => d.dispose())
-      overlays.current = []
+      clearLayer(statusLayer)
+      clearLayer(linkedLayer)
       apiRef.current = null
       const univer = instance
       if (univer) setTimeout(() => univer.dispose(), 0)
@@ -193,26 +201,43 @@ export function UniverGrid(props: UniverGridProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model])
 
-  // ---- overlay: tag status colours + the cell linked to the selected fact
-  function drawOverlay(): void {
-    const univerAPI = apiRef.current
-    const ws = univerAPI?.getActiveWorkbook()?.getActiveSheet()
-    if (!univerAPI || !ws) return
-    overlays.current.forEach((d) => d.dispose())
-    overlays.current = []
-    const m = latest.current.marks
-    const sheetName = ws.getSheetName()
-    const onSheet = (cells: CellRef[] | undefined) => (cells ?? []).filter((c) => c.workbook === model.source && c.sheet === sheetName).map((c) => c.ref)
-    for (const status of ['approved', 'suggested', 'rejected'] as const) {
-      const refs = onSheet(m[status])
-      if (refs.length) overlays.current.push(ws.highlightRanges(refs.map((a1) => ws.getRange(a1)), overlayStyle(STYLE[status])))
-    }
-    for (const ref of onSheet(m.blocks)) overlays.current.push(ws.highlightRanges([ws.getRange(ref)], overlayStyle(STYLE.block, 2, 8)))
-    const linked = onSheet(m.linked)
-    if (linked.length) overlays.current.push(ws.highlightRanges(linked.map((a1) => ws.getRange(a1)), overlayStyle(STYLE.linked, 2)))
+  // ---- overlay: tag status colours + the cells linked to the selected fact. Cells are merged into as few rectangles
+  // as possible first: Univer re-sorts every shape on each add, so one shape per cell froze the window for minutes.
+  function activeSheet() {
+    const ws = apiRef.current?.getActiveWorkbook()?.getActiveSheet()
+    if (!ws) return null
+    const name = ws.getSheetName()
+    const onSheet = (cells: CellRef[] | undefined) => compactRanges((cells ?? []).filter((c) => c.workbook === model.source && c.sheet === name).map((c) => c.ref))
+    return { ws, onSheet }
   }
 
-  useEffect(drawOverlay, [marks])
+  function drawStatus(): void {
+    clearLayer(statusLayer)
+    const at = activeSheet()
+    if (!at) return
+    const m = latest.current.marks
+    for (const status of ['approved', 'suggested', 'rejected'] as const) {
+      const refs = at.onSheet(m[status])
+      if (refs.length) statusLayer.current.push(at.ws.highlightRanges(refs.map((a1) => at.ws.getRange(a1)), overlayStyle(STYLE[status])))
+    }
+    const blocks = at.onSheet(m.blocks)
+    if (blocks.length) statusLayer.current.push(at.ws.highlightRanges(blocks.map((a1) => at.ws.getRange(a1)), overlayStyle(STYLE.block, 2, 8)))
+  }
+
+  function drawLinked(): void {
+    clearLayer(linkedLayer)
+    const at = activeSheet()
+    const linked = at?.onSheet(latest.current.marks.linked) ?? []
+    if (at && linked.length) linkedLayer.current.push(at.ws.highlightRanges(linked.map((a1) => at.ws.getRange(a1)), overlayStyle(STYLE.linked, 2)))
+  }
+
+  function drawOverlay(): void {
+    drawStatus()
+    drawLinked()
+  }
+
+  useEffect(drawStatus, [marks.approved, marks.suggested, marks.rejected, marks.blocks])
+  useEffect(drawLinked, [marks.linked])
 
   // ---- reveal requests from the XBRL side (Form/XML/Inspector)
   // Univer registers a sheet's render unit some frames after the grid (or a newly activated sheet) appears; until then
@@ -231,4 +256,9 @@ export function UniverGrid(props: UniverGridProps) {
   }, [reveal?.seq])
 
   return <div ref={host} className="univer-host h-full w-full" data-testid="univer-host" data-cellkey={selected ? cellKey(selected) : ''} />
+}
+
+function clearLayer(layer: { current: IDisposable[] }): void {
+  layer.current.forEach((d) => d.dispose())
+  layer.current = []
 }

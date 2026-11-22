@@ -1,5 +1,6 @@
 import { Plus, Settings2, Trash2 } from 'lucide-react'
 import { fyLabel } from '@xap/engine/basics'
+import { useShallow } from 'zustand/react/shallow'
 import type { MasterField } from '@shared/indas'
 import { Button, Dialog, Field, Input, Select } from '@/components/ui/primitives'
 import { useIndas } from '@/stores/indas'
@@ -12,7 +13,12 @@ import { fieldKind, knownMasters } from './model'
  * rounding) are shown read-only: they are edited once, in Filing settings.
  */
 export function IndasMastersDialog() {
-  const { mastersOpen, setMastersOpen, fields, details, company, setCompany, auditor, setAuditor, signatories, addSignatory, updateSignatory, removeSignatory } = useIndas()
+  const { mastersOpen, setMastersOpen, fields, details, company, setCompany, auditor, setAuditor, signatories, addSignatory, updateSignatory, removeSignatory } = useIndas(
+    useShallow((s) => ({
+      mastersOpen: s.mastersOpen, setMastersOpen: s.setMastersOpen, fields: s.fields, details: s.details, company: s.company, setCompany: s.setCompany, auditor: s.auditor,
+      setAuditor: s.setAuditor, signatories: s.signatories, addSignatory: s.addSignatory, updateSignatory: s.updateSignatory, removeSignatory: s.removeSignatory,
+    })),
+  )
   const known = details ? knownMasters(details) : {}
   const close = () => setMastersOpen(false)
   return (

@@ -1,4 +1,4 @@
-import { TriangleAlert } from 'lucide-react'
+import { ChevronsLeft, TriangleAlert } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { IndasMastersSummary, IndasTaxonomyPanel } from '@/features/indas/IndasSidePanels'
 import { IndasProblemsPanel } from '@/features/indas/IndasProblemsPanel'
@@ -22,11 +22,15 @@ const TITLES: Record<Activity, string> = {
 
 export function SidePanel() {
   const activity = useUi((s) => s.activity)
+  const hide = useUi((s) => s.toggleSidebar)
   const indas = useWorkspace()?.kind === 'indas'
   return (
     <aside className="flex h-full flex-col bg-panel">
-      <header className="flex h-8 shrink-0 items-center border-b border-border px-3 text-[11px] font-semibold uppercase tracking-wide text-muted">
-        {TITLES[activity]}
+      <header className="flex h-8 shrink-0 items-center border-b border-border pr-1 pl-3 text-[11px] font-semibold uppercase tracking-wide text-muted">
+        <span className="min-w-0 flex-1 truncate">{TITLES[activity]}</span>
+        <button className="flex h-6 w-6 items-center justify-center rounded hover:bg-panel-2 hover:text-fg" onClick={hide} title="Hide the side panel (Ctrl+B)" aria-label="Hide the side panel" data-testid="sidebar-hide">
+          <ChevronsLeft size={14} />
+        </button>
       </header>
       <div className={cn('min-h-0 flex-1', activity === 'ai' ? 'flex flex-col overflow-hidden' : 'overflow-auto')}>
         {activity === 'explorer' && <FilingExplorer />}

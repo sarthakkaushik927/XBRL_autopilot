@@ -1,5 +1,6 @@
 /** The side panel's Taxonomy and Masters activities for an Ind AS filing (ADR-0017). */
 import { Building2, Pencil } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { LINE_SHEETS, PPE_TABLE, SOCIE_TABLE } from '@shared/indas'
 import { useIndasElrs } from '@/app/workspace'
 import { Button } from '@/components/ui/primitives'
@@ -12,7 +13,7 @@ import { emptyMasterCount, parseRowId } from './workspace'
  * line, as double-clicking it in the XBRL Form does.
  */
 export function IndasTaxonomyPanel() {
-  const s = useIndas()
+  const s = useIndas(useShallow((x) => ({ rows: x.rows, selection: x.selection, activeElr: x.activeElr })))
   const elrs = useIndasElrs()
   const row = s.rows.find((r) => r.id === s.selection?.id)
   const kind = row?.statement ?? (s.selection ? parseRowId(s.selection.id)?.kind : undefined) ?? elrs.find((e) => e.uri === s.activeElr)?.kind
@@ -36,7 +37,9 @@ export function IndasTaxonomyPanel() {
 }
 
 export function IndasMastersSummary() {
-  const { fields, company, auditor, signatories, setMastersOpen } = useIndas()
+  const { fields, company, auditor, signatories, setMastersOpen } = useIndas(
+    useShallow((s) => ({ fields: s.fields, company: s.company, auditor: s.auditor, signatories: s.signatories, setMastersOpen: s.setMastersOpen })),
+  )
   const empty = emptyMasterCount(fields, company, auditor)
   const signed = signatories.filter((x) => /^\d{8}$/.test(x.din.trim())).length
   return (

@@ -4,6 +4,7 @@
  * useEditor) and the Ind AS filing (useIndas). Panes read this instead of a store, so one editor serves both.
  */
 import { useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { fyLabel, maxDisplayPlaces, taxonomyLabel, type RoundingLevel, type TaxonomyId } from '@xap/engine/basics'
 import type { ElrInfo } from '@shared/project'
 import { readinessProblems } from '@/features/indas/model'
@@ -77,7 +78,8 @@ function useFilingWorkspace(): FilingWorkspace | null {
 }
 
 function useIndasWorkspace(): FilingWorkspace | null {
-  const s = useIndas()
+  // only what the shared panes show: a selection or progress change must not re-render the whole window
+  const s = useIndas(useShallow((x) => ({ open: x.open, details: x.details, dirty: x.dirty, activeElr: x.activeElr, setActiveElr: x.setActiveElr })))
   const setRightTab = useUi((u) => u.setRightTab)
   const elrs = useIndasElrs()
   const problems = useIndasProblems()
@@ -117,16 +119,12 @@ export function useIndasElrs() {
 
 /** The Ind AS Problems list: readiness, totals that don't add up, MCA's answer to Generate. */
 export function useIndasProblems() {
-  const rows = useIndas((s) => s.rows)
-  const details = useIndas((s) => s.details)
-  const signatories = useIndas((s) => s.signatories)
-  const company = useIndas((s) => s.company)
-  const fields = useIndas((s) => s.fields)
-  const checks = useIndas((s) => s.checks)
-  const result = useIndas((s) => s.result)
+  const { rows, socie, ppe, details, signatories, company, fields, checks, result } = useIndas(
+    useShallow((s) => ({ rows: s.rows, socie: s.socie, ppe: s.ppe, details: s.details, signatories: s.signatories, company: s.company, fields: s.fields, checks: s.checks, result: s.result })),
+  )
   return useMemo(() => {
     if (!details) return []
     const readiness = readinessProblems({ rows, details, signatories, company, companyFields: fields?.company ?? [] })
-    return problemsOf({ readiness, checks, result })
-  }, [rows, details, signatories, company, fields, checks, result])
+    return problemsOf({ readiness, checks, result, lines: { rows, socie, ppe } })
+  }, [rows, socie, ppe, details, signatories, company, fields, checks, result])
 }

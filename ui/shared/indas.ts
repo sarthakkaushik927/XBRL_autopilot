@@ -142,9 +142,15 @@ export interface GenerateXmlInput {
   companyName: string
 }
 
+/** The error message of a recommend call the user cancelled (renderer and main agree on it). */
+export const RECOMMEND_CANCELLED = 'Auto-tag was cancelled.'
+
 export interface GenerateXmlProblem {
   type: string | null
   message: string
+  /** what the problem is about, when the checks say (a concept, or a PPE class member) */
+  concept?: string | null
+  member?: string | null
 }
 
 export type GenerateXmlResult =

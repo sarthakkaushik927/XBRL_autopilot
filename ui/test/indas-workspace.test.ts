@@ -171,11 +171,55 @@ describe('Problems', () => {
       facts: {},
       byElr: {},
     }
-    const out = problemsOf({ readiness: ['Add at least 2 signatory directors.'], checks: { balanceSheet: check }, result: { ok: false, errors: [{ type: 'MANDATORY', message: 'PAN missing' }] } })
+    const out = problemsOf({
+      readiness: [{ message: 'Add at least 2 signatory directors.', fix: 'masters' }],
+      checks: { balanceSheet: check },
+      result: { ok: false, errors: [{ type: 'MANDATORY', message: 'PAN missing' }] },
+      lines: { rows: [], socie: [], ppe: [] },
+    })
     expect(out).toEqual([
-      { severity: 'warning', source: 'readiness', message: 'Add at least 2 signatory directors.' },
-      { severity: 'error', source: 'difference', message: 'Balance Sheet · CY: Assets 300 ≠ 100.1 (difference 199.9)', elr: '110000', concept: 'ind-as:Assets' },
-      { severity: 'error', source: 'mca', message: 'MANDATORY: PAN missing' },
+      { severity: 'warning', source: 'readiness', message: 'Add at least 2 signatory directors.', target: { kind: 'masters' } },
+      { severity: 'error', source: 'difference', message: 'Balance Sheet · CY: Assets 300 ≠ 100.1 (difference 199.9)', target: { kind: 'concept', concept: 'ind-as:Assets', elr: '110000' } },
+      { severity: 'error', source: 'mca', message: 'MANDATORY: PAN missing', target: null },
+    ])
+  })
+
+  it('double-click goes to the line behind a problem: the total’s cell for its year, the PPE class, the details dialog', () => {
+    const check: CheckResult = {
+      differences: [{ year: 'PY', elr: '110000', concept: 'ind-as:Assets', label: 'Assets', reported: '3', calculated: '1', difference: '2', children: [] }],
+      total: '2',
+      facts: {},
+      byElr: {},
+    }
+    const lines = {
+      rows: [
+        { id: 'profitLoss:1', concept: 'ind-as:Assets', statement: 'profitLoss' as const },
+        { id: 'balanceSheet:7', concept: 'ind-as:Assets', statement: 'balanceSheet' as const },
+        { id: 'balanceSheet:2', concept: 'ind-as:Inventories', statement: 'balanceSheet' as const },
+      ],
+      socie: [],
+      ppe: [{ id: 'ppe:3', member: 'ind-as:ComputerEquipmentsMember' }],
+    }
+    const out = problemsOf({
+      readiness: [],
+      checks: { balanceSheet: check },
+      result: {
+        ok: false,
+        errors: [
+          { type: 'NEGATIVE_VALUE_NOT_PERMITTED', message: 'negative', concept: 'ind-as:Inventories' },
+          { type: 'PPE_NET_BLOCK_MISMATCH', message: 'net block', member: 'ind-as:ComputerEquipmentsMember' },
+          { type: 'INVALID_DIN', message: 'DIN' },
+          { type: 'MANDATORY_STATEMENT_ROOT_MISSING', message: 'root', concept: 'ind-as:EquityAndLiabilities' },
+        ],
+      },
+      lines,
+    })
+    expect(out.map((p) => p.target)).toEqual([
+      { kind: 'line', rowId: 'balanceSheet:7', which: 'py' },
+      { kind: 'line', rowId: 'balanceSheet:2', which: 'cy' },
+      { kind: 'line', rowId: 'ppe:3', which: 'label' },
+      { kind: 'masters' },
+      { kind: 'concept', concept: 'ind-as:EquityAndLiabilities', elr: null },
     ])
   })
 

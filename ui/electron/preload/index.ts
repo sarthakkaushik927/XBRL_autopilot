@@ -148,6 +148,7 @@ const api: XapApi = {
     saveTemplate: () => invoke(IPC.indasSaveTemplate),
     transform: (path) => invoke(IPC.indasTransform, path),
     recommend: (req) => invoke(IPC.indasRecommend, req),
+    cancelRecommend: () => invoke(IPC.indasCancelRecommend),
     masterFields: () => invoke(IPC.indasMasterFields),
     generate: (input) => invoke(IPC.indasGenerate, input),
     showGenerated: () => invoke(IPC.indasShowGenerated),

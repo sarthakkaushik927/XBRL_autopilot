@@ -1,6 +1,7 @@
 /** The Preview tab of an Ind AS filing (ADR-0017): an MCA-like preview of the tagged statements. */
 import { ScrollText } from 'lucide-react'
 import { useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { LINE_SHEETS, type StatementKey } from '@shared/indas'
 import { useIndasElrs } from '@/app/workspace'
 import { EmptyState } from '@/components/EmptyState'
@@ -8,7 +9,7 @@ import { useIndas } from '@/stores/indas'
 import { formLines, previewHtml, taggedOf, treeOf } from './workspace'
 
 export function IndasPreviewView() {
-  const s = useIndas()
+  const s = useIndas(useShallow((x) => ({ details: x.details, trees: x.trees, checks: x.checks, rows: x.rows, socie: x.socie, ppe: x.ppe, texts: x.texts })))
   const elrs = useIndasElrs()
   const html = useMemo(() => {
     if (!s.details) return ''

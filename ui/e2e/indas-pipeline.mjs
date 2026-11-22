@@ -1,6 +1,7 @@
 // An Ind AS filing in the editor (docs/17, ADR-0017), dev app, real sidecar (+ real Groq for the AI pick):
 // start screen → New project (real dialog, synthetic company) → open a client workbook (/indas/transform, local) →
-// Auto-tag (scoped /indas/recommend for every sheet; nothing tagged until accepted) → Accept suggestions on each
+// Auto-tag (scoped /indas/recommend for every sheet, the progress overlay, each untagged line takes its top suggestion:
+// PR #15 review, no Accept step) → each statement from the Filing Explorer
 // statement from the Filing Explorer → cell ↔ fact → company / auditor / signatories (synthetic) → Save → close →
 // reopen from Saved projects → Generate XML: the XML or the MCA problems in Problems.
 // AI consent is switched on for the run: only line-item names and headings go to Groq (no amounts, no company data).
@@ -54,24 +55,24 @@ check(sizes.CANONICAL_BS > 0 && sizes.CANONICAL_PL > 0, 'workbook converted into
 await waitFor(`!!document.querySelector('[data-testid="univer-host"] canvas')`, 'Excel grid', 30000)
 await shot('01-financials.png')
 
-// 3. Auto-tag: suggestions for every sheet, nothing tagged
+// 3. Auto-tag: the editor is blocked behind a progress overlay, then every untagged line takes its top suggestion
 const t0 = Date.now()
 check(await click('auto-tag'), 'Auto-tag button')
+await waitFor(`!!document.querySelector('[data-testid="busy-overlay"]')`, 'progress overlay', 15000)
+check(true, 'Auto-tag shows the blocking progress overlay', await ev(`document.querySelector('[data-testid="busy-overlay"]').innerText.replace(/\s+/g, ' ')`))
 await waitFor(`${S}.busy === null`, 'auto-tag', 1800000)
 const got = await ev(`${S}.rows.filter(r => r.suggestions.length).length + '/' + ${S}.rows.length`)
 const ai = await ev(`${S}.rows.filter(r => r.suggestions[0]?.pickedBy === 'ai').length`)
 check(Number(got.split('/')[0]) > 0, 'suggestions from each sheet’s scope', `${got} lines, ${ai} AI picks, ${Math.round((Date.now() - t0) / 1000)} s`)
-check(await ev(`${S}.rows.every(r => !r.concept) && ${S}.ppe.every(r => !r.member)`), 'nothing tagged until accepted')
-
-// 4. Accept the suggestions statement by statement (Filing Explorer → Form toolbar)
+check(await ev(`${S}.rows.filter(r => r.suggestions.length).every(r => r.concept)`), 'Auto-tag applied the tags (no Accept step)')
+check(!(await ev(`!!document.querySelector('[data-testid="indas-accept-top"]')`)), 'no Accept suggestions button')
 for (const uri of await ev(`[...document.querySelectorAll('[data-testid="explorer-elr"]')].map(e => e.dataset.elr).filter(u => /CANONICAL_(BS|PL|CF|SOCIE|PPE_SCHEDULE)#/.test(u))`)) {
   await ev(`[...document.querySelectorAll('[data-testid="explorer-elr"]')].find(e => e.dataset.elr === ${J(uri)}).click()`)
   await sleep(300)
-  await click('indas-accept-top')
 }
 const bs = await ev(`${S}.rows.filter(r => r.statement === 'balanceSheet').slice(0, 8).map(r => [r.label, r.concept])`)
 console.log('   BS', J(bs.map(([l, q]) => `${String(l).slice(0, 28)} → ${short(q)}`)))
-check(await ev(`${S}.rows.some(r => r.concept)`), 'accepted suggestions tag the lines')
+check(await ev(`${S}.rows.some(r => r.concept)`), 'the lines are tagged')
 await sleep(1000)
 await ev(`[...document.querySelectorAll('[data-testid="explorer-elr"]')][0].click()`)
 await shot('02-tagged.png')
@@ -123,6 +124,29 @@ else {
 }
 await sleep(500)
 await shot('04-generate-result.png')
+
+// 8. Problems: double-click goes where the problem is fixed (PR #15 review, point 9)
+const lineAt = await ev(`[...document.querySelectorAll('[data-testid="problem"]')].findIndex(p => p.dataset.target === 'line')`)
+if (lineAt >= 0) {
+  await ev(`(${S}.reveal = null, document.querySelectorAll('[data-testid="problem"]')[${lineAt}].dispatchEvent(new MouseEvent('dblclick', { bubbles: true })), true)`)
+  await sleep(500)
+  const at = await ev(`JSON.stringify({ cell: ${S}.reveal?.cell, row: ${S}.selection?.id, elr: ${S}.activeElr })`)
+  check(/"cell":\{/.test(at) && /"row":"/.test(at), 'double-clicking a problem shows its cell in Excel and its line', at)
+} else console.log('  (no problem with a line to go to)')
+const mastersAt = await ev(`[...document.querySelectorAll('[data-testid="problem"]')].findIndex(p => p.dataset.target === 'masters')`)
+if (mastersAt >= 0) {
+  await ev(`(document.querySelectorAll('[data-testid="problem"]')[${mastersAt}].dispatchEvent(new MouseEvent('dblclick', { bubbles: true })), true)`)
+  check(await ev(`${S}.mastersOpen`), 'a company / signatory problem opens the details dialog')
+  await ev(`${S}.setMastersOpen(false)`)
+}
+
+// 9. The side panel slides away and back (« / »)
+await click('sidebar-hide')
+await sleep(300)
+check(await ev(`!!document.querySelector('[data-testid="sidebar-show"]') && !document.querySelector('[data-testid="sidebar-hide"]')`), '« hides the side panel')
+await click('sidebar-show')
+await sleep(300)
+check(await ev(`!!document.querySelector('[data-testid="sidebar-hide"]')`), '» brings it back')
 await ev(`${S}.close()`)
 
 check(errors.length === 0, 'no uncaught renderer errors', errors.join(' | '))

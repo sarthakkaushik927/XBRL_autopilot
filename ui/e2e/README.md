@@ -3,7 +3,9 @@
 These scripts drive the real Electron app over CDP. They aren't Vitest tests yet; Playwright `_electron` is planned for Phase 11.
 
 ```bash
-# from ui/ — isolated user data, dev build (window.__xap_test__ hooks exist only in dev)
+# terminal 1, repo root: the backend (the app no longer starts it, ADR-0018)
+make dev-server            # = uv run uvicorn api.app:app --host 127.0.0.1 --port 7860 --reload
+# terminal 2, from ui/ — isolated user data, dev build (window.__xap_test__ hooks exist only in dev)
 taskkill //IM electron.exe //F            # make sure no instance holds the single-instance lock
 XAP_USER_DATA="$TEMP/xap-e2e-$RANDOM" env -u ELECTRON_RUN_AS_NODE \
   ./node_modules/.bin/electron-vite dev -- --remote-debugging-port=9350 &
@@ -14,7 +16,11 @@ Since 2026-11-22 the start screen has no Import XBRL / Recover and New project i
 
 `indas-valid-xml.mjs` (dev app, real sidecar, synthetic filing, no AI; ADR-0017): New project through the real dialog (`indas-new-project.mjs`) → saved as `<Company>_<FY>.axbrl` → the filled standard template in the Excel pane → every line tagged from `tests/fixtures/synthetic_indas/filing.json` → Excel → Form and Form → Excel → green Difference footer on each statement → masters prefilled from the settings → Generate XML (0 MCA problems, XML tab) → save, close, reopen from Saved projects → Arelle. Run from the repo root: `node ui/e2e/indas-valid-xml.mjs <port> <screenshotDir>`.
 
-`indas-pipeline.mjs` (dev app, real sidecar + Groq AI pick; ADR-0017): New project from the activity bar → open a client workbook (path argument, no dialog) → `/indas/transform` → Auto-tag (`/indas/recommend` for every sheet; nothing tagged until accepted) → Accept suggestions on each statement from the Filing Explorer → masters (synthetic) → save, close, reopen → Generate XML: the XML, or the MCA problems listed in Problems. Usage: `node e2e/indas-pipeline.mjs <port> <screenshotDir> <workbook.xls|xlsx>`.
+`indas-cancel.mjs` (dev app, backend, no AI): Auto-tag → Cancel once 40 lines are done → the lines done keep their tags, the editor is free, the button says "Continue auto-tag (N left)" → Continue asks only for those → every line has suggestions. Usage: `node e2e/indas-cancel.mjs <port> <screenshotDir> <workbook>`.
+
+`indas-perf.mjs` (dev app, backend, no AI; ADR-0018): times each action until its render and effects have run: open every statement, click 25 lines, switch every sheet twice, double-click problems. Fails over 600 ms (dev build). The first run auto-tags and saves the project; pass that `.axbrl` as the 5th argument to skip it. Usage: `node e2e/indas-perf.mjs <port> <screenshotDir> <workbook> [maxMs] [saved.axbrl]`. A hidden window doesn't fire `requestAnimationFrame` and Univer doesn't paint: the timing uses macrotasks, and screenshots need the window in front.
+
+`indas-pipeline.mjs` (dev app, real sidecar + Groq AI pick; ADR-0017): New project from the activity bar → open a client workbook (path argument, no dialog) → `/indas/transform` → Auto-tag (`/indas/recommend` for every sheet behind the progress overlay; each untagged line takes its top suggestion) → each statement from the Filing Explorer → masters (synthetic) → save, close, reopen → Generate XML: the XML, or the MCA problems listed in Problems. Usage: `node e2e/indas-pipeline.mjs <port> <screenshotDir> <workbook.xls|xlsx>`.
 
 **Memory:** the dev app with Univer needs ~1.4 GB of free commit (renderer ~750 MB after tagging 60 lines). With little free virtual memory (a full C: drive stops the page file growing) the renderer dies with `renderer gone: oom` when the grid mounts; free memory and run again.
 

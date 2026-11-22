@@ -4,11 +4,12 @@
  * line → its cell in Excel; double-click a concept → tags the line selected in Excel with it. Tables and text blocks
  * open their own grids. The Difference footer is the shared one.
  */
-import { CheckCheck, ChevronDown, ChevronRight, CircleSlash, FileCode2, ListChecks, Loader2, Table2 } from 'lucide-react'
-import { useEffect, useMemo, useRef } from 'react'
-import { LINE_SHEETS, type StatementKey } from '@shared/indas'
+import { ChevronDown, ChevronRight, CircleSlash, FileCode2, ListChecks, Loader2 } from 'lucide-react'
+import { memo, useDeferredValue, useEffect, useMemo, useRef } from 'react'
+import { useShallow } from 'zustand/react/shallow'
+import { LINE_SHEETS, type StatementKey, type TransformResult } from '@shared/indas'
 import { useIndasElrs } from '@/app/workspace'
-import { EmptyState } from '@/components/EmptyState'
+import { Loading, ProgressLine } from '@/components/Loading'
 import { Button, Select } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 import { useIndas } from '@/stores/indas'
@@ -23,9 +24,12 @@ export function IndasFormView() {
   const elrs = useIndasElrs()
   const activeElr = useIndas((s) => s.activeElr)
   const setActiveElr = useIndas((s) => s.setActiveElr)
-  const entry = elrs.find((e) => e.uri === activeElr)
+  // a big statement renders in the background: the select answers at once, a line shows while the old one stays
+  const shownElr = useDeferredValue(activeElr)
+  const entry = elrs.find((e) => e.uri === shownElr)
   return (
-    <div className="flex h-full flex-col outline-none" data-testid="form-view">
+    <div className="relative flex h-full flex-col outline-none" data-testid="form-view">
+      <ProgressLine active={shownElr !== activeElr} delayMs={120} className="absolute inset-x-0 top-0 z-20" />
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-3 py-1.5">
         <Select className="h-7 w-auto min-w-48 flex-1 basis-56 text-xs" value={activeElr ?? ''} onChange={(e) => setActiveElr(e.target.value)} aria-label="Statement" data-testid="indas-elr-select">
           {!activeElr && <option value="">Loading the taxonomy…</option>}
@@ -39,7 +43,7 @@ export function IndasFormView() {
         <FormActions entry={entry} />
       </div>
       {!entry ? (
-        <EmptyState icon={Table2} title="Loading the taxonomy…" />
+        <Loading label="Loading the taxonomy…" />
       ) : entry.kind === 'socie' || entry.kind === 'ppe' || entry.kind === 'texts' ? (
         <div className="min-h-0 flex-1">
           <TableTagging kind={entry.kind} />
@@ -51,16 +55,22 @@ export function IndasFormView() {
   )
 }
 
-/** Empty mandatory → 0 · Mandatory items · Accept suggestions · Generate XML. */
+/** Empty mandatory → 0 · Mandatory items · Generate XML (Auto-tag applies its tags itself: no Accept step). */
 function FormActions({ entry }: { entry: IndasElr | undefined }) {
-  const s = useIndas()
+  const s = useIndas(
+    useShallow((x) => ({
+      trees: x.trees, checks: x.checks, rows: x.rows, socie: x.socie, ppe: x.ppe, fields: x.fields, company: x.company, auditor: x.auditor,
+      busy: x.busy, transform: x.transform, fillMandatoryZeros: x.fillMandatoryZeros, setMastersOpen: x.setMastersOpen, generate: x.generate,
+    })),
+  )
   const isLines = !!entry && LINE_SHEETS.some((l) => l.key === entry.kind)
+  const { trees, checks, rows, socie, ppe } = s
   const emptyCount = useMemo(() => {
-    const tree = treeOf(s.trees, entry)
+    const tree = treeOf(trees, entry)
     if (!tree || !isLines) return 0
     const kind = entry!.kind as StatementKey
-    return emptyMandatory(formLines(tree, s.checks[kind]?.facts ?? {}, taggedOf(kind, s))).length
-  }, [s, entry, isLines])
+    return emptyMandatory(formLines(tree, checks[kind]?.facts ?? {}, taggedOf(kind, { rows, socie, ppe }))).length
+  }, [trees, checks, rows, socie, ppe, entry, isLines])
   const mastersEmpty = emptyMasterCount(s.fields, s.company, s.auditor)
   return (
     <>
@@ -83,9 +93,6 @@ function FormActions({ entry }: { entry: IndasElr | undefined }) {
       >
         <ListChecks size={13} /> Mandatory items{mastersEmpty > 0 ? ` (${mastersEmpty})` : ''}
       </Button>
-      <Button variant="ghost" className="h-7 shrink-0 px-2 text-[11px]" disabled={!entry || !!s.busy} onClick={s.acceptTop} title="Accept the first suggestion on every untagged line of this statement (AI only proposes; check them)." data-testid="indas-accept-top">
-        <CheckCheck size={13} /> Accept suggestions
-      </Button>
       <Button variant="primary" className="h-7 shrink-0 px-2 text-[11px]" disabled={!!s.busy || !s.transform} onClick={() => void s.generate()} title="Validate and generate the AOC-4 XML (Filing → Generate XML)" data-testid="indas-generate">
         {s.busy?.startsWith('Validating') ? <Loader2 size={13} className="animate-spin" /> : <FileCode2 size={13} />} Generate XML
       </Button>
@@ -94,15 +101,21 @@ function FormActions({ entry }: { entry: IndasElr | undefined }) {
 }
 
 function LineForm({ entry, kind }: { entry: IndasElr; kind: StatementKey }) {
-  const s = useIndas()
+  const s = useIndas(
+    useShallow((x) => ({ trees: x.trees, checks: x.checks, rows: x.rows, socie: x.socie, ppe: x.ppe, details: x.details, selection: x.selection, focus: x.focus, transform: x.transform })),
+  )
   const tree = treeOf(s.trees, entry)
   const check = s.checks[kind]
-  const lines = useMemo(() => (tree ? formLines(tree, check?.facts ?? {}, taggedOf(kind, s)) : []), [tree, check, kind, s])
+  const { rows, socie, ppe } = s
+  const lines = useMemo(() => (tree ? formLines(tree, check?.facts ?? {}, taggedOf(kind, { rows, socie, ppe })) : []), [tree, check, kind, rows, socie, ppe])
   const foldable = useMemo(() => ({ elrUri: entry.uri, rows: lines.map((l) => l.node), tables: [] }), [entry.uri, lines])
   const fold = useFormTree(tree ? foldable : null)
   const body = useRef<HTMLDivElement>(null)
   const hasPy = s.details?.py !== null
   const selectedRow = s.rows.find((r) => r.id === s.selection?.id) ?? null
+  const selectedId = s.selection?.id ?? null
+  const canTag = s.selection?.field === 'concept'
+  const suggested = useMemo(() => (selectedRow && !selectedRow.concept ? selectedRow.suggestions.map((x) => x.qname) : NONE), [selectedRow])
 
   // a cell selected in Excel: its fact's row comes into view (folded heads open first)
   useEffect(() => {
@@ -115,7 +128,7 @@ function LineForm({ entry, kind }: { entry: IndasElr; kind: StatementKey }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.focus?.seq, lines.length])
 
-  if (!tree) return <EmptyState icon={Table2} title="Loading statement…" />
+  if (!tree) return <Loading label="Loading the statement…" />
   const difference = check?.byElr[entry.code] ?? { cy: '0', py: '0', issues: 0 }
   return (
     <>
@@ -136,10 +149,13 @@ function LineForm({ entry, kind }: { entry: IndasElr; kind: StatementKey }) {
                   line={l}
                   hasPy={hasPy}
                   fold={fold.parents.has(i) ? (fold.collapsed.has(i) ? 'closed' : 'open') : null}
-                  onFold={() => fold.toggleRow(i)}
+                  index={i}
+                  onFold={fold.toggleRow}
                   selectedConcept={selectedRow?.concept ?? null}
-                  suggested={selectedRow && !selectedRow.concept ? selectedRow.suggestions.map((x) => x.qname) : []}
-                  selectedRowId={s.selection?.id ?? null}
+                  suggested={suggested}
+                  selectedRowId={selectedId}
+                  transform={s.transform}
+                  canTag={canTag}
                 />
               ),
             )}
@@ -151,23 +167,29 @@ function LineForm({ entry, kind }: { entry: IndasElr; kind: StatementKey }) {
   )
 }
 
-function LineRow(props: {
+const NONE: string[] = []
+
+/** One Form row. Memoised and store-free: a click re-renders only the rows whose selection state changed. */
+const LineRow = memo(function LineRow(props: {
   line: FormLine
   hasPy: boolean
   fold: 'open' | 'closed' | null
-  onFold(): void
+  index: number
+  onFold(index: number): void
   selectedConcept: string | null
   suggested: string[]
   selectedRowId: string | null
+  transform: TransformResult | null
+  canTag: boolean
 }) {
-  const { line: l } = props
-  const { transform, selection, revealRow, tagFromTree } = useIndas()
+  const { line: l, transform } = props
+  const { revealRow, tagFromTree } = useIndas.getState()
   const n = l.node
   const indent = { paddingLeft: `${1.25 + n.depth * 0.9}rem` }
   const foldButton = props.fold && (
     <button
       className="mr-0.5 -ml-3.5 inline-flex w-3 align-middle text-muted hover:text-fg"
-      onClick={(e) => (e.stopPropagation(), props.onFold())}
+      onClick={(e) => (e.stopPropagation(), props.onFold(props.index))}
       aria-expanded={props.fold === 'open'}
       data-testid="form-fold"
     >
@@ -195,14 +217,14 @@ function LineRow(props: {
     return (
       <CellChip
         text={`${cell.ref}${more}`}
-        active={selection?.id === first}
+        active={props.selectedRowId === first}
         title={`From ${cell.sheet}!${cell.ref}${more ? ` and ${l.rows.length - 1} more line(s) (added up)` : ''}\nClick to show it in Excel`}
         onClick={() => revealRow(first, year)}
       />
     )
   }
   const tagHere = () => {
-    if (selection && selection.field === 'concept') tagFromTree(n)
+    if (props.canTag) tagFromTree(n)
   }
   return (
     <tr
@@ -212,7 +234,7 @@ function LineRow(props: {
       data-tagged={l.rows.length > 0 || undefined}
       onClick={() => first && revealRow(first, 'label')}
       onDoubleClick={tagHere}
-      title={`${n.qname}${n.periodType ? ` · ${n.periodType}` : ''}\n${selection ? 'Double-click to tag the selected line with this concept' : 'Select a line in Excel, then double-click its concept here'}`}
+      title={`${n.qname}${n.periodType ? ` · ${n.periodType}` : ''}\n${props.selectedRowId ? 'Double-click to tag the selected line with this concept' : 'Select a line in Excel, then double-click its concept here'}`}
     >
       <td style={indent} className="py-1 pr-3">
         {foldButton}
@@ -237,4 +259,4 @@ function LineRow(props: {
       )}
     </tr>
   )
-}
+})
