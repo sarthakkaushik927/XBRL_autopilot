@@ -10,7 +10,8 @@
  * can't both be kept). Pure: no IPC, no sidecar.
  */
 import { decimal as Dec } from '@xap/engine'
-import { LINE_SHEETS, type FixChange, type FixLine, type PeriodRole, type StatementLine } from '@shared/indas'
+import { LINE_SHEETS, type FixChange, type FixLine, type PeriodRole, type StatementElrs, type StatementKey, type StatementLine } from '@shared/indas'
+import { deriveFiling } from './indas-derived-totals'
 import { checkDifferences, checkedTotals } from './indas-difference-check'
 import { filingRuleErrors } from './indas-filing-rules'
 import type { IndasKnowledgeBase } from './indas-knowledge-base'
@@ -40,23 +41,29 @@ function statementLines(lines: readonly FixLine[], statement: string): Statement
 type Keep = ReadonlyMap<string, ReadonlySet<string>>
 const KEEP_NONE: Keep = new Map()
 
+/** Each statement's tagged lines and the totals they imply (the live check's derivation, issue #20 point 5). */
+function derivedFiling(kb: IndasKnowledgeBase, lines: readonly FixLine[], elrs: StatementElrs) {
+  return deriveFiling(kb, Object.fromEntries(LINE_SHEETS.map((s) => [s.key, statementLines(lines, s.key)])) as Record<StatementKey, StatementLine[]>, elrs)
+}
+
 /**
- * The filing's problems: totals off in each statement (CY and PY) + Generate's statement rules, and Σ |difference|.
+ * The filing's problems: totals off in each statement (CY and PY) + Generate's statement rules, and Σ |difference|,
+ * with the totals the lines imply derived as the live check and Generate derive them.
  * `keep` = per statement, totals still compared after their parts lost their tags (see `untagKeep`).
  */
-function measure(kb: IndasKnowledgeBase, lines: readonly FixLine[], keep: Keep = KEEP_NONE): Score {
+function measure(kb: IndasKnowledgeBase, lines: readonly FixLine[], elrs: StatementElrs, keep: Keep = KEEP_NONE): Score {
   let issues = 0
   const gaps: string[] = []
   const offCy = new Set<string>()
-  const statements = LINE_SHEETS.map((s) => statementLines(lines, s.key))
-  LINE_SHEETS.forEach((s, i) => {
-    const r = checkDifferences(kb, statements[i], keep.get(s.key))
+  const filing = derivedFiling(kb, lines, elrs)
+  for (const s of LINE_SHEETS) {
+    const r = checkDifferences(kb, statementLines(lines, s.key), keep.get(s.key), filing.derived[s.key])
     issues += r.differences.length
     for (const d of r.differences) if (d.year === 'CY') offCy.add(d.concept)
     gaps.push(r.total)
-  })
+  }
   // a CY total already off in its statement is one problem, not two (Generate's own calculation check sees it too)
-  const rules = filingRuleErrors(kb, statements).filter((e) => !((e.type === 'CALCULATION_MISMATCH' || e.type === 'BS_OUT_OF_BALANCE') && offCy.has(e.concept))).length
+  const rules = filingRuleErrors(kb, LINE_SHEETS.map((s) => filing.lines[s.key])).filter((e) => !((e.type === 'CALCULATION_MISMATCH' || e.type === 'BS_OUT_OF_BALANCE') && offCy.has(e.concept))).length
   return { issues: issues + rules, rules, total: Dec.toString(Dec.sum(gaps.map((g) => Dec.parse(g)))) }
 }
 
@@ -70,14 +77,15 @@ export function applyChange(lines: readonly FixLine[], change: Pick<ProposedChan
  * that were compared before, stay compared. Only for untagging: a part retagged to another total leaves its old total
  * with no tagged part, which neither the live check nor Generate compares, so the dry run doesn't either.
  */
-function untagKeep(kb: IndasKnowledgeBase, filing: readonly FixLine[], changes: readonly ProposedChange[]): Keep {
+function untagKeep(kb: IndasKnowledgeBase, filing: readonly FixLine[], elrs: StatementElrs, changes: readonly ProposedChange[]): Keep {
   const untagged = changes.filter((c) => !c.concept).map((c) => filing.find((l) => l.id === c.rowId)).filter((l): l is FixLine => !!l?.concept)
   if (untagged.length === 0) return KEEP_NONE
+  const derived = derivedFiling(kb, filing, elrs).derived
   const out = new Map<string, Set<string>>()
   for (const s of LINE_SHEETS) {
     const lost = new Set(untagged.filter((l) => l.statement === s.key).map((l) => l.concept))
     if (lost.size === 0) continue
-    const before = checkedTotals(kb, statementLines(filing, s.key))
+    const before = checkedTotals(kb, statementLines(filing, s.key), derived[s.key])
     const parents = new Set<string>()
     for (const eqs of Object.values(kb.calculation ?? {})) for (const eq of eqs) if (lost.has(eq.to) && before.has(eq.from)) parents.add(eq.from)
     out.set(s.key, parents)
@@ -87,12 +95,13 @@ function untagKeep(kb: IndasKnowledgeBase, filing: readonly FixLine[], changes: 
 
 /**
  * Each proposed change on a known line, with its effect alone on the whole filing (`filing` = every line of every
- * statement) and whether Accept all keeps it; changes on lines the request didn't have are dropped.
+ * statement, `elrs` = each statement's ELRs for the derived totals) and whether Accept all keeps it; changes on lines
+ * the request didn't have are dropped.
  */
-export function dryRun(kb: IndasKnowledgeBase, filing: readonly FixLine[], proposed: readonly ProposedChange[]): FixChange[] {
-  const before = measure(kb, filing)
+export function dryRun(kb: IndasKnowledgeBase, filing: readonly FixLine[], proposed: readonly ProposedChange[], elrs: StatementElrs = {}): FixChange[] {
+  const before = measure(kb, filing, elrs)
   const known = proposed.filter((p) => filing.some((l) => l.id === p.rowId))
-  const alone = known.map((p) => measure(kb, applyChange(filing, p), untagKeep(kb, filing, [p])))
+  const alone = known.map((p) => measure(kb, applyChange(filing, p), elrs, untagKeep(kb, filing, elrs, [p])))
 
   // Accept all: the helpful changes in order, each kept only when it still helps on top of the ones kept before
   let state = filing
@@ -101,7 +110,7 @@ export function dryRun(kb: IndasKnowledgeBase, filing: readonly FixLine[], propo
   const together = known.map((p, i) => {
     if (!improves(before, alone[i])) return false
     const next = applyChange(state, p)
-    const s = measure(kb, next, untagKeep(kb, filing, [...kept, p]))
+    const s = measure(kb, next, elrs, untagKeep(kb, filing, elrs, [...kept, p]))
     if (!improves(score, s)) return false
     state = next
     score = s

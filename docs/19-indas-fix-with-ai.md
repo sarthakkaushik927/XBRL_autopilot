@@ -42,6 +42,32 @@ Vashu saw ~20 problems become ~50 after Fix with AI. Three causes, all fixed:
 2. **Accept all** applied every open card, amber ones included, and changes that help alone can undo each other together.
 3. The MCA checks list in Problems stayed from the last Generate until it was clicked again, so the count mixed old and new results.
 
+## Calculated totals (issue #20, point 5)
+After Auto-tag, some red elements in the XBRL Form are totals the sheet has no line for (DGPL has no "Total equity" line). Their parts are tagged, so the app sums them. The Difference check, the Form, Fix with AI's dry run and Generate all use the same sums.
+
+**The rules** (`indas-derived-totals.ts`, deterministic, no AI):
+- **What counts as a total:** only what the MCA taxonomy's **calculation linkbase** (KB `calculation`) defines, never "Total" in a name.
+- **Which ELRs:** only the calculation ELRs of the statement being tagged (its Form trees: BS 110000; P&L 210000 + 210000a; CF 310000 direct + 320000 indirect; the notes' ELRs). A total's parts differ between ELRs (OCI net of tax in 210000a vs before tax in 210000b; cash from operations direct vs indirect), so the app never takes the union.
+- **Several ELRs for one total:** when the statement has more than one, it takes the one with the most reported parts (the first on a tie).
+- **How it sums:** Σ weight × part, where the weights are ±1 (expenses and tax are −1). CY and PY are summed separately, in exact decimals.
+  - **Opening balances** are left out.
+  - **Units:** monetary parents and parts only. EPS, share counts and percentages are never summed.
+  - **Periods:** parts must have the same period type as the total.
+- **Levels:** bottom-up through every level. A derived total is a part of the next total up (share capital + other equity → equity attributable to owners → equity → equity and liabilities).
+- **A total a line reports is never derived.** The line's own amount is used and compared with its parts.
+- **Never stored:** a derived total isn't kept in the rows. It always follows its parts: retag or edit a part and it changes.
+
+**Where it shows:**
+- **XBRL Form:** the value, with a **Σ** chip. Its tooltip lists the parts and the ELR. The row is no longer red, and Empty mandatory → 0 skips it.
+- **Difference check:**
+  - a derived total counts as a part of the total above it, so that total can now be compared. The DGPL "Total equity and liabilities" is checked against derived equity + liabilities instead of liabilities alone;
+  - a derived total is not compared itself: it equals its parts by construction;
+  - the balance sheet balance uses derived Assets / Equity and liabilities too.
+- **Fix with AI:** the dry run derives the same totals (the request carries each statement's ELRs, which never go to the AI). So a fix that works through a derived total reads ✓.
+- **Generate XML:** main adds the derived totals to the statements it sends to `/generateXML`:
+  - not one that a line of any statement reports;
+  - a total two statements derive is filed once, from the first (balance sheet, P&L, cash flow, then notes).
+
 ## Limits of the free Groq tier
 Groq's free tier allows 8,000 tokens a minute per model. Fix all is therefore asked in parts:
 - CY and PY of one total are merged into one problem;
@@ -65,7 +91,7 @@ The DGPL details:
 ## Not done yet
 - The dry run does not port Generate's company / signatory / PPE gates (not about tags) or the statement-root check (it uses ELR codes); Generate still runs the backend's full validator.
 - MCA-check problems (after Generate XML) have no AI fix.
-- A total missing from the sheet can't be fixed by retagging. The Difference check doesn't derive intermediate totals.
+- A total derived in the notes that the balance sheet also derives with another amount is filed once (from the balance sheet); the notes' Form still shows its own sum.
 - gpt-oss-120b sometimes returns malformed tool calls; they are retried once.
 
 ## Code map
@@ -74,6 +100,7 @@ The DGPL details:
 | Route | `POST /api/v1/indas/fix` (`api/v1/routes/indas_router.py`, schema `FixRequest`) |
 | AI service | `src/services/indas_fix.py` (prompt, KB calculation, parts, guard rails) |
 | Dry run | `ui/electron/main/services/indas-fix-dry-run.ts` (+ `checkedTotals` in `indas-difference-check.ts`) |
+| Calculated totals | `ui/electron/main/services/indas-derived-totals.ts` (`deriveTotals`, `deriveFiling`); tests `ui/test/indas-derived-totals.test.ts` |
 | Main | `IndasPipelineService.proposeFix`, IPC `indas:fix` |
 | Renderer | `features/indas/fix.ts`, `stores/indas-fix.ts`, `features/indas/IndasFixMessages.tsx` (in `AiChatPanel`), buttons in `IndasProblemsPanel.tsx` |
 | Tests | `tests/test_indas_fix.py`, `ui/test/indas-fix.test.ts`, `ui/test/indas-fix.renderer.test.ts`, `ui/e2e/indas-fix-ai.mjs`, `ui/e2e/indas-fix-ai-live.mjs` |

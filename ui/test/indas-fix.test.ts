@@ -45,7 +45,7 @@ describe('Fix with AI: the request', () => {
   it('Difference problems carry what the AI needs; readiness and company problems do not', () => {
     const problems = problemsOf({
       readiness: [{ message: 'Add at least 2 signatory directors.', fix: 'masters' }],
-      checks: { balanceSheet: { differences: [{ year: 'CY', elr: '110000', concept: 'ind-as:CurrentAssets', label: 'Total current assets', reported: '190000', calculated: '68000', difference: '122000', children: [] }], total: '122000', facts: {}, byElr: {} } },
+      checks: { balanceSheet: { differences: [{ year: 'CY', elr: '110000', concept: 'ind-as:CurrentAssets', label: 'Total current assets', reported: '190000', calculated: '68000', difference: '122000', children: [] }], total: '122000', facts: {}, byElr: {}, derived: [] } },
       result: { ok: false, errors: [{ type: 'INVALID_DIN', message: 'DIN' }] },
       lines: { rows: ROWS, socie: [], ppe: [] },
     })
@@ -58,7 +58,7 @@ describe('Fix with AI: the request', () => {
     const req = fixRequestOf([PROBLEM], ROWS)
     expect(req.lines.map((l) => l.id)).toEqual(['balanceSheet:1', 'balanceSheet:2', 'balanceSheet:3', 'balanceSheet:4'])
     expect(req.lines[1]).toEqual({ id: 'balanceSheet:2', statement: 'balanceSheet', label: 'Trade receivables', headings: 'Assets > Current assets', cy: 122000, py: null, concept: 'ind-as:NoncurrentAssets', periodRole: 'end' })
-    expect(Object.keys(req)).toEqual(['problems', 'lines', 'filing'])
+    expect(Object.keys(req)).toEqual(['problems', 'lines', 'filing', 'elrs'])
     // the dry run gets every tagged line of the filing too (main only: never sent to the backend)
     expect(req.filing.map((l) => l.id)).toEqual(['balanceSheet:1', 'balanceSheet:2', 'balanceSheet:3', 'balanceSheet:4', 'profitLoss:5'])
     const many = Array.from({ length: FIX_MAX_LINES + 5 }, (_, i) => row(i, `l${i}`, '', 1))
@@ -107,6 +107,22 @@ describe('Fix with AI: dry run with the Difference check', () => {
     const [a, b, c] = dryRun(kb, lines(ROWS), [fix, fix, { ...fix, rowId: 'balanceSheet:1', concept: '' }])
     expect([a.effect.better, b.effect.better, c.effect.better]).toEqual([true, true, false])
     expect([a.effect.together, b.effect.together, c.effect.together]).toEqual([true, false, false])
+  })
+
+  it('derives the totals the lines imply as the live check does (issue #20, point 5): a fix through a derived total is better', () => {
+    // no "Total equity" line; "Other equity" is tagged as a current liability, so equity and liabilities is 300 off
+    const dgpl = [
+      row(1, 'Equity share capital', 'ind-as:EquityShareCapital', 100),
+      row(2, 'Other equity', 'ind-as:OtherCurrentLiabilities', 300),
+      row(3, 'Total liabilities', 'ind-as:Liabilities', 600),
+      row(4, 'Total equity and liabilities', 'ind-as:EquityAndLiabilities', 1000),
+    ]
+    const fix = { problemId: PROBLEM.id, rowId: 'balanceSheet:2', concept: 'ind-as:OtherEquity', conceptLabel: 'Other equity', reason: 'it is equity' }
+    // with the statement's ELRs: equity (derived) 400 + liabilities 600 = 1000, and liabilities' derived part is gone
+    const [c] = dryRun(kb, fixRequestOf([PROBLEM], dgpl, { balanceSheet: ['110000'] }).filing, [fix], { balanceSheet: ['110000'] })
+    expect(c.effect).toMatchObject({ before: 2, after: 0, better: true })
+    // without them (trees not loaded) equity has no reported value, so the same fix looks like it changes nothing
+    expect(dryRun(kb, lines(dgpl), [fix])[0].effect).toMatchObject({ before: 1, after: 1, better: false })
   })
 
   it('drops changes on lines the request did not have, and applies a period role', () => {

@@ -16,6 +16,7 @@ import {
   SOCIE_TABLE,
   TEXT_BLOCKS_SCOPE,
   type CheckResult,
+  type DerivedTotal,
   type FactValue,
   type FixProblem,
   type GenerateXmlResult,
@@ -235,19 +236,29 @@ export interface FormLine {
   value: FactValue | null
   /** the lines tagged with this concept (their rows), first one first */
   rows: string[]
-  /** red: mandatory and still empty; green: tagged */
+  /** red: mandatory and still empty; green: tagged or calculated */
   tone: 'ok' | 'bad' | null
+  /** no line reports it: its value is summed from its parts (issue #20, point 5); their labels */
+  derived: { parts: string[]; elr: string } | null
 }
 
-/** The ELR's tree with each concept's facts and the lines tagged with it. */
-export function formLines(tree: SheetTree, facts: Record<string, FactValue>, rows: readonly { id: string; concept: string }[]): FormLine[] {
+/** The ELR's tree with each concept's facts, the lines tagged with it, and the totals summed from their parts. */
+export function formLines(
+  tree: SheetTree,
+  facts: Record<string, FactValue>,
+  rows: readonly { id: string; concept: string }[],
+  derived: readonly DerivedTotal[] = [],
+): FormLine[] {
   const byConcept = new Map<string, string[]>()
   for (const r of rows) if (r.concept) byConcept.set(r.concept, [...(byConcept.get(r.concept) ?? []), r.id])
+  const calculated = new Map(derived.map((d) => [d.concept, d]))
+  const labelOf = (q: string) => tree.nodes.find((n) => n.qname === q)?.label ?? q.slice(q.indexOf(':') + 1)
   return tree.nodes.map((node) => {
     const tagged = byConcept.get(node.qname) ?? []
     const value = facts[node.qname] ?? null
     const tone = node.abstract ? null : tagged.length || value ? 'ok' : node.mandatory ? 'bad' : null
-    return { node, value, rows: tagged, tone }
+    const d = !node.abstract && !tagged.length ? calculated.get(node.qname) : undefined
+    return { node, value, rows: tagged, tone, derived: d ? { parts: d.parts.map(labelOf), elr: d.elr } : null }
   })
 }
 

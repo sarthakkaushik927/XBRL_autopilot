@@ -459,8 +459,8 @@ export interface XapApi {
     pickProject(): Promise<Result<ProjectPick | null>>
     /** a sheet's taxonomy tree(s) for the split view */
     tree(scope: string, kind?: 'concept' | 'member'): Promise<Result<SheetTree[]>>
-    /** the live Difference check of tagged lines */
-    check(rows: StatementLine[]): Promise<Result<CheckResult>>
+    /** the live Difference check of one statement's tagged lines; `elrs` = its ELR codes (the totals it implies are derived) */
+    check(rows: StatementLine[], elrs?: string[]): Promise<Result<CheckResult>>
     /** Fix with AI: proposed tag changes for totals that don't add up, each dry-run by the Difference check */
     fix(req: FixRequest): Promise<Result<FixProposal>>
     /** Stop: the running Fix with AI requests end with FIX_STOPPED */

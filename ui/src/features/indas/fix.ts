@@ -2,7 +2,7 @@
  * Fix with AI for the Ind AS Problems panel: what is sent and how a proposal's cards stand. Pure (no React, no IPC;
  * ui/test/indas-fix.test.ts). The AI only proposes; a change is applied when the user accepts its card.
  */
-import type { FixChange, FixLine, FixProblem, FixRequest } from '@shared/indas'
+import type { FixChange, FixLine, FixProblem, FixRequest, StatementElrs } from '@shared/indas'
 import type { TagRow } from './model'
 
 /** The backend's limits (api/v1/schemas/indas_schema.py FixRequest). */
@@ -12,9 +12,10 @@ export const FIX_MAX_LINES = 600
 /**
  * The request for some totals that don't add up: the problems and every line of their statements (tagged or not, so
  * the AI can see a line that should carry a tag). Line items, headings, amounts and tags only: the request has no
- * field for the company name, CIN or DINs.
+ * field for the company name, CIN or DINs. `elrs` (each statement's ELRs) lets the dry run derive the same totals as
+ * the live check.
  */
-export function fixRequestOf(problems: readonly FixProblem[], rows: readonly TagRow[]): FixRequest {
+export function fixRequestOf(problems: readonly FixProblem[], rows: readonly TagRow[], elrs: StatementElrs = {}): FixRequest {
   const chosen = problems.slice(0, FIX_MAX_PROBLEMS)
   const statements = new Set(chosen.map((p) => p.statement))
   const line = (r: TagRow): FixLine => ({ id: r.id, statement: r.statement, label: r.label, headings: r.breadcrumb, cy: r.cy, py: r.py, concept: r.concept, periodRole: r.periodRole })
@@ -22,7 +23,7 @@ export function fixRequestOf(problems: readonly FixProblem[], rows: readonly Tag
   // the dry run scores each change on the whole filing (main only: the backend gets `lines`)
   const sent = new Set(lines.map((l) => l.id))
   const filing = [...lines, ...rows.filter((r) => r.concept && !sent.has(r.id)).map(line)]
-  return { problems: chosen, lines, filing }
+  return { problems: chosen, lines, filing, elrs }
 }
 
 /** A card's state: waiting for the user, done, declined, or no longer applicable (the line changed since). */

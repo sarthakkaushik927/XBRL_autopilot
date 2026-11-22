@@ -5,6 +5,7 @@
 export interface KbConcept {
   name?: string
   type?: string
+  periodType?: string
   abstract?: boolean
   labels?: { label?: string }
 }

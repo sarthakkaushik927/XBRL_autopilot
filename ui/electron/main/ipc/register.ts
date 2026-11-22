@@ -9,7 +9,7 @@ import { PREVIEW_SPACINGS, type PreviewFormat } from '@xap/engine/basics'
 import type { ProjectController } from '../project/project-controller'
 import type { IndasController } from '../indas/indas-controller'
 import type { RecentFilingsService } from '../services/recent-filings-service'
-import { LINE_SHEETS, type FixLine, type FixRequest, type GenerateXmlInput, type IndasDetails, type IndasSaveRequest, type RecommendRequest, type StatementLine } from '@shared/indas'
+import { LINE_SHEETS, type FixLine, type FixRequest, type GenerateXmlInput, type IndasDetails, type IndasSaveRequest, type RecommendRequest, type StatementElrs, type StatementLine } from '@shared/indas'
 import type { SavedProjectsService } from '../services/saved-projects-service'
 import type { AutoTagService } from '../services/auto-tag-service'
 import type { ColumnPeriodService } from '../services/column-period-service'
@@ -382,9 +382,10 @@ function registerIndasIpc({ indas }: IpcDeps): void {
     if (!/^[A-Z_]{1,40}$/.test(s) || (kind !== undefined && kind !== 'concept' && kind !== 'member')) throw new Error('Invalid tree request')
     return indas.tree(s, (kind as 'concept' | 'member' | undefined) ?? 'concept')
   })
-  handleResult(IPC.indasCheck, (_e, rows: unknown) => {
+  handleResult(IPC.indasCheck, (_e, rows: unknown, elrs: unknown) => {
     if (!Array.isArray(rows) || rows.length > 5000) throw new Error('Invalid rows')
-    return indas.check(rows as StatementLine[])
+    if (elrs !== undefined && !isElrList(elrs)) throw new Error('Invalid ELR list')
+    return indas.check(rows as StatementLine[], (elrs as string[] | undefined) ?? [])
   })
   handleResult(IPC.indasFix, (_e, req: unknown) => indas.fix(requireFixRequest(req)))
   handleQuery(IPC.indasCancelFix, () => indas.cancelFix())
@@ -410,9 +411,20 @@ function requireFixRequest(v: unknown): FixRequest {
     r.lines.every(line) &&
     Array.isArray(r.filing) &&
     r.filing.length <= 5000 &&
-    r.filing.every(line)
+    r.filing.every(line) &&
+    (r.elrs === undefined || isStatementElrs(r.elrs))
   if (!ok) throw new Error('Invalid Fix with AI request')
   return r
+}
+
+/** A statement's ELR codes (its Form trees): the calculations its derived totals come from. */
+function isElrList(v: unknown): v is string[] {
+  return Array.isArray(v) && v.length <= 500 && v.every((e) => typeof e === 'string' && e.length <= 40)
+}
+
+/** ELR codes per statement key. */
+function isStatementElrs(v: unknown): v is StatementElrs {
+  return !!v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([k, list]) => LINE_SHEETS.some((s) => s.key === k) && isElrList(list))
 }
 
 function requireSaveRequest(v: unknown): IndasSaveRequest {
@@ -484,7 +496,8 @@ function requireGenerateInput(v: unknown): GenerateXmlInput {
     Array.isArray(i.statements.balanceSheet) &&
     Array.isArray(i.statements.profitLoss) &&
     Array.isArray(i.tables) &&
-    Array.isArray(i.notes)
+    Array.isArray(i.notes) &&
+    (i.elrs === undefined || isStatementElrs(i.elrs))
   if (!ok) throw new Error('Invalid filing data')
   return i
 }

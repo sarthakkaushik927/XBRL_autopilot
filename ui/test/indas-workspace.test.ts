@@ -158,6 +158,16 @@ describe('XBRL Form', () => {
     expect(emptyMandatory(lines).map((n) => n.qname)).toEqual(['ind-as:Goodwill'])
   })
 
+  it('a total summed from its parts is filled, not red, and carries its parts for the Σ mark (issue #20, point 5)', () => {
+    const derived = [{ concept: 'ind-as:Goodwill', cy: '417830', py: null, parts: ['ind-as:EquityShareCapital', 'ind-as:NotInTree'], elr: '110000' }]
+    const lines = formLines(bsTree, { ...facts, 'ind-as:Goodwill': { cy: '417830', py: null } }, taggedOf('balanceSheet', { rows, socie: [], ppe: [] }), derived)
+    const goodwill = lines.find((l) => l.node.qname === 'ind-as:Goodwill')!
+    expect(goodwill).toMatchObject({ tone: 'ok', rows: [], derived: { parts: [bsTree.nodes.find((n) => n.qname === 'ind-as:EquityShareCapital')!.label, 'NotInTree'], elr: '110000' } })
+    expect(emptyMandatory(lines)).toEqual([])
+    // a tagged concept is never marked derived
+    expect(lines.find((l) => l.node.qname === 'ind-as:EquityShareCapital')!.derived).toBeNull()
+  })
+
   it('the tables tag members: PPE lines show by member', () => {
     const ppe = ppeFromTransform(t).map((r) => ({ ...r, member: 'ind-as:BuildingsMember' }))
     expect(taggedOf('ppe', { rows, socie: [], ppe })).toEqual([{ id: 'ppe:0', concept: 'ind-as:BuildingsMember' }])
@@ -171,6 +181,7 @@ describe('Problems', () => {
       total: '199.9',
       facts: {},
       byElr: {},
+      derived: [],
     }
     const out = problemsOf({
       readiness: [{ message: 'Add at least 2 signatory directors.', fix: 'masters' }],
@@ -198,6 +209,7 @@ describe('Problems', () => {
       total: '2',
       facts: {},
       byElr: {},
+      derived: [],
     }
     const lines = {
       rows: [

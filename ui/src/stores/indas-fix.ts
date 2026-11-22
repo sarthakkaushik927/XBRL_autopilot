@@ -7,6 +7,7 @@
 import { create } from 'zustand'
 import { FIX_STOPPED, type FixProblem } from '@shared/indas'
 import { cardState, fixRequestOf, type FixCard } from '@/features/indas/fix'
+import { statementElrs } from '@/features/indas/model'
 import { unwrap } from '@/lib/result'
 import { useIndas } from './indas'
 import { toast } from './toast'
@@ -75,7 +76,7 @@ export const useIndasFix = create<IndasFixState>((set, get) => {
       set({ sessions: [...get().sessions, { id, projectId: indas.projectId, problems, status: 'asking', error: null, explanation: '', cards: [] }] })
       useUi.getState().showActivity('ai')
       let error: string | null = null
-      const proposal = await unwrap(window.xap.indas.fix(fixRequestOf(problems, indas.rows)), { quietWhen: (e) => ((error = e.message), true) })
+      const proposal = await unwrap(window.xap.indas.fix(fixRequestOf(problems, indas.rows, statementElrs(indas.trees))), { quietWhen: (e) => ((error = e.message), true) })
       if (get().sessions.find((s) => s.id === id)?.status !== 'asking') return // stopped (or removed) meanwhile
       if (error === FIX_STOPPED) return patchSession(id, () => ({ status: 'stopped' }))
       if (!proposal) return patchSession(id, () => ({ status: 'failed', error: error ?? 'The AI could not propose a fix.' }))

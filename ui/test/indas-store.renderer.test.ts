@@ -33,6 +33,7 @@ const bsTree: SheetTree = { elr: '110000', title: 'Balance sheet [Abstract]', no
 const ok = <T,>(value: T) => Promise.resolve({ ok: true as const, value })
 const saves: IndasSaveRequest[] = []
 const checks: unknown[][] = []
+const checkElrs: (string[] | undefined)[] = []
 const fake = {
   create: vi.fn((d: IndasDetails) => ok({ path: 'P:/Projects/Acme Pvt Ltd_FY 2025-26.axbrl', projectId: 'p-1', draft: { version: 2, details: d } })),
   open: vi.fn(),
@@ -40,10 +41,11 @@ const fake = {
   transform: vi.fn(() => ok(transform)),
   tree: vi.fn((scope: string) => ok(scope === 'CANONICAL_BS' ? [bsTree] : [])),
   masterFields: vi.fn(() => ok({ company: [{ qname: 'in-ca:NameOfCompany', label: 'Name', type: 'stringItemType' }, { qname: 'in-ca:PermanentAccountNumberOfEntity', label: 'PAN', type: 'stringItemType' }], auditor: [] })),
-  check: vi.fn((rows: { concept: string; cy: number | null }[]): Promise<{ ok: true; value: CheckResult }> => {
+  check: vi.fn((rows: { concept: string; cy: number | null }[], elrs?: string[]): Promise<{ ok: true; value: CheckResult }> => {
     checks.push(rows)
+    checkElrs.push(elrs)
     const facts = Object.fromEntries(rows.map((r) => [r.concept, { cy: String(r.cy), py: null }]))
-    return ok({ differences: [], total: '0', facts, byElr: {} })
+    return ok({ differences: [], total: '0', facts, byElr: {}, derived: [] })
   }),
   recommend: vi.fn(),
   onProgress: vi.fn(() => () => {}),
@@ -103,6 +105,13 @@ describe('Ind AS editor store', () => {
 
     await settle()
     expect(useIndas.getState().checks.balanceSheet?.facts['ind-as:EquityShareCapital']).toEqual({ cy: '100', py: null })
+    // each statement is checked with its trees' ELRs (the totals it implies are derived from them); none before they load
+    checkElrs.length = 0
+    await useIndas.getState().loadTree('CANONICAL_BS', 'concept')
+    useIndas.getState().runCheck()
+    await settle()
+    expect(checkElrs).toContainEqual(['110000'])
+    expect(checkElrs).toContainEqual([])
 
     useIndas.getState().fillMandatoryZeros()
     s = useIndas.getState()

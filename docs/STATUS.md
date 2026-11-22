@@ -54,6 +54,26 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-22, issue #20 points 5 and 6 (branch `fix/issue-20`, [19](19-indas-fix-with-ai.md#calculated-totals-issue-20-point-5), docs/17 log):**
+  - **5. Calculated totals:** a new Electron-free service, `ui/electron/main/services/indas-derived-totals.ts`.
+    - `deriveTotals(kb, lines, elrs)` sums a total no line reports from its tagged parts, bottom-up, by the KB calculation of the **statement's own ELRs** (from its Form trees, never the union):
+      - when a statement has several ELRs for one total, the one with the most reported parts;
+      - ±1 weights; CY and PY apart; monetary only, with the parts' period type equal to the total's; no opening balances.
+    - `deriveFiling` decides what Generate files: never a concept another statement reports, and once per filing (first statement wins).
+    - **Wiring:**
+      - `indas:check` takes the statement's ELRs; `CheckResult.derived`;
+      - `checkDifferences` uses derived totals as parts and doesn't compare them as totals;
+      - the dry run (`FixRequest.elrs`) and `IndasPipelineService.generate` (`GenerateXmlInput.elrs`) derive the same way: in main, from the lines actually sent, so a debounced check can't be stale;
+      - the renderer re-runs the check when a statement's tree loads; the XBRL Form shows a **Σ** chip whose tooltip lists the parts.
+    - **KB facts behind the design:**
+      - 37 calculation ELRs, weights ±1, no parent/child period mismatch;
+      - inside one statement only Cash Flow (310000 *direct* / 320000 *indirect*: 3 totals) and Notes (2 totals) define a total twice.
+  - **6. Pre-fill from CIN: not built.** MCA has no official API (MCA21 V3 master data is a page for people). The only official machine source is data.gov.in's monthly RoC master-data snapshot: it needs an API key and has no directors. Recorded for Vashu in docs/17.
+  - **Tests:**
+    - `indas-derived-totals.test.ts`: 9 tests (new) on the real KB: sign −1, multi-level, per-ELR child sets (OCI 210000a/b, direct/indirect cash flow), no derivation when the total is tagged, EPS never summed, opening balances out, DGPL-like balance sheet, `deriveFiling`;
+    - +1 dry run (a fix through a derived total is ✓ only with the ELRs), +1 pipeline (check + Generate payload), +1 Form, store (the check gets each statement's ELRs);
+    - totals: Ind AS UI tests all pass; the same 29 old failures (3 files reading the removed `sample_financials.xlsx`); `pnpm typecheck` green;
+    - e2e `ui/e2e/issue-20.mjs` +11 checks (section 5): untag "Total equity" → Equity derived 11,50,000 / 9,00,000 via equity attributable to owners, Difference still 0, Σ in the Form, not red, follows its parts, Generate saves the XML with the derived facts, tagged again → reported, not derived.
 - **2026-11-22, Vashu's issue #20 (branch `fix/issue-20`, [19](19-indas-fix-with-ai.md), docs/17 log):**
   - **1. Edited cells:** the Excel pane takes edits (`UniverGrid` `onEdit`, editable only when the caller takes them). `SheetValueChanged` redraws the highlight layers, which Univer dropped on every edit. `withCellEdits` (features/indas/workspace.ts) writes the value into the canonical sheet and reads every line / changes-in-equity / PPE row again, keeping tags, members, suggestions and opening/closing. The Form fact and the Difference check follow at once. The grid is not rebuilt (`workbook` keeps its identity).
   - **2. Auto-save:** it never ran for Ind AS (main's `AutosaveScheduler` only copies a C&I filing for recovery). Now `useIndasAutosave` (App) calls `indas.autosave()` every `autosaveSeconds`, which saves to the `.axbrl` without a toast. Default **5 minutes**, 1–60 min in Settings (minutes); an old stored 30 s means the default. Status bar: "Unsaved changes" / "Saved 10:42" / "Auto-saved 10:42". Edits made while saving stay unsaved.
@@ -62,7 +82,7 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
   - **7. Stop** (Vashu, chat): Stop on a running Fix with AI aborts the backend request in main (`AbortSignal` through `SidecarClient.request` → `sidecarCall` → `proposeFix`, IPC `indas:cancel-fix`); the session shows "Stopped". The general AI chat's Send turns into Stop while it waits (the late answer is dropped).
   - **Found on the way:** the dry run kept checking a total after its part was *moved* to another total (a guard meant for untagging), so a right fix read "4 → 2 problems" while Generate then found 0. The guard now applies to untagged parts only; the card reads "2 → 0".
   - **Tests:** ui `indas-filing-rules.test.ts` 7 (new), `indas-fix.test.ts` 14, `indas-fix.renderer.test.ts` 7, `indas-workspace.test.ts` +4 (`withCellEdits`), `settings-service.test.ts` +1: Ind AS + settings 107 pass; the same 29 old failures (files reading the removed `sample_financials.xlsx`). `pnpm typecheck` green. The TS rules port agrees with the backend validator on the synthetic filing (0 and 0). e2e in the dev app (mock LLM): `ui/e2e/issue-20.mjs` (new) 18 checks and `indas-fix-ai.mjs` 25 checks, ALL PASSED: edited PY reaches the line and the Form with the highlights kept, auto-save writes the file after 1 min ("Auto-saved 10:46 PM"), Generate 1 statement error → Accept → re-run by itself → 0, Stop shows "Stopped" and drops the late answer.
-  - **Not done yet:** 5 (auto-fill calculated totals from the calculation linkbase) and 6 (Pre-fill master data from CIN: first check for an official MCA API).
+  - **Not done yet (then):** 5 and 6, done / decided in the entry above.
 - **2026-11-22, Ind AS Fix with AI (branch `feat/indas-fix-with-ai`, [07](07-ai-fix-agent.md#ind-as-fix-with-ai-2026-11-22), docs/17 log):**
   - **Problems:** ✦ **Fix with AI** on every Difference row and **✦ Fix all with AI** at the top; readiness / company / DIN problems get none. The answer is a message in the left **AI chat** with one card per change (line → concept / opening balance / no tag, reason, dry-run effect), Accept / Reject each or Accept all. Accept goes through the Ind AS store, so the Difference check re-runs; a line retagged meanwhile makes its card stale.
   - **Backend** `POST /api/v1/indas/fix` (`src/services/indas_fix.py`): KB calculation around each problem, the statement's lines with amounts (Sarthak: amounts may go; identity data never), allowed concepts; structured output; guard rails (known line, allowed concept, real change, opening balance only on instants, never a part retagged as its own total unless the line says "Total …"); Fix all in parts within Groq's 8k tokens/min (CY+PY merged, per statement, long statements send only the lines around each problem), waits out rate limits within 240 s, retries a malformed answer once, names the parts that still failed.

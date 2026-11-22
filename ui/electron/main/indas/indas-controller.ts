@@ -118,8 +118,8 @@ export class IndasController {
     return this.service.tree(scope, kind)
   }
 
-  check(rows: StatementLine[]): Promise<CheckResult> {
-    return this.service.check(rows)
+  check(rows: StatementLine[], elrs: string[] = []): Promise<CheckResult> {
+    return this.service.check(rows, elrs)
   }
 
   /** Fix with AI; Stop in the AI chat aborts every running request (cancelFix) */

@@ -38,6 +38,7 @@ import {
   projectCompanyName,
   rowsFromTransform,
   socieFromTransform,
+  statementElrs,
   suggestionKey,
   toDraft,
   withoutKnown,
@@ -395,7 +396,10 @@ export const useIndas = create<IndasState>((set, get) => {
       const key = `${scope}:${kind}`
       if (get().trees[key]) return
       const trees = await unwrap(api().tree(scope, kind), { quiet: true })
-      if (trees) set({ trees: { ...get().trees, [key]: trees } })
+      if (!trees) return
+      set({ trees: { ...get().trees, [key]: trees } })
+      // a statement's ELRs arrived: its check runs again with the totals they imply (issue #20, point 5)
+      if (kind === 'concept' && LINE_SHEETS.some((s) => s.sheet === scope)) get().runCheck()
     },
 
     loadExplorer: async () => {
@@ -571,9 +575,10 @@ export const useIndas = create<IndasState>((set, get) => {
     runCheck: () => {
       clearTimeout(checkTimer)
       checkTimer = setTimeout(async () => {
-        const rows = get().rows
-        const results = await Promise.all(LINE_SHEETS.map((st) => unwrap(api().check(checkRows(rows, st.key)), { quiet: true })))
-        if (get().rows !== rows) return // changed meanwhile: the next run brings the fresh result
+        const { rows, trees } = get()
+        const elrs = statementElrs(trees)
+        const results = await Promise.all(LINE_SHEETS.map((st) => unwrap(api().check(checkRows(rows, st.key), elrs[st.key] ?? []), { quiet: true })))
+        if (get().rows !== rows || get().trees !== trees) return // changed meanwhile: the next run brings the fresh result
         set({ checks: Object.fromEntries(LINE_SHEETS.flatMap((st, i) => (results[i] ? [[st.key, results[i]]] : []))) })
       }, 300)
     },

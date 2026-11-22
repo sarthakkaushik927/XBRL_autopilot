@@ -3,6 +3,7 @@
 //  2. auto-save writes the project file by itself (Settings: every 1 minute here; 5 minutes by default);
 //  3. after accepting AI fixes the MCA checks run again by themselves (Problems refreshes without Generate);
 //  4. the dry run scores the whole filing: Generate's own checks agree with what the cards promised;
+//  5. a total no line reports is summed from its tagged parts (taxonomy calculation), marked Σ and filed;
 //  7. Stop on a running Fix with AI: nothing is changed, the late answer is not shown.
 // Usage (from the repo root), as ui/e2e/indas-fix-ai.mjs:
 //   terminal 1: GROQ_API_BASE=http://127.0.0.1:8766 uv run uvicorn api.app:app --host 127.0.0.1 --port 7861
@@ -99,6 +100,49 @@ await waitFor(`${S}.dirty === false`, 'auto-save', 90000).then(() => check(true,
 check(statSync(path).mtimeMs > before, 'the project file changed on disk')
 check(/^Auto-saved \d/.test((await ev(`${q('[data-testid="save-state"]')}?.textContent`)) ?? ''), 'the status bar says Auto-saved <time>', await ev(`${q('[data-testid="save-state"]')}?.textContent`))
 await ev(`window.xap.settings.update({ autosaveSeconds: 300 })`)
+
+// ---- 5. a total no line reports (DGPL: no "Total equity"): summed from its tagged parts by the taxonomy's
+// calculation, shown Σ in the Form, compared in the total above it, and filed by Generate
+const te = await ev(`${S}.rows.find(r => r.statement === 'balanceSheet' && r.concept === 'ind-as:Equity')`)
+await ev(`${S}.setConcept(${J(te.id)}, '')`)
+const eq = `${S}.checks.balanceSheet?.derived.find(d => d.concept === 'ind-as:Equity')`
+await waitFor(`!!${eq}`, 'Equity derived', 10000).then(() => check(true, 'Equity is derived once its line is untagged'), () => check(false, 'Equity is derived once its line is untagged'))
+check(J(await ev(`${S}.checks.balanceSheet?.facts['ind-as:Equity']`)) === J({ cy: '1150000', py: '900000' }), 'derived Equity = share capital + other equity, CY and PY', J(await ev(`${S}.checks.balanceSheet?.facts['ind-as:Equity']`)))
+check((await ev(`${eq}.parts`))?.[0] === 'ind-as:EquityAttributableToOwnersOfParent' && (await ev(`${S}.checks.balanceSheet.derived.some(d => d.concept === 'ind-as:EquityAttributableToOwnersOfParent')`)), 'multi-level: via the derived equity attributable to owners')
+check((await ev(`${S}.checks.balanceSheet.differences.length`)) === 0, 'Total equity and liabilities still adds up with the derived equity')
+await ev(`${S}.setActiveElr(${S}.elrs().find(e => e.code === '110000').uri), ${UI}.setRightTab('form'), true`)
+await waitFor(`!!${q('tr[data-concept="ind-as:Equity"] [data-testid="derived-chip"]')}`, 'Σ chip', 10000).then(() => check(true, 'the Form marks Equity Σ (calculated from its parts)'), () => check(false, 'the Form marks Equity Σ'))
+check((await ev(`${q('tr[data-concept="ind-as:Equity"] [data-testid="row-label"]')}?.dataset.tone`)) === 'ok', 'Equity is no longer red')
+await ev(`${q('tr[data-concept="ind-as:Equity"]')}.scrollIntoView({ block: 'center' }), true`)
+await sleep(500)
+await shot('i20-06-derived-total.png')
+// a part changes: the derived total follows (it is never stored)
+await ev(`${S}.setConcept(${J(te.id)}, '')`)
+const osc = await ev(`${S}.rows.find(r => r.statement === 'balanceSheet' && r.concept === 'ind-as:OtherEquity')`)
+await ev(`${S}.setConcept(${J(osc.id)}, '')`)
+await waitFor(`${eq}?.cy === '500000'`, 'derived follows', 10000).then(() => check(true, 'the derived total follows its parts (other equity untagged → 5,00,000)'), async () => check(false, 'the derived total follows its parts', J(await ev(eq))))
+await ev(`${S}.setConcept(${J(osc.id)}, 'ind-as:OtherEquity')`)
+await waitFor(`${eq}?.cy === '1150000'`, 'derived back', 10000)
+// the company / auditor / signatory details (as ui/e2e/indas-valid-xml.mjs), so Generate can save the XML
+await ev(`${S}.setMastersOpen(true)`)
+await waitFor(`${S}.fields !== null`, 'master fields', 60000)
+for (const [qn] of await ev(`${S}.fields.company.map(f => [f.qname])`)) {
+  const v = filing.company[qn.split(':')[1]]
+  if (v && !(await ev(`${S}.company[${J(qn)}]`))) await ev(`${S}.setCompany(${J(qn)}, ${J(v)})`)
+}
+for (const [qn, type] of await ev(`${S}.fields.auditor.map(f => [f.qname, f.type])`)) await ev(`${S}.setAuditor(${J(qn)}, ${J(/boolean/i.test(type) ? 'false' : 'Unmodified opinion.')})`)
+for (const [i, sg] of filing.signatories.entries()) await ev(`${S}.updateSignatory(${i}, ${J(sg)})`)
+await ev(`${S}.setMastersOpen(false)`)
+await ev(`${S}.generate()`)
+await waitFor(`${S}.busy === null && ${S}.result !== null`, 'generate with a derived total', 60000)
+const gen = await ev(`(() => { const r = ${S}.result; return r.ok ? { ok: true, equity: (r.xml.match(/<ind-as:Equity [^>]*>[^<]*</g) ?? []), owners: (r.xml.match(/<ind-as:EquityAttributableToOwnersOfParent [^>]*>[^<]*</g) ?? []) } : { ok: false, errors: r.errors.map(e => e.type + ' ' + (e.concept ?? '') + ' ' + e.message) } })()`)
+console.log('  Generate with Equity derived:', J(gen).slice(0, 600))
+check(gen.ok, 'Generate saves the XML with the derived totals (0 MCA problems)', gen.ok ? '' : gen.errors.join(' | '))
+check(!!gen.ok && gen.equity.some((f) => f.endsWith('>1150000<')) && gen.equity.some((f) => f.endsWith('>900000<')), 'the XML files the derived Equity (CY 11,50,000 and PY 9,00,000)', gen.ok ? gen.equity.join(' ') : '')
+check(!!gen.ok && gen.owners.length === 2, 'and the derived equity attributable to owners (both years)', gen.ok ? gen.owners.join(' ') : '')
+await ev(`${UI}.setRightTab('form'), true`)
+await ev(`${S}.setConcept(${J(te.id)}, 'ind-as:Equity')`)
+await waitFor(`!${eq}`, 'Equity reported again', 10000).then(() => check(true, 'tagged again: Equity is reported, not derived'), () => check(false, 'tagged again: Equity is reported, not derived'))
 
 // ---- 3 + 4. a wrong tag → Generate → Fix with AI → Accept → the MCA checks re-run by themselves and agree
 await ev(`${UI}.setBottomTab('problems'), true`)
