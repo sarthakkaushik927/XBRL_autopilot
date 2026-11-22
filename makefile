@@ -1,4 +1,12 @@
 
+# ============= Frontend ==================
+dev-frontend:
+	pnpm --filter ui dev
+
+start-frontend:
+	pnpm --filter ui preview
+
+
 # --- Launch Desktop Application ---
 app:
 	pnpm --filter ui dev
@@ -10,6 +18,12 @@ dev-backend:
 
 start-backend:
 	uv run uvicorn api.app:app --host 0.0.0.0 --port 7860
+
+docker-build:
+	docker build -t xbrl-autopilot-backend .
+
+docker-run:
+	docker run -p 7860:7860 --env-file .env xbrl-autopilot-backend
 
 test-backend:
 	uv run pytest $0

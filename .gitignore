@@ -54,3 +54,7 @@ data/validation_tool/*/sun.net.*
 # Claude Code personal settings
 .claude/settings.local.json
 /validation_tool
+
+
+initiate.sh
+linked.sh

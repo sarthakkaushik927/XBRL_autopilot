@@ -1,0 +1,52 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Virtual environments
+.venv
+venv
+ENV/
+env/
+
+# Python cache and temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+sidecar-dist/
+*.egg-info/
+
+# Frontend / Electron files not needed for FastAPI backend
+node_modules/
+ui/
+lagacy_js/
+package.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# Local data & environment secrets
+.env
+output/*
+!output/.gitkeep
+static/*
+!static/.gitkeep
+.cache/
+*.axbrl
+
+# Tests and notebooks
+tests/
+evals/
+notebooks/
+
+# Documentation
+docs/
+
+# Shell scripts & spec
+sidecar.spec
+initiate.sh
+linked.sh
