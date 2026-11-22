@@ -178,32 +178,6 @@ def test_member_tree_for_fixed_assets(kb):
     assert nodes["ind-as:BuildingsMember"]["depth"] < nodes["ind-as:FactoryBuildingMember"]["depth"]
 
 
-def test_difference_check_sums_tagged_children_exactly(kb):
-    from src.services import calc_check
-
-    rows = [
-        # Ind AS: cash rolls up into current financial assets, which (with inventories) make current assets
-        {"concept": "ind-as:CurrentAssets", "cy": "100.10", "py": 50},
-        {"concept": "ind-as:Inventories", "cy": "60.05", "py": 50},
-        {"concept": "ind-as:CurrentFinancialAssets", "cy": "40.05", "py": None},
-        {"concept": "ind-as:CashAndCashEquivalents", "cy": "40.04", "py": None},
-        {"concept": "ind-as:Assets", "cy": 300, "py": 50},
-        {"concept": "ind-as:EquityAndLiabilities", "cy": 290, "py": 50},
-    ]
-    res = calc_check.check(kb, rows)
-    by = {(d["year"], d["concept"], d["label"][:7]) for d in res["differences"]}
-    assert not any(c == "ind-as:CurrentAssets" for _, c, _ in by)  # 60.05 + 40.05 = 100.10 exactly
-    assert ("CY", "ind-as:Assets", "Balance") in by  # 300 vs 290
-    # 40.05 vs 40.04: within MCA's 1 INR tolerance, so not reported
-    assert not any(d["concept"] == "ind-as:CurrentFinancialAssets" for d in res["differences"])
-    # Assets 300 vs its only tagged child (current assets 100.10): the untagged 199.90 shows, plus the balance gap 10
-    assert any(d["concept"] == "ind-as:Assets" and d["difference"] == "199.90" for d in res["differences"])
-    assert res["total"] == "209.90"
-
-    assert all(d["year"] != "PY" or d["concept"] != "ind-as:Assets" for d in res["differences"] if d["label"].startswith("Balance"))
-
-
-
 def test_same_concept_lines_of_a_statement_are_added_like_webxbrl_add():
     from src.services.statement_lines import merge_lines
 

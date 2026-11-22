@@ -43,5 +43,14 @@ engine/authority/*.json
 /output/
 /static/
 
+# Notebooks: only .ipynb experiments are tracked (PR #15 review); scripts and generated outputs stay local
+notebooks/**/*.py
+notebooks/**/*.xml
+
+# MCA Validation Tool runtime files (it unpacks its taxonomies and leaves JVM stream dumps next to the exe)
+data/validation_tool/*/Taxonomies/
+data/validation_tool/*/sun.net.*
+
 # Claude Code personal settings
 .claude/settings.local.json
+/validation_tool

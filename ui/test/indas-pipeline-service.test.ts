@@ -154,18 +154,41 @@ describe('xmlFileName', () => {
 })
 
 describe('split view calls', () => {
-  it('asks for a sheet tree and runs the Difference check', async () => {
+  it('asks for a sheet tree; the Difference check and master fields come from /authority, fetched once', async () => {
     const tree = [{ elr: '110000', title: 'Balance sheet', nodes: [] }]
+    const kb = {
+      concepts: { 'ind-as:Assets': { labels: { label: 'Assets' } }, 'in-ca:NameOfCompany': { type: 'stringItemType', labels: { label: 'Name of company' } } },
+      calculation: { '110000': [{ from: 'ind-as:Assets', to: 'ind-as:NoncurrentAssets', weight: 1 }] },
+      businessRules: { mandatoryByELR: { '700300': ['in-ca:NameOfCompany'] } },
+    }
     const { sidecar, calls } = fakeSidecar({
       '/api/v1/indas/tree/CANONICAL_PPE_SCHEDULE?kind=member': () => ok(tree),
-      '/api/v1/indas/check': () => ok({ differences: [], total: '0' }),
+      '/api/v1/indas/authority': () => ok(kb),
     })
     const svc = new IndasPipelineService(sidecar, writer())
     expect(await svc.tree('CANONICAL_PPE_SCHEDULE', 'member')).toEqual(tree)
+    const rows = [
+      { concept: 'ind-as:Assets', cy: 10, py: null },
+      { concept: 'ind-as:NoncurrentAssets', cy: 7, py: null },
+    ]
+    expect(await svc.check(rows)).toMatchObject({ total: '3', differences: [{ concept: 'ind-as:Assets', label: 'Assets', reported: '10', calculated: '7' }] })
     expect(await svc.check([{ concept: 'ind-as:Assets', cy: 1, py: null }])).toEqual({ differences: [], total: '0' })
+    expect((await svc.masterFields()).company).toEqual([{ qname: 'in-ca:NameOfCompany', label: 'Name of company', type: 'stringItemType' }])
     expect(calls.map((c) => [c.method, c.path])).toEqual([
       ['GET', '/api/v1/indas/tree/CANONICAL_PPE_SCHEDULE?kind=member'],
-      ['POST', '/api/v1/indas/check'],
+      ['GET', '/api/v1/indas/authority'],
     ])
+  })
+
+  it('fetches the knowledge base again after a failed fetch', async () => {
+    let fail = true
+    const { sidecar, calls } = fakeSidecar({
+      '/api/v1/indas/authority': () => (fail ? { status: 500, data: { success: false, message: 'Knowledge Base file not found' } } : ok({})),
+    })
+    const svc = new IndasPipelineService(sidecar, writer())
+    await expect(svc.masterFields()).rejects.toThrow('Knowledge Base file not found')
+    fail = false
+    expect(await svc.masterFields()).toEqual({ company: [], auditor: [] })
+    expect(calls).toHaveLength(2)
   })
 })

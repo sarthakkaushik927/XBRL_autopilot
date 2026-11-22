@@ -15,11 +15,6 @@ class RecommendSchema(BaseModel):
     use_llm: bool = False
 
 
-class CheckSchema(BaseModel):
-    """Tagged lines for the live Difference check: [{concept, cy, py, periodRole?}]."""
-    rows: list[dict[str, Any]] = []
-
-
 class Meta(BaseModel):
     taxonomy: str = "ind_as"
     nature: Literal["Standalone", "Consolidated"] = "Standalone"

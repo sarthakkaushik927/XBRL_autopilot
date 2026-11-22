@@ -350,7 +350,7 @@ Unlike 1D statement rows, a Table Schedule is **Two-Dimensional**:
 
 ## 4. The 6 Standard Canonical Excel Files (Schemas & Concrete Samples)
 
-All canonical files reside in `notebooks/canonical_sheets/` (pure financials, zero XBRL tags):
+All canonical files reside in `data/canonical_sheets/` (copied from `notebooks/canonical_sheets/`, PR #15 review) (pure financials, zero XBRL tags):
 
 ### 4.1 `CANONICAL_BS.xlsx` (Balance Sheet)
 

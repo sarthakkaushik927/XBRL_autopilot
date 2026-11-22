@@ -7,12 +7,11 @@ from __future__ import annotations
 
 import json
 import sys
-from io import BytesIO
 from pathlib import Path
 
-from openpyxl import load_workbook
+from openpyxl import Workbook
 
-from src.transformation.template import CANONICAL_SCHEMA, build_standard_template
+from src.transformation.template import CANONICAL_SCHEMA
 
 HERE = Path(__file__).parent
 FILING = HERE / "filing.json"
@@ -34,9 +33,11 @@ def _cells(sheet: str, i: int, r: dict) -> dict[str, object]:
 
 def build_workbook(out: Path = DEFAULT_OUT) -> Path:
     filing = json.loads(FILING.read_text(encoding="utf-8"))
-    wb = load_workbook(BytesIO(build_standard_template()))
+    wb = Workbook()
+    wb.remove(wb.active)
     for sheet, cols in CANONICAL_SCHEMA.items():
-        ws = wb[sheet]
+        ws = wb.create_sheet(sheet)
+        ws.append(cols)
         for i, row in enumerate(filing["sheets"].get(sheet, []), start=1):
             cells = _cells(sheet, i, row)
             ws.append([cells.get(c) for c in cols])

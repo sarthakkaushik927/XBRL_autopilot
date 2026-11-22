@@ -11,7 +11,7 @@ from pathlib import Path
 block_cipher = None
 
 a = Analysis(
-    ['api/__main__.py'],
+    ['api/app.py'],
     pathex=['.'],
     binaries=[],
     datas=[],

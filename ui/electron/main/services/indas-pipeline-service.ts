@@ -1,6 +1,8 @@
 /**
  * IndasPipelineService: Vashu's Ind AS pipeline (docs/17) over the sidecar's /api/v1/indas/* routes.
- * Excel → canonical sheets (/transform) → tag suggestions (/recommend) → masters (/master-fields) → XML (/generateXML).
+ * Excel → canonical sheets (/transform) → tag suggestions (/recommend) → masters → XML (/generateXML).
+ * The master fields and the live Difference check are computed here from the knowledge base (/authority, read
+ * once per session), so editing a cell never calls the sidecar (PR #15 review).
  * Electron-free: the sidecar, the output folder and the writer come in as ports. The AI only proposes tags;
  * the renderer sends the tags the user accepted.
  */
@@ -19,6 +21,9 @@ import type {
 } from '@shared/indas'
 import { LINE_SHEETS } from '@shared/indas'
 import { sidecarCall } from '../infra/sidecar-call'
+import { checkDifferences } from './indas-difference-check'
+import type { IndasKnowledgeBase } from './indas-knowledge-base'
+import { masterFieldsOf } from './indas-master-fields'
 import type { OutputWriter } from './mca-tool-service'
 import type { SidecarClient, SidecarFileClient } from './ports'
 
@@ -40,6 +45,8 @@ interface RawMatch {
 }
 
 export class IndasPipelineService {
+  private kb: Promise<IndasKnowledgeBase> | null = null
+
   constructor(
     private readonly sidecar: SidecarClient & SidecarFileClient,
     private readonly output: OutputWriter,
@@ -101,13 +108,23 @@ export class IndasPipelineService {
     return sidecarCall<SheetTree[]>(this.sidecar, 'GET', `${BASE}/tree/${encodeURIComponent(scope)}?kind=${kind}`, { what: 'Taxonomy tree' })
   }
 
-  /** The live Difference bar: totals vs their tagged children, balance sheet balance (exact decimals). */
-  check(rows: StatementLine[]): Promise<CheckResult> {
-    return sidecarCall<CheckResult>(this.sidecar, 'POST', `${BASE}/check`, { body: { rows }, what: 'Difference check' })
+  /** The live Difference bar: totals vs their tagged children, balance sheet balance (exact decimals, no sidecar call). */
+  async check(rows: StatementLine[]): Promise<CheckResult> {
+    return checkDifferences(await this.knowledgeBase(), rows)
   }
 
-  masterFields(): Promise<MasterFields> {
-    return sidecarCall<MasterFields>(this.sidecar, 'GET', `${BASE}/master-fields`, { what: 'Master fields' })
+  /** The mandatory company and auditor fields for the masters form. */
+  async masterFields(): Promise<MasterFields> {
+    return masterFieldsOf(await this.knowledgeBase())
+  }
+
+  /** The Ind AS knowledge base, fetched once; a failed fetch is retried on the next call. */
+  private knowledgeBase(): Promise<IndasKnowledgeBase> {
+    this.kb ??= sidecarCall<IndasKnowledgeBase>(this.sidecar, 'GET', `${BASE}/authority`, { timeoutMs: SLOW_MS, what: 'Knowledge base' }).catch((e) => {
+      this.kb = null
+      throw e
+    })
+    return this.kb
   }
 
   /** Validates and generates the XML; on success it is written to the projects folder. */

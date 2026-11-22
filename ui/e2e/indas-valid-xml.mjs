@@ -73,7 +73,7 @@ for (const t of filing.texts) {
   await ev(`(() => { const s = ${S}; const last = s.texts[s.texts.length - 1]; s.updateTextBlock(last.id, ${J(t)}); return true })()`)
 }
 
-// the Difference bar (/indas/check) is clean on each statement
+// the Difference bar (computed in the app) is clean on each statement
 await ev(`${S}.setStep('tagging')`)
 for (const tab of ['balanceSheet', 'profitLoss', 'cashFlow', 'noteLines']) {
   await ev(`${S}.setTab('${tab}')`)

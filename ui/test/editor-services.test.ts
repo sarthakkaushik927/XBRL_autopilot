@@ -25,7 +25,7 @@ const BS = 'http://www.icai.org/xbrl/taxonomy/role/in-gaap/BalanceSheet'
 const authority = new FileAuthorityProvider(AUTHORITY)
 const REPO = resolve(__dirname, '../..')
 
-// The real FastAPI sidecar (uv run python -m api) serves the taxonomy routes: no fakes for the contract under test.
+// The real FastAPI sidecar (uv run python -m api.app) serves the taxonomy routes: no fakes for the contract under test.
 let sidecar: SidecarManager
 let catalog: SidecarTaxonomyCatalog
 beforeAll(async () => {

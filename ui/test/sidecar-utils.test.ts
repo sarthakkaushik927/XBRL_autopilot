@@ -27,7 +27,7 @@ describe('isAllowedSidecarPath', () => {
 describe('resolveSidecarLaunch', () => {
   it('uses uv from the repo root in dev', () => {
     const l = resolveSidecarLaunch({ isPackaged: false, repoRoot: 'R', resourcesPath: 'X', platform: 'win32' })
-    expect(l).toEqual({ command: 'uv', args: ['run', 'python', '-m', 'api'], cwd: 'R' })
+    expect(l).toEqual({ command: 'uv', args: ['run', 'python', '-m', 'api.app'], cwd: 'R' })
   })
   it('uses the bundled exe when packaged', () => {
     const l = resolveSidecarLaunch({ isPackaged: true, repoRoot: 'R', resourcesPath: 'X', platform: 'win32' })

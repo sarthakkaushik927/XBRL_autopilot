@@ -42,7 +42,7 @@ export function getFreePort(): Promise<number> {
 }
 
 /**
- * Dev: run the FastAPI app from the repo with uv (`uv run python -m api`).
+ * Dev: run the FastAPI app from the repo with uv (`uv run python -m api.app`).
  * Packaged: run the PyInstaller onedir executable shipped in resources/sidecar.
  */
 export function resolveSidecarLaunch(opts: {
@@ -56,7 +56,7 @@ export function resolveSidecarLaunch(opts: {
     const dir = join(opts.resourcesPath, 'sidecar')
     return { command: join(dir, exe), args: [], cwd: dir }
   }
-  return { command: 'uv', args: ['run', 'python', '-m', 'api'], cwd: opts.repoRoot }
+  return { command: 'uv', args: ['run', 'python', '-m', 'api.app'], cwd: opts.repoRoot }
 }
 
 export interface HealthPayload {

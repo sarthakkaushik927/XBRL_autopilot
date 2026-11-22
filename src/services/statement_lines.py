@@ -26,7 +26,7 @@ def _out(d: Decimal) -> int | float:
 def merge_lines(rows: list[dict[str, Any]], as_decimal: bool = False) -> list[dict[str, Any]]:
     """Same (concept, periodRole) within the list -> one row with summed cy / py, first row's position kept.
 
-    `as_decimal`: amounts stay Decimal (the Difference check); otherwise int when whole (the XML pipeline).
+    `as_decimal`: amounts stay Decimal; otherwise int when whole (the XML pipeline).
     """
     merged: dict[tuple[str, str], dict[str, Any]] = {}
     order: list[tuple[str, str]] = []

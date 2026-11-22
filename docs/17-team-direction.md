@@ -26,14 +26,15 @@ All under `/api/v1/indas/`:
 | `POST /generateXML` | Validates against `ind_as_knowledge_base.json` and writes the AOC-4 XML (contract: [doc 16-validation](16-validation-and-xml-generation-api-contract.md)). |
 | `GET /download/{id}/{file}` | Serves generated files. They are deleted after `DELETE_FILE_AFTER` (15 min). |
 | `GET /authority` | Ind AS knowledge-base JSON. |
-| `GET /template` | The standard template (README + six canonical sheets; columns from `indas.py`). Added 2026-11-21. |
-| `GET /master-fields` | Mandatory company (ELR 700300) and auditor (700400) fields with labels and types, from the KB. Added 2026-11-21. |
+| `GET /template` | The standard template: the canonical sheets in `data/canonical_sheets/` (the source of truth) served as one workbook, one sheet per file. |
+| `GET /tree/{scope}` | A sheet's presentation tree(s), or its table axis members (the split view's right pane). |
 
 **Changes made to Vashu's routes on `integrate/vashu-main` (2026-11-21), for him to review:**
 - `/transform` reads a filled standard template as-is (`summary.source = "standard_template"`), otherwise runs his extractor (`"heuristic"`). The response also has `sheets` (canonical rows as JSON), so the app doesn't read the xlsx back.
 - `/recommend` returns **one list per key, in key order**. Before, `top_k > 1` gave one flat list and you couldn't tell which key a match belonged to.
 - `load_object` loads pickles holding a `PosixPath` on Windows. `db/ind_as_taxonomy.pkl` is built on Linux and failed on Windows with "cannot instantiate 'PosixPath'", so `/recommend` could not run on a CA's PC.
-- Restored `api/__main__.py` + `src/core/parent_watch.py` (the desktop app starts the sidecar with `python -m api`) and the per-launch token middleware.
+- Restored `src/core/parent_watch.py` and the per-launch token middleware. The desktop app starts the sidecar with `python -m api.app` (`run()` in `api/app.py`, also the PyInstaller entry); `make dev-backend` keeps `uvicorn api.app:app`.
+- **PR #15 review (Vashu, 2026-11-21), done:** no `.py` files in `notebooks/` (now git-ignored); `/template` serves the existing canonical sheets instead of building one from a README; `/check` and `/master-fields` removed: the app computes the Difference bar and the master fields itself from `/authority` (fetched once per session, `IndasPipelineService`), so editing a cell never calls the sidecar; `api/__main__.py` removed.
 - **`/generateXML` XML fixes (2026-11-21), found by checking the XML with Arelle against the official Ind AS 2017 taxonomy in `data/`:**
   - The schemaRef and namespaces were invented (`http://www.mca.gov.in/ind-as/2016-03-31`), so no fact belonged to the real taxonomy. They now come from the KB: `meta.schemaRef` = `https://www.mca.gov.in/V3XBRL/2017/07/16/Taxonomy/Ind/in-ci-ent-2017-03-31.xsd` (the address in the MCA-accepted Dixon instance), and `meta.namespaces` = `http://www.icai.org/xbrl/taxonomy/2017-03-31/{in-ca,ind-as,…}`, read from each schema's `targetNamespace` (`src/services/extractors/ind_as.py`).
   - Every Ind AS hypercube has `xbrldt:contextElement="scenario"`. The generator wrote dimensions in `<xbrli:segment>`, so the director facts were dimensionally invalid. Dimensions now go where the KB says (`meta.dimensionContextElement`).
@@ -84,6 +85,7 @@ The work is saved as `<Company>_Ind AS_FY yyyy-yy.axbrl` in the projects folder:
 - [ ] **Index `elr` metadata** (his ingestion) — would let the hybrid search scope too; the KB-based scope works without it.
 
 ## Log
+- **2026-11-22** — Vashu (PR #15 review): notebooks hold only `.ipynb`; `data/canonical_sheets/` is the template's source of truth; no server round trip per cell edit (client-side checks; our plan keeps the TS engine for validation); no `/master-fields` (use `/authority`); no `api/__main__.py`. Done on `integrate/vashu-main`.
 - **2026-11-21** — Done: ELR-scoped suggestions with the AI pick, tagging of all six sheets + text blocks, cash flow / equity / notes in the generator, saving and reopening Ind AS projects. Line-item names may go to the AI (Sarthak).
 - **2026-11-21** — Done on `integrate/vashu-main`: Groq model switch on 429, standard template (`/indas/template`), the app's 4-step Ind AS screen over `/indas/*`, plus the fixes listed under §2.
 - **2026-11-21** — Vashu: make an `XBRL_Autopilot` folder in Program Files and save projects there; the start screen shows the saved projects and New filing. Done on `integrate/vashu-main`.

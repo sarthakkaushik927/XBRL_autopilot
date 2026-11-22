@@ -1,4 +1,4 @@
-"""Standard template (docs/17, input path 1): build it, fill it, and read it back through /indas/transform's pipeline."""
+"""Standard template (docs/17, input path 1): the canonical sheets as served, filled and read back through /indas/transform."""
 import asyncio
 import pathlib
 import pickle
@@ -7,10 +7,12 @@ from io import BytesIO
 from openpyxl import load_workbook
 
 from src.pipeline.indas_transformation import IndasTransformationPipeline
+import pytest
+
+from src.constants import CANONICAL_SHEETS_DIR
 from src.transformation.template import (
     CANONICAL_SCHEMA,
-    README_SHEET,
-    build_standard_template,
+    canonical_sheets_workbook,
     is_standard_template,
     read_standard_template,
 )
@@ -18,16 +20,36 @@ from src.utils.main_utils import load_object
 
 
 def _write_template(path: pathlib.Path) -> None:
-    path.write_bytes(build_standard_template())
+    """A blank template: the served headers, example rows removed."""
+    wb = load_workbook(BytesIO(canonical_sheets_workbook()))
+    for ws in wb.worksheets:
+        if ws.max_row > 1:
+            ws.delete_rows(2, ws.max_row)
+    wb.save(path)
 
 
-def test_template_has_readme_then_the_six_canonical_sheets_with_their_headers():
-    wb = load_workbook(BytesIO(build_standard_template()))
-    assert wb.sheetnames == [README_SHEET, *CANONICAL_SCHEMA]
+def test_template_serves_the_canonical_sheet_files_as_they_are():
+    wb = load_workbook(BytesIO(canonical_sheets_workbook()))
+    files = sorted(p.stem for p in CANONICAL_SHEETS_DIR.glob("*.xlsx"))
+    # the six sheets /transform reads first, then the other canonical sheets (e.g. CANONICAL_NOTES)
+    assert wb.sheetnames[: len(CANONICAL_SCHEMA)] == list(CANONICAL_SCHEMA)
+    assert sorted(wb.sheetnames) == files
+    for name in wb.sheetnames:
+        src = load_workbook(CANONICAL_SHEETS_DIR / f"{name}.xlsx").worksheets[0]
+        assert [list(r) for r in wb[name].iter_rows(values_only=True)] == [list(r) for r in src.iter_rows(values_only=True)]
     for name, cols in CANONICAL_SCHEMA.items():
-        header = [c.value for c in wb[name][1]][: len(cols)]
-        assert header == cols
-        assert wb[name].max_row == 1 or all(c.value is None for c in wb[name][2])
+        assert [c.value for c in wb[name][1]][: len(cols)] == cols
+
+
+def test_the_served_template_is_recognised_as_is(tmp_path):
+    f = tmp_path / "served.xlsx"
+    f.write_bytes(canonical_sheets_workbook())
+    assert is_standard_template(f)
+
+
+def test_a_missing_canonical_sheet_is_reported(tmp_path):
+    with pytest.raises(FileNotFoundError, match="CANONICAL_BS"):
+        canonical_sheets_workbook(tmp_path)
 
 
 def test_blank_template_is_recognised(tmp_path):
@@ -90,22 +112,3 @@ def test_pickles_with_a_foreign_os_path_load_here(tmp_path):
     f.write_bytes(data)
     obj = asyncio.run(load_object(f))
     assert pathlib.Path(obj["p"]).name == "x.pkl"
-
-
-def test_master_fields_come_from_the_mandatory_rules_and_skip_tables():
-    from src.services.master_fields import master_fields
-
-    kb = {
-        "concepts": {
-            "in-ca:NameOfCompany": {"name": "NameOfCompany", "type": "stringItemType", "labels": {"label": "Name of company"}},
-            "in-ca:DetailsRegardingAuditorsTable": {"name": "DetailsRegardingAuditorsTable", "abstract": True},
-            "in-ca:WhetherAuditorsReportHasBeenQualified": {"name": "W", "type": "booleanItemType", "labels": {}},
-        },
-        "businessRules": {"mandatoryByELR": {
-            "700300": ["in-ca:NameOfCompany", "in-ca:Unknown"],
-            "700400": ["in-ca:DetailsRegardingAuditorsTable", "in-ca:WhetherAuditorsReportHasBeenQualified"],
-        }},
-    }
-    out = master_fields(kb)
-    assert out["company"] == [{"qname": "in-ca:NameOfCompany", "label": "Name of company", "type": "stringItemType"}]
-    assert out["auditor"] == [{"qname": "in-ca:WhetherAuditorsReportHasBeenQualified", "label": "W", "type": "booleanItemType"}]
