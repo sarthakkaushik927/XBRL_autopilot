@@ -54,6 +54,10 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-23, App CI proposed (branch `ci/app-tests`, for Vashu):** `.github/workflows/app-ci.yml` runs `pnpm typecheck` and the UI unit tests on every push and PR. Until now no app test ran in CI: `ci.yml` covers the backend.
+  - **Kept apart from `ci.yml`:** the backend's tests, Docker image and deploy are untouched.
+  - **Not run:** the engine's own tests. They need `knowledge_base/*_engine_authority.json`, removed in `b97ccc1`; there 8 vitest files fail to load and 52 of 68 legacy tests fail (open item, docs/17).
+  - **`mapping-helpers.test.ts`:** the 3 tests that read the removed `data/sample_financials.xlsx` now skip while it is missing, like the other KB-based tests. UI: 210 pass, 145 skipped.
 - **2026-11-22, Ind AS Fix with AI (branch `feat/indas-fix-with-ai`, [07](07-ai-fix-agent.md#ind-as-fix-with-ai-2026-11-22), docs/17 log):**
   - **Problems:** ✦ **Fix with AI** on every Difference row and **✦ Fix all with AI** at the top; readiness / company / DIN problems get none. The answer is a message in the left **AI chat** with one card per change (line → concept / opening balance / no tag, reason, dry-run effect), Accept / Reject each or Accept all. Accept goes through the Ind AS store, so the Difference check re-runs; a line retagged meanwhile makes its card stale.
   - **Backend** `POST /api/v1/indas/fix` (`src/services/indas_fix.py`): KB calculation around each problem, the statement's lines with amounts (Sarthak: amounts may go; identity data never), allowed concepts; structured output; guard rails (known line, allowed concept, real change, opening balance only on instants, never a part retagged as its own total unless the line says "Total …"); Fix all in parts within Groq's 8k tokens/min (CY+PY merged, per statement, long statements send only the lines around each problem), waits out rate limits within 240 s, retries a malformed answer once, names the parts that still failed.

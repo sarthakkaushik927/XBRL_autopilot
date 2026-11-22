@@ -87,6 +87,7 @@ The work is saved as `<Company>_FY yyyy-yy.axbrl` in the projects folder (from N
 - [ ] **Index `elr` metadata** (his ingestion) — would let the hybrid search scope too; the KB-based scope works without it.
 
 ## Log
+- **2026-11-23** — Sarthak: propose an **App CI** (`app-ci.yml`: typecheck + UI unit tests on every push and PR) next to Vashu's backend `ci.yml`. **Vashu's call:** merge it or not, and whether the engine tests come back (their authority files were removed in `b97ccc1`) or retire.
 - **2026-11-22** — Sarthak: Fix with AI for the Ind AS Problems panel, as cards in the left AI chat, accepted one by one (plus Accept all); a Fix with AI button on each total that doesn't add up and Fix all. Amounts may go to the AI (see §3). Done on `feat/indas-fix-with-ai`.
 - **2026-11-22** — Vashu (chat): CI/CD deploys the backend; after the merge it is served at `http://13.127.205.133:7860` (http, not https). `make build-ui` bakes that URL into packaged builds (`XAP_API_URL`); local development uses `make dev-server` (`127.0.0.1:7860`).
 - **2026-11-22** — Vashu (PR #15 review + chat), done on `integrate/vashu-main` ([ADR-0018](decisions/ADR-0018-hosted-backend-and-responsive-editor.md)):
