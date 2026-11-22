@@ -66,7 +66,7 @@ import { IndasProjectService } from './services/indas-project-service'
 import { readIndas, writeIndas } from './project/indas-file'
 import { readManifest } from './project/axbrl'
 import { SettingsService } from './services/settings-service'
-import { SidecarManager } from './sidecar'
+import { BackendClient, backendUrl } from './infra/backend-client'
 import { findProjectArg, parseDotEnv, windowTitle } from './util/launch'
 import { hardenConsole } from './util/safe-console'
 
@@ -90,12 +90,13 @@ mkdirSync(userData, { recursive: true })
 const db = new AppDatabase(join(userData, 'app.db'))
 const devEnv = isDev && existsSync(join(repoRoot, '.env')) ? parseDotEnv(readFileSync(join(repoRoot, '.env'), 'utf8')) : {}
 const settings = new SettingsService(db, new SafeStorageSecretStore(join(userData, 'secrets.bin')), devEnv.GROQ_API_KEY || null)
-const sidecar = new SidecarManager({
-  isPackaged: app.isPackaged,
-  repoRoot,
-  resourcesPath: process.resourcesPath,
-  // Settings win over the dev .env (pydantic-settings gives env vars priority over .env).
-  extraEnv: async () => ({ GROQ_API_KEY: (await settings.groqKey()) ?? undefined, GROQ_MODEL: settings.get().groqModel }),
+// The Python backend is hosted separately (PR #15 review): the app never starts it, it connects to XAP_API_URL
+// (process environment, then the dev .env, then the value baked in at build time; `make dev-server` serves :7860).
+// The Groq key and model live in the backend's own environment.
+declare const __XAP_API_URL__: string
+const sidecar = new BackendClient({
+  baseUrl: backendUrl(process.env.XAP_API_URL, devEnv.XAP_API_URL, typeof __XAP_API_URL__ === 'string' ? __XAP_API_URL__ : undefined),
+  token: process.env.XAP_API_TOKEN || devEnv.XAP_API_TOKEN || null,
 })
 // Engine authority: the taxonomy half (ADR-0010) and the business rules (ADR-0011), both from the knowledge base
 // through the sidecar routes.
@@ -279,7 +280,7 @@ function wireEvents(): void {
   })
   settings.on('changed', (s) => mainWindow?.webContents.send(IPC.settingsChanged, s))
   settings.on('changed', pushAi)
-  settings.on('ai-config-changed', () => void sidecar.restart())
+  settings.on('ai-config-changed', () => void sidecar.reconnect())
   settings.on('changed', () => autosave.start()) // re-arm with a possibly new interval
   sidecar.on('status', (s) => {
     mainWindow?.webContents.send(IPC.sidecarStatusChanged, s)
@@ -362,14 +363,11 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   let quitting = false
-  app.on('before-quit', (e) => {
+  app.on('before-quit', () => {
     if (quitting) return
     quitting = true
-    e.preventDefault()
     autosave.stop()
-    void sidecar.stop().finally(() => {
-      db.close()
-      app.quit()
-    })
+    sidecar.stop()
+    db.close()
   })
 }

@@ -19,7 +19,7 @@ const api: XapApi = {
   sidecar: {
     status: () => invoke(IPC.sidecarStatus),
     logs: () => invoke(IPC.sidecarLogs),
-    restart: () => invoke(IPC.sidecarRestart),
+    reconnect: () => invoke(IPC.sidecarReconnect),
     request: (method, path, body) => invoke(IPC.sidecarRequest, method, path, body),
     onStatus: (cb) => subscribe<SidecarStatus>(IPC.sidecarStatusChanged, cb),
     onLog: (cb) => subscribe<SidecarLogLine>(IPC.sidecarLog, cb),

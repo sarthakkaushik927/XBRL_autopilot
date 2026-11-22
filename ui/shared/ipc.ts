@@ -79,11 +79,11 @@ import type { AiHistoryEntry, AiView } from './ai'
 export type IpcError = { kind: 'validation'; message: string; problems: string[] } | { kind: 'error'; message: string }
 export type Result<T> = { ok: true; value: T } | { ok: false; error: IpcError }
 
+/** The connection to the separately hosted backend (XAP_API_URL): 'starting' = first check still running. */
 export type SidecarStatus =
   | { state: 'starting' }
-  | { state: 'ready'; port: number; version: string; aiEnabled: boolean; model: string | null }
+  | { state: 'ready'; url: string; version: string; aiEnabled: boolean; model: string | null }
   | { state: 'error'; message: string }
-  | { state: 'stopped' }
 
 export interface SidecarLogLine {
   ts: number
@@ -131,7 +131,7 @@ export const IPC = {
   sidecarLog: 'sidecar:log',
   sidecarLogs: 'sidecar:logs',
   sidecarRequest: 'sidecar:request',
-  sidecarRestart: 'sidecar:restart',
+  sidecarReconnect: 'sidecar:reconnect',
   menuCommand: 'menu:command',
   projectCurrent: 'project:current',
   projectCreate: 'project:create',
@@ -253,7 +253,8 @@ export interface XapApi {
   sidecar: {
     status(): Promise<SidecarStatus>
     logs(): Promise<SidecarLogLine[]>
-    restart(): Promise<void>
+    /** checks the backend again at once (after starting it) */
+    reconnect(): Promise<void>
     request<T = unknown>(method: HttpMethod, path: string, body?: unknown): Promise<SidecarResponse<T>>
     onStatus(cb: (s: SidecarStatus) => void): () => void
     onLog(cb: (l: SidecarLogLine) => void): () => void

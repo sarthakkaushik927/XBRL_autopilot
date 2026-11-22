@@ -33,7 +33,7 @@ import type { ValidationService } from '../services/validation-service'
 import type { FixAgentService } from '../services/fix-agent-service'
 import type { ProjectService } from '../services/project-service'
 import type { SettingsService } from '../services/settings-service'
-import type { SidecarManager } from '../sidecar'
+import type { BackendClient } from '../infra/backend-client'
 import { capWorkbook } from '../infra/workbook-parser'
 import { handleQuery, handleResult, requireString } from './handle'
 import { requireNoteCheckInput, requireNoteHtml, requireSaveNoteInput } from './notes-input'
@@ -42,7 +42,7 @@ import { requireAlsoInput, requireBlockInput, requireCell, requireIndex, require
 
 export interface IpcDeps {
   appInfo: () => AppInfo
-  sidecar: SidecarManager
+  sidecar: BackendClient
   projects: ProjectService
   projectController: ProjectController
   savedProjects: SavedProjectsService
@@ -98,7 +98,7 @@ function registerSidecarIpc({ sidecar }: IpcDeps): void {
   const methods: HttpMethod[] = ['GET', 'POST', 'PUT', 'DELETE']
   handleQuery(IPC.sidecarStatus, () => sidecar.getStatus())
   handleQuery(IPC.sidecarLogs, () => sidecar.getLogs())
-  handleQuery(IPC.sidecarRestart, () => sidecar.restart())
+  handleQuery(IPC.sidecarReconnect, () => sidecar.reconnect())
   handleQuery(IPC.sidecarRequest, (_e, method: unknown, path: unknown, body: unknown) => {
     if (!methods.includes(method as HttpMethod) || typeof path !== 'string') throw new Error('Invalid sidecar request')
     return sidecar.request(method as HttpMethod, path, body)

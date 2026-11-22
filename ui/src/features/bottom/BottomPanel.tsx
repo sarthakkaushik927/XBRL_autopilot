@@ -56,10 +56,10 @@ export function BottomPanel() {
             {bottomTab === 'output' && (
               <button
                 className="flex items-center gap-1 px-3 text-muted hover:text-fg"
-                title="Restart AI engine"
-                onClick={() => void window.xap?.sidecar.restart()}
+                title="Check the backend again (start it with make dev-server, or set XAP_API_URL)"
+                onClick={() => void window.xap?.sidecar.reconnect()}
               >
-                <RotateCw size={12} /> Restart AI engine
+                <RotateCw size={12} /> Reconnect
               </button>
             )}
             <button

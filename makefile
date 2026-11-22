@@ -5,6 +5,11 @@ app:
 
 
 # ============= Backend ===================
+# The backend is hosted separately: the app connects to XAP_API_URL (default http://127.0.0.1:7860), it never starts it.
+# Local development: terminal 1 `make dev-server`, terminal 2 `pnpm dev` (or `make app`).
+dev-server:
+	uv run uvicorn api.app:app --host 127.0.0.1 --port 7860 --reload
+
 dev-backend:
 	uv run uvicorn api.app:app --host 0.0.0.0 --port 7860 --reload
 
@@ -36,7 +41,7 @@ build-ui:
 	@echo "==> Building Electron + React UI bundles..."
 	pnpm --filter ui build
 
-build-win: build-sidecar build-ui
+build-win: build-ui
 	@echo "==> Packaging Windows installer..."
 	pnpm --filter ui exec electron-builder --win
 	@mkdir -p dist
@@ -44,7 +49,7 @@ build-win: build-sidecar build-ui
 	@echo "==> Windows artifact ready in dist/:"
 	@ls -lh dist/*.exe
 
-build-linux: build-sidecar build-ui
+build-linux: build-ui
 	@echo "==> Packaging Linux AppImage & Debian package..."
 	pnpm --filter ui exec electron-builder --linux
 	@mkdir -p dist
@@ -53,7 +58,7 @@ build-linux: build-sidecar build-ui
 	@echo "==> Linux artifacts ready in dist/:"
 	@ls -lh dist/*.AppImage dist/*.deb
 
-build_app: build-sidecar build-ui
+build_app: build-ui
 	@echo "==> Packaging shareable applications for Windows and Linux..."
 	pnpm --filter ui exec electron-builder --win --linux
 	@mkdir -p dist

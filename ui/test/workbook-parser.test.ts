@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { capSheet, capWorkbook, sidecarXlsReader, workbookFormat, workbookParser } from '../electron/main/infra/workbook-parser'
 import { readXlsx, UnsupportedWorkbookError } from '../electron/main/infra/xlsx-reader'
 import type { SidecarClient } from '../electron/main/services/ports'
-import { SidecarManager } from '../electron/main/sidecar'
+import { BackendClient, backendUrl } from '../electron/main/infra/backend-client'
 
 const REPO = resolve(__dirname, '../..')
 const DGPL = resolve(REPO, 'data/BS DGPL Mar-2026-V1.xls')
@@ -57,14 +57,14 @@ describe('capSheet and capWorkbook', () => {
 
 // The real FastAPI sidecar reads the DGPL .xls (python-calamine).
 describe.skipIf(!existsSync(DGPL))('workbookParser with the real sidecar', () => {
-  let sidecar: SidecarManager
+  let sidecar: BackendClient
   beforeAll(async () => {
-    sidecar = new SidecarManager({ isPackaged: false, repoRoot: REPO, resourcesPath: '' })
+    sidecar = new BackendClient({ baseUrl: backendUrl(process.env.XAP_API_URL) }) // make dev-server
     void sidecar.start()
     await sidecar.whenReady(170_000)
   }, 180_000)
   afterAll(async () => {
-    await sidecar?.stop()
+    sidecar?.stop()
   })
 
   it('reads .xls through the sidecar and .xlsx in process', async () => {

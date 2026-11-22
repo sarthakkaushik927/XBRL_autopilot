@@ -17,7 +17,7 @@ import { ProjectService } from '../electron/main/services/project-service'
 import { SourceService } from '../electron/main/services/source-service'
 import { StatementService } from '../electron/main/services/statement-service'
 import { TaxonomyService } from '../electron/main/services/taxonomy-service'
-import { SidecarManager } from '../electron/main/sidecar'
+import { BackendClient, backendUrl } from '../electron/main/infra/backend-client'
 
 const AUTHORITY = resolve(__dirname, '../../engine/authority/ci-2016.authority.json')
 const SAMPLE = resolve(__dirname, '../../data/sample_financials.xlsx')
@@ -26,16 +26,16 @@ const authority = new FileAuthorityProvider(AUTHORITY)
 const REPO = resolve(__dirname, '../..')
 
 // The real FastAPI sidecar (uv run python -m api.app) serves the taxonomy routes: no fakes for the contract under test.
-let sidecar: SidecarManager
+let sidecar: BackendClient
 let catalog: SidecarTaxonomyCatalog
 beforeAll(async () => {
-  sidecar = new SidecarManager({ isPackaged: false, repoRoot: REPO, resourcesPath: '' })
+  sidecar = new BackendClient({ baseUrl: backendUrl(process.env.XAP_API_URL) }) // make dev-server
   void sidecar.start()
   await sidecar.whenReady(170_000)
   catalog = new SidecarTaxonomyCatalog(sidecar)
 }, 180_000)
 afterAll(async () => {
-  await sidecar?.stop()
+  sidecar?.stop()
 })
 
 describe.skipIf(!existsSync(AUTHORITY))('editor services on the sample workbook', () => {

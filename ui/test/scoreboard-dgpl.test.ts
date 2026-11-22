@@ -26,7 +26,7 @@ import { SourceService } from '../electron/main/services/source-service'
 import { StatementService } from '../electron/main/services/statement-service'
 import { TableMappingService } from '../electron/main/services/table-mapping-service'
 import { TableSuggestionService } from '../electron/main/services/table-suggestion-service'
-import { SidecarManager } from '../electron/main/sidecar'
+import { BackendClient, backendUrl } from '../electron/main/infra/backend-client'
 import { scoreboardText, scoreFacts, type ScoredFact } from './helpers/fact-scoreboard'
 import { kbAuthorityService, kbReady } from './helpers/kb-authorities'
 
@@ -38,14 +38,14 @@ type Fact = ScoredFact & { key: string; origin?: string }
 type Issue = { severity: string; ruleId?: string; code?: string }
 
 describe.skipIf(!kbReady || !existsSync(DGPL) || !existsSync(DIXON))('scoreboard: the app pipeline on DGPL vs Dixon (LLM off)', () => {
-  let sidecar: SidecarManager
+  let sidecar: BackendClient
   beforeAll(async () => {
-    sidecar = new SidecarManager({ isPackaged: false, repoRoot: REPO, resourcesPath: '' })
+    sidecar = new BackendClient({ baseUrl: backendUrl(process.env.XAP_API_URL) }) // make dev-server
     void sidecar.start()
     await sidecar.whenReady(170_000)
   }, 180_000)
   afterAll(async () => {
-    await sidecar?.stop()
+    sidecar?.stop()
   })
 
   it('auto-tag → accept all → roll-ups → zeros, scored per origin', async () => {

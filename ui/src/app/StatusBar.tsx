@@ -12,13 +12,7 @@ export function StatusBar() {
   const dot =
     status.state === 'ready' ? 'bg-ok' : status.state === 'starting' ? 'bg-warn animate-pulse' : 'bg-err'
   const label =
-    status.state === 'ready'
-      ? `AI engine ready (v${status.version})`
-      : status.state === 'starting'
-        ? 'AI engine starting…'
-        : status.state === 'error'
-          ? 'AI engine error'
-          : 'AI engine stopped'
+    status.state === 'ready' ? `Backend connected (v${status.version})` : status.state === 'starting' ? 'Connecting to the backend…' : 'Backend not reachable'
   const ai =
     status.state === 'ready' ? (status.aiEnabled ? `Groq · ${status.model}` : 'AI off (no Groq key)') : null
 
@@ -46,7 +40,7 @@ export function StatusBar() {
       <div className="flex-1" />
       <span
         className="flex items-center gap-1.5"
-        title={status.state === 'error' ? status.message : undefined}
+        title={status.state === 'error' ? status.message : status.state === 'ready' ? status.url : undefined}
         data-testid="sidecar-status"
         data-state={status.state}
       >

@@ -15,8 +15,6 @@ extraResources:
   - from: ../knowledge_base
     to: knowledge_base
     filter: ['*.json']
-  - from: ../sidecar-dist/xap-sidecar
-    to: sidecar
 asar: true
 # Double-clicking a .axbrl project opens it in the app (ui/electron/main/index.ts → findProjectArg).
 fileAssociations:
