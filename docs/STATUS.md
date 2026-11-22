@@ -56,8 +56,8 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 ## Log
 - **2026-11-22, the installed app timed (branch `perf/packaged-timing`, [18](18-performance.md#the-installed-app-packaged-build-2026-11-22-perfpackaged-timing)):** `XAP_TEST_BUILD=1` builds a production bundle that keeps the e2e hooks, so `indas-perf.mjs` can drive `release/win-unpacked`.
   - **DGPL, packaged vs dev:** open a statement 9 vs 101 ms, click a line 18 vs 114 ms, switch sheet 48 vs 229 ms (longest 71 vs 387 ms), JS heap 49 vs 132 MB.
-  - **Decided from it:** drawing only the visible rows and the Univer memory check aren't needed now. The "750 MB" is the whole app; the JS data is under 50 MB.
-  - **Left:** Auto-tag (backend). The knowledge base disk cache needs an `ETag` on `/authority` (backend, ask first). CI perf runs with a 150 ms limit.
+  - **Decided from it (Sarthak):** drawing only the visible rows is a future improvement; the Univer memory check is skipped (the "750 MB" is the whole app; the JS data is under 50 MB).
+  - **Left:** Auto-tag (backend). The knowledge base disk cache: the `ETag` on `/authority` is Vashu's, the app side is `perf/kb-disk-cache`. CI perf runs with a 150 ms limit.
   - **Embeddings saved to disk and lighter models:** left to Vashu (Sarthak).
   - **Tests:** `pnpm typecheck` green; UI tests pass except the 3 pre-existing `mapping-helpers` failures.
 - **2026-11-22, Faster Auto-tag (branch `perf/autotag-parallel`, [18](18-performance.md#faster-auto-tag-parallel-batches-2026-11-22-perfautotag-parallel)):** Settings → Auto-tag → "Faster Auto-tag (3–4 batches at once)", **off by default** (`AppSettings.parallelAutoTag`; old settings read as off).

@@ -82,9 +82,10 @@ Re-ordered after the measurements above.
    - **Concept embeddings saved to disk, lighter models (ONNX / quantized): not ours. Left to Vashu** (Sarthak, 2026-11-22). For him: `rank_scope` already keeps the embeddings in memory (`_scope_matrix`, `lru_cache`), so only the first Auto-tag after a backend start pays for them (95 s for the notes, 26 s for the balance sheet).
 2. **Faster first open.**
    - **Compress responses:** done (gzip, `perf/backend-gzip`): the knowledge base download goes from 4.3 MB to 356 KB.
-   - **Keep the knowledge base on disk:** the app needs a way to know when the server's copy changed. `/health`'s `version` is fixed (`"0.1.0"`), so it can't tell. The server would have to send an `ETag` (a hash of the file) on `/authority` and answer `304 Not Modified` when it hasn't changed. That is a backend change: ask first.
+   - **Keep the knowledge base on disk:** the app needs a way to know when the server's copy changed. `/health`'s `version` is fixed (`"0.1.0"`), so it can't tell.
+     - **Server: Vashu's.** It would send an `ETag` (a hash of the file) on `/authority` and answer `304 Not Modified` when the app's copy is current.
+     - **App:** `perf/kb-disk-cache`. It keeps the knowledge base on disk only when the server sends an `ETag`; until then nothing changes.
 3. **Keep it fast.** Run `ui/e2e/indas-perf.mjs` on the packaged build in CI with a 150 ms limit per action. A change that makes any action slower then fails before it ships.
-4. **Not needed now** (measured above):
-   - **Drawing only the rows on screen** in long lists (XBRL Form, taxonomy tree, Problems): the longest action is 71 ms. Revisit if a bigger filing goes over 100 ms.
-   - **Univer memory:** no data kept that isn't needed (above).
-5. **Fewer round trips to the remote server** (a whole sheet per request, progress streamed back): Vashu's review first.
+4. **Future improvement: draw only the rows on screen** in long lists (XBRL Form, taxonomy tree up to 1,843 concepts, Problems). Not needed now: the longest action in the installed app is 71 ms. Take it up when a bigger filing goes over 100 ms, and keep "scroll to the fact" working.
+5. **Skipped: Univer memory.** Nothing to fix: the JS data, Univer's included, is under 50 MB; the rest is Chromium's own.
+6. **Fewer round trips to the remote server** (a whole sheet per request, progress streamed back): Vashu's review first.
