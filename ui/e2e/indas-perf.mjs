@@ -3,6 +3,8 @@
 // sheets and statements, double-click problems; each action is timed until the next painted frame (a freeze).
 // Usage: node e2e/indas-perf.mjs <port> <screenshotDir> <workbook.xls|xlsx> [maxMs=600, dev build] [savedProject.axbrl]
 // (with a saved, auto-tagged project the run skips New project and the ~3-minute Auto-tag)
+// XAP_PERF_AI=1: Auto-tag with the AI pick (the user's AI consent on); the backend then calls Groq (its .env key).
+// XAP_PERF_PARALLEL=1: Settings → Faster Auto-tag on (several batches at once); otherwise off, one at a time.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { newProject } from './indas-new-project.mjs'
@@ -34,7 +36,9 @@ await send('Page.reload')
 await sleep(2000)
 await waitFor(`!!window.__xap_test__?.indas && !!document.querySelector('[data-testid="activity-new-project"]')`, 'start screen', 120000)
 await waitFor(`window.xap.sidecar.status().then(s => s.state === 'ready')`, 'backend connected', 60000)
-await ev(`window.xap.settings.update({ aiConsent: false }).then(() => true)`)
+const ai = process.env.XAP_PERF_AI === '1'
+const parallel = process.env.XAP_PERF_PARALLEL === '1'
+await ev(`window.xap.settings.update({ aiConsent: ${ai}, parallelAutoTag: ${parallel} }).then(() => true)`)
 
 const project = process.argv[6]
 if (project) {
@@ -60,7 +64,9 @@ if (!project) {
   const t0 = Date.now()
   await ev(`document.querySelector('[data-testid="auto-tag"]').click(), true`)
   await waitFor(`${S}.busy === null`, 'auto-tag', 1800000)
-  console.log(`  auto-tag ${Math.round((Date.now() - t0) / 1000)} s, ${await ev(`${S}.rows.filter(r => r.concept).length`)} lines tagged`)
+  const tagged = await ev(`${S}.rows.filter(r => r.concept).length`)
+  const aiPicks = await ev(`${S}.rows.filter(r => r.concept && r.suggestions?.[0]?.pickedBy === 'ai').length`)
+  console.log(`  auto-tag ${Math.round((Date.now() - t0) / 1000)} s${ai ? ' (AI pick)' : ''}${parallel ? ' (Faster Auto-tag)' : ''}, ${tagged} lines tagged${ai ? `, ${aiPicks} by the AI` : ''}`)
   await ev(`${S}.save()`)
   console.log('  saved', await ev(`${S}.savedPath`), '(pass it as the 4th argument to skip the auto-tag)')
 }

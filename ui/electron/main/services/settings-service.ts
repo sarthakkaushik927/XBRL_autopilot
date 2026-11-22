@@ -16,6 +16,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mcaToolPath: '',
   autosaveSeconds: 300,
   aiConsent: false,
+  // Faster Auto-tag (docs/18): off until it has been tried on the hosted backend with AI on
+  parallelAutoTag: false,
 }
 
 const KEY = 'app.settings.v1'
@@ -104,5 +106,6 @@ function sanitize(p: Partial<AppSettings>): Partial<AppSettings> {
     out.autosaveSeconds = Math.min(AUTOSAVE_MAX_SECONDS, Math.max(AUTOSAVE_MIN_SECONDS, Math.round(p.autosaveSeconds)))
   }
   if (typeof p.aiConsent === 'boolean') out.aiConsent = p.aiConsent
+  if (typeof p.parallelAutoTag === 'boolean') out.parallelAutoTag = p.parallelAutoTag
   return out
 }
