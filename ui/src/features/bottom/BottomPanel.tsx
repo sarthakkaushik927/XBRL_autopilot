@@ -1,4 +1,4 @@
-import { RotateCw, Sparkles } from 'lucide-react'
+import { ChevronDown, RotateCw, Sparkles } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { useWorkspace } from '@/app/workspace'
 import { EmptyState } from '@/components/EmptyState'
@@ -35,7 +35,7 @@ function OutputLog() {
 }
 
 export function BottomPanel() {
-  const { bottomTab, setBottomTab } = useUi()
+  const { bottomTab, setBottomTab, toggleBottom } = useUi()
   const ws = useWorkspace()
   const indas = ws?.kind === 'indas'
   const ciErrors = useValidation((s) => s.view?.summary.errors ?? 0)
@@ -52,15 +52,26 @@ export function BottomPanel() {
           { id: 'output', label: 'Output' },
         ]}
         right={
-          bottomTab === 'output' ? (
+          <>
+            {bottomTab === 'output' && (
+              <button
+                className="flex items-center gap-1 px-3 text-muted hover:text-fg"
+                title="Restart AI engine"
+                onClick={() => void window.xap?.sidecar.restart()}
+              >
+                <RotateCw size={12} /> Restart AI engine
+              </button>
+            )}
             <button
-              className="flex items-center gap-1 px-3 text-muted hover:text-fg"
-              title="Restart AI engine"
-              onClick={() => void window.xap?.sidecar.restart()}
+              className="flex items-center px-2 text-muted hover:text-fg"
+              title="Hide the panel (Ctrl+J). Show it again from the status bar or View → Toggle Bottom Panel."
+              aria-label="Hide the bottom panel"
+              onClick={toggleBottom}
+              data-testid="bottom-hide"
             >
-              <RotateCw size={12} /> Restart AI engine
+              <ChevronDown size={14} />
             </button>
-          ) : null
+          </>
         }
       />
       <div className="min-h-0 flex-1">

@@ -17,10 +17,11 @@ The layout is IDE-like, built for accountants: dense, keyboard-friendly and calm
 │⚙ │                   ├──────────────────────────────────────────────────────────────────────────────┤
 │  │                   │ Bottom panel: [Problems (12)] [AI Agent] [Output]                             │
 ├──┴───────────────────┴──────────────────────────────────────────────────────────────────────────────┤
-│ Status: CIN U12345… │ C&I 2016 │ FY 25-26 │ ⛔ 3 ⚠ 9 │ Sidecar ● ready │ AI ● gpt-oss-120b │ Saved   │
+│ Status: CIN U12345… │ C&I 2016 │ FY 25-26 │ ⛔ 3 ⚠ 9 │ Sidecar ● ready │ AI ● gpt-oss-120b │ ▯ ▭     │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
-- **AB** is the activity bar.
+- **AB** is the activity bar; its first button is New project.
+- **Layout toggles** (VS Code style, right end of the status bar): ▯ shows / hides the side panel (Ctrl+B), ▭ the bottom panel (Ctrl+J). The bottom panel also has its own ⌄ hide button. Showing a bottom tab (Problems after Generate, the status-bar error count) opens the panel again. Which panels are shown is remembered across restarts (`localStorage`, `xap.layout`).
 - All splits are resizable (`react-resizable-panels`). Sizes are remembered in `ui-state.json`.
 
 ## Activity bar → side panels

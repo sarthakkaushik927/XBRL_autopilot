@@ -1,6 +1,7 @@
 import { cn } from '@/lib/cn'
 import { useSidecar } from '@/stores/sidecar'
 import { useUi } from '@/stores/ui'
+import { LayoutToggles } from './LayoutToggles'
 import { useWorkspace } from './workspace'
 
 export function StatusBar() {
@@ -54,6 +55,7 @@ export function StatusBar() {
       </span>
       {ai && <span>{ai}</span>}
       {app && <span>v{app.version}{app.isDev ? ' · dev' : ''}</span>}
+      <LayoutToggles className="-mr-1 border-l border-border pl-2" />
     </footer>
   )
 }
