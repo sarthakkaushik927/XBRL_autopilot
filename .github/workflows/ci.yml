@@ -1,0 +1,51 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GROQ_API_KEY: ${{ vars.GROQ_API_KEY }}
+      PYDANTIC_LOGFIRE_API_KEY: ${{ vars.PYDANTIC_LOGFIRE_API_KEY }}
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+      GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+      EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL }}
+      EMBEDDING_DIM: ${{ vars.EMBEDDING_DIM }}
+      QDRANT_API_KEY: ${{ vars.QDRANT_API_KEY }}
+      LANGFUSE_HOST: ${{ vars.LANGFUSE_HOST }}
+      QDRANT_CLUSTER_ENDPOINT: ${{ vars.QDRANT_CLUSTER_ENDPOINT }}
+      XAP_PORT: ${{ vars.XAP_PORT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run tests
+        run: uv run pytest -v -n=8
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker login
+        run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+
+      - name: Build the Docker image
+        run: docker build -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest" .
+
+      - name: Push to Docker Hub
+        run: docker push "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
