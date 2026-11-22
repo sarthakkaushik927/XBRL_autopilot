@@ -14,13 +14,23 @@ export class SidecarAuthoritySource implements TaxonomyAuthoritySource {
     private readonly readyTimeoutMs = 120_000,
   ) {}
 
-  taxonomyAuthority(taxonomy: TaxonomyId): Promise<AuthorityJson> {
-    return sidecarCall<AuthorityJson>(this.sidecar, 'GET', `/api/v1/taxonomies/${KB_TAXONOMY_ID[taxonomy]}/authority`, {
-      readyTimeoutMs: this.readyTimeoutMs,
-      what: 'Taxonomy service',
-    })
+  async taxonomyAuthority(taxonomy: TaxonomyId): Promise<AuthorityJson> {
+    try {
+      return await sidecarCall<AuthorityJson>(this.sidecar, 'GET', `/api/v1/taxonomies/${KB_TAXONOMY_ID[taxonomy]}/authority`, {
+        readyTimeoutMs: this.readyTimeoutMs,
+        what: 'Taxonomy service',
+      })
+    } catch (err) {
+      // the route was removed with Vashu's pipeline (docs/17 §3): say what that means instead of "error (404)"
+      if (err instanceof SidecarCallError && err.status === 404) throw new Error(ENGINE_ROUTES_REMOVED)
+      throw err
+    }
   }
 }
+
+/** Shown when an engine (C&I editor) filing is opened but the sidecar no longer serves the engine's taxonomy routes. */
+export const ENGINE_ROUTES_REMOVED =
+  'This filing was made with the earlier editor, which needs the engine taxonomy routes (/taxonomies) that the Ind AS pipeline removed, so it cannot be opened in this version. For an Ind AS filing, use New project and open the financial statements.'
 
 /** A taxonomy without built rules (404, e.g. Costing) gets null, which means an empty rule model. */
 export class SidecarRuleBundleSource implements RuleBundleSource {
