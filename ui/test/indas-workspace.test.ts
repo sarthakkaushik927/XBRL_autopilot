@@ -19,6 +19,7 @@ import {
   rowIdAt,
   taggedOf,
   treeOf,
+  withCellEdits,
 } from '../src/features/indas/workspace'
 
 const t: TransformResult = {
@@ -251,5 +252,49 @@ describe('Preview', () => {
     expect(html).toContain('Policies &lt;b&gt;')
     expect(html).toContain('Line 1<br>Line 2')
     expect(html).not.toMatch(/<script/i)
+  })
+})
+
+describe('withCellEdits (issue #20, point 1: an edited cell reaches its tagged line)', () => {
+  // CANONICAL_BS columns: Row_Index, Line_Item, Breadcrumb_Hierarchy, Note_No, Current_Year_Amount (4), Previous_Year_Amount (5)
+  const work = () => {
+    const rows = rowsFromTransform(t).map((r) => (r.id === 'balanceSheet:0' ? { ...r, concept: 'ind-as:EquityShareCapital', periodRole: 'start' as const } : r))
+    const zero = { ...rows[0]!, id: 'zero:ind-as:Goodwill', concept: 'ind-as:Goodwill', cy: 0, py: 0 }
+    return { transform: t, rows: [...rows, zero], socie: socieFromTransform(t), ppe: ppeFromTransform(t) }
+  }
+
+  it('the PY amount follows the cell; the tag, period role and the other lines stay', () => {
+    const next = withCellEdits(work(), [{ sheet: 'CANONICAL_BS', row: 1, column: 5, value: 400000 }])!
+    const line = next.rows.find((r) => r.id === 'balanceSheet:0')!
+    expect(line).toMatchObject({ py: 400000, cy: 417830, concept: 'ind-as:EquityShareCapital', periodRole: 'start' })
+    expect(next.transform.sheets.CANONICAL_BS![0]!.Previous_Year_Amount).toBe(400000)
+    expect(next.rows.find((r) => r.id === 'zero:ind-as:Goodwill')).toBeDefined()
+    // the original transform is not mutated
+    expect(t.sheets.CANONICAL_BS![0]!.Previous_Year_Amount).toBe(390220)
+  })
+
+  it('typed text amounts are read like the workbook; a heading that gets an amount becomes a line', () => {
+    const next = withCellEdits(work(), [
+      { sheet: 'CANONICAL_BS', row: 3, column: 4, value: '1,500' },
+      { sheet: 'CANONICAL_BS', row: 2, column: 4, value: 7 },
+    ])!
+    expect(next.rows.find((r) => r.id === 'balanceSheet:2')!.cy).toBe(1500)
+    expect(next.rows.find((r) => r.id === 'balanceSheet:1')).toMatchObject({ label: 'Heading', cy: 7, concept: '' })
+  })
+
+  it('changes-in-equity and PPE rows follow their cells too', () => {
+    const next = withCellEdits({ ...work(), socie: socieFromTransform(t).map((r) => ({ ...r, member: 'ind-as:RetainedEarningsMember' })) }, [
+      { sheet: 'CANONICAL_SOCIE', row: 1, column: 4, value: 55 },
+      { sheet: 'CANONICAL_PPE_SCHEDULE', row: 1, column: 1, value: 120 },
+    ])!
+    expect(next.socie[0]).toMatchObject({ cy: 55, member: 'ind-as:RetainedEarningsMember' })
+    expect(next.ppe[0]!.amounts.Gross_Opening).toBe(120)
+  })
+
+  it('header-row edits, cells outside the rows and unchanged values change nothing', () => {
+    expect(withCellEdits(work(), [{ sheet: 'CANONICAL_BS', row: 0, column: 4, value: 'x' }])).toBeNull()
+    expect(withCellEdits(work(), [{ sheet: 'CANONICAL_BS', row: 9, column: 4, value: 1 }])).toBeNull()
+    expect(withCellEdits(work(), [{ sheet: 'CANONICAL_BS', row: 1, column: 4, value: 417830 }])).toBeNull()
+    expect(withCellEdits(work(), [{ sheet: 'NOPE', row: 1, column: 4, value: 1 }])).toBeNull()
   })
 })

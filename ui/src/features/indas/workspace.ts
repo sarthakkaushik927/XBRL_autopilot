@@ -28,7 +28,7 @@ import {
 } from '@shared/indas'
 import type { ElrInfo } from '@shared/project'
 import { columnLetter, type CellModel, type CellRef, type SheetModel, type WorkbookModel } from '@shared/workbook'
-import type { PpeRow, Readiness, SocieRow, TagRow, TextBlockRow } from './model'
+import { ppeFromTransform, rowsFromTransform, socieFromTransform, type PpeRow, type Readiness, type SocieRow, type TagRow, type TextBlockRow } from './model'
 
 /** The source id of the canonical workbook in the Excel pane. */
 export const CANONICAL_SOURCE = 'canonical'
@@ -51,6 +51,54 @@ export function sheetColumns(t: TransformResult, sheet: string): string[] {
   const cols: string[] = []
   for (const r of t.sheets[sheet] ?? []) for (const k of Object.keys(r)) if (!cols.includes(k)) cols.push(k)
   return cols
+}
+
+/** One edited cell of the canonical sheets (0-based row and column; row 0 is the header). */
+export interface SheetEdit {
+  sheet: string
+  row: number
+  column: number
+  value: string | number | boolean | null
+}
+
+type EditableWork = { transform: TransformResult; rows: TagRow[]; socie: SocieRow[]; ppe: PpeRow[] }
+
+/**
+ * The work after the user edited cells of the canonical sheets (issue #20, point 1): the sheet rows take the new
+ * values, and every line, changes-in-equity row and PPE row is read again from them, so its amounts and label follow
+ * the cell. What the user decided stays: tags, members, suggestions and opening / closing. A line that gets an amount
+ * appears (untagged); one that loses both amounts goes, as when the workbook is read. Header-row edits, cells outside
+ * the sheet's rows and columns, and unchanged values are ignored; null = nothing changed.
+ */
+export function withCellEdits(w: EditableWork, edits: readonly SheetEdit[]): EditableWork | null {
+  const sheets = { ...w.transform.sheets }
+  let changed = false
+  for (const e of edits) {
+    const rows = sheets[e.sheet]
+    const column = rows ? sheetColumns(w.transform, e.sheet)[e.column] : undefined
+    const index = e.row - 1
+    if (!rows || !column || index < 0 || index >= rows.length) continue
+    const value = typeof e.value === 'string' && e.value.trim() === '' ? null : e.value
+    if ((rows[index]![column] ?? null) === value) continue
+    if (rows === w.transform.sheets[e.sheet]) sheets[e.sheet] = [...rows]
+    sheets[e.sheet]![index] = { ...sheets[e.sheet]![index], [column]: value }
+    changed = true
+  }
+  if (!changed) return null
+  const transform = { ...w.transform, sheets }
+  const keep = <T extends { id: string }>(fresh: T[], old: readonly T[], read: (f: T) => Partial<T>): T[] => {
+    const byId = new Map(old.map((r) => [r.id, r]))
+    const freshIds = new Set(fresh.map((r) => r.id))
+    // rows that aren't sheet rows (e.g. mandatory amounts reported as 0) stay as they are
+    const extra = old.filter((r) => !parseRowId(r.id) && !freshIds.has(r.id))
+    return [...fresh.map((f) => (byId.has(f.id) ? { ...byId.get(f.id)!, ...read(f) } : f)), ...extra]
+  }
+  return {
+    transform,
+    rows: keep(rowsFromTransform(transform), w.rows, (f) => ({ label: f.label, breadcrumb: f.breadcrumb, note: f.note, cy: f.cy, py: f.py })),
+    socie: keep(socieFromTransform(transform), w.socie, (f) => ({ component: f.component, description: f.description, cy: f.cy, py: f.py })),
+    ppe: keep(ppeFromTransform(transform), w.ppe, (f) => ({ assetClass: f.assetClass, amounts: f.amounts })),
+  }
 }
 
 /** The canonical sheets as a read-only workbook for the Univer grid: a bold header row, then the rows as given. */

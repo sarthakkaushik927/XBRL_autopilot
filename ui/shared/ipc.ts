@@ -249,6 +249,7 @@ export const IPC = {
   indasCreate: 'indas:create',
   indasPickProject: 'indas:pick-project',
   indasFix: 'indas:fix',
+  indasCancelFix: 'indas:cancel-fix',
 } as const
 
 /** The API exposed on window.xap by the preload script. */
@@ -462,6 +463,8 @@ export interface XapApi {
     check(rows: StatementLine[]): Promise<Result<CheckResult>>
     /** Fix with AI: proposed tag changes for totals that don't add up, each dry-run by the Difference check */
     fix(req: FixRequest): Promise<Result<FixProposal>>
+    /** Stop: the running Fix with AI requests end with FIX_STOPPED */
+    cancelFix(): Promise<void>
     onProgress(cb: (p: { done: number; total: number }) => void): () => void
   }
 }

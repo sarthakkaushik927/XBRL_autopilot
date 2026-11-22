@@ -1,9 +1,9 @@
 /**
  * Fix with AI in the left AI chat: each request is a "you asked" message and the AI's answer with one card per
  * proposed tag change (line → concept / opening balance, the reason, and the app's own dry run of it). Accept applies
- * that change only; the Difference check re-runs at once. Thin: the work is in stores/indas-fix.ts.
+ * that change only; the Difference check re-runs at once and the MCA checks shortly after. Thin: the work is in stores/indas-fix.ts.
  */
-import { Check, CircleAlert, Loader2, Sparkles, X } from 'lucide-react'
+import { Check, CircleAlert, Loader2, Sparkles, Square, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { formatIndian } from '@xap/engine/basics'
 import { Button } from '@/components/ui/primitives'
@@ -36,9 +36,10 @@ export function useHasFixSessions(): boolean {
 }
 
 function Session({ session }: { session: FixSession }) {
-  const { acceptAll, dismiss } = useIndasFix(useShallow((s) => ({ acceptAll: s.acceptAll, dismiss: s.dismiss })))
+  const { acceptAll, dismiss, stop } = useIndasFix(useShallow((s) => ({ acceptAll: s.acceptAll, dismiss: s.dismiss, stop: s.stop })))
   const rows = useIndas((s) => s.rows)
-  const open = session.cards.filter((c) => cardState(c, rows.find((r) => r.id === c.rowId)) === 'open')
+  // Accept all takes only the changes that help together (the dry run's `together`); the others stay for the user
+  const open = session.cards.filter((c) => c.effect.together && cardState(c, rows.find((r) => r.id === c.rowId)) === 'open')
   return (
     // AI text carries long unbroken qnames: let them wrap instead of widening the chat
     <div className="min-w-0 space-y-2 [overflow-wrap:anywhere]" data-testid="fix-session" data-status={session.status}>
@@ -67,7 +68,16 @@ function Session({ session }: { session: FixSession }) {
         <div className="w-full rounded-lg border border-border bg-panel-2 px-3 py-2 text-xs">
           {session.status === 'asking' && (
             <div className="flex items-center gap-2 text-muted">
-              <Loader2 size={12} className="animate-spin text-accent" /> Checking the tags against the taxonomy's calculations…
+              <Loader2 size={12} className="shrink-0 animate-spin text-accent" />
+              <span className="flex-1">Checking the tags against the taxonomy's calculations…</span>
+              <Button variant="ghost" className="h-6 shrink-0 px-2 text-[11px]" onClick={() => stop(session.id)} title="Stop the AI: nothing is changed" data-testid="fix-stop">
+                <Square size={10} className="mr-1 fill-current" /> Stop
+              </Button>
+            </div>
+          )}
+          {session.status === 'stopped' && (
+            <div className="text-muted" data-testid="fix-stopped">
+              Stopped. Nothing was changed.
             </div>
           )}
           {session.status === 'failed' && (
@@ -88,8 +98,14 @@ function Session({ session }: { session: FixSession }) {
                     <Card key={c.id} sessionId={session.id} card={c} />
                   ))}
                   {open.length > 1 && (
-                    <Button variant="primary" className="h-6 w-full text-[11px]" onClick={() => acceptAll(session.id)} data-testid="fix-accept-all">
-                      <Check size={11} className="mr-1" /> Accept all ({open.length})
+                    <Button
+                      variant="primary"
+                      className="h-6 w-full text-[11px]"
+                      onClick={() => acceptAll(session.id)}
+                      title="Accepts the changes that help together (checked on the whole filing); the others stay for you to decide"
+                      data-testid="fix-accept-all"
+                    >
+                      <Check size={11} className="mr-1" /> Accept the {open.length} that help
                     </Button>
                   )}
                 </div>
@@ -139,9 +155,16 @@ function Card({ sessionId, card }: { sessionId: string; card: FixCard }) {
         </div>
       </div>
       <p className="mt-1 select-text text-[11px] leading-snug text-muted">{card.reason}</p>
-      <div className={cn('mt-1 text-[10px]', card.effect.better ? 'text-ok' : 'text-warn')} data-testid="fix-effect" data-better={card.effect.better}>
+      <div
+        className={cn('mt-1 text-[10px]', card.effect.better ? 'text-ok' : 'text-warn')}
+        data-testid="fix-effect"
+        data-better={card.effect.better}
+        data-together={card.effect.together}
+        title="The app's own check of this change on the whole filing: totals that don't add up + the rules Generate applies"
+      >
         {card.effect.better ? '✓ ' : '! '}
         {effectText(card.effect, formatIndian)}
+        {card.effect.better && !card.effect.together && ' · not with the other changes'}
       </div>
       {state === 'open' ? (
         <div className="mt-1.5 flex gap-1.5">

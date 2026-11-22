@@ -9,7 +9,7 @@ import { PREVIEW_SPACINGS, type PreviewFormat } from '@xap/engine/basics'
 import type { ProjectController } from '../project/project-controller'
 import type { IndasController } from '../indas/indas-controller'
 import type { RecentFilingsService } from '../services/recent-filings-service'
-import { LINE_SHEETS, type FixRequest, type GenerateXmlInput, type IndasDetails, type IndasSaveRequest, type RecommendRequest, type StatementLine } from '@shared/indas'
+import { LINE_SHEETS, type FixLine, type FixRequest, type GenerateXmlInput, type IndasDetails, type IndasSaveRequest, type RecommendRequest, type StatementLine } from '@shared/indas'
 import type { SavedProjectsService } from '../services/saved-projects-service'
 import type { AutoTagService } from '../services/auto-tag-service'
 import type { ColumnPeriodService } from '../services/column-period-service'
@@ -387,6 +387,7 @@ function registerIndasIpc({ indas }: IpcDeps): void {
     return indas.check(rows as StatementLine[])
   })
   handleResult(IPC.indasFix, (_e, req: unknown) => indas.fix(requireFixRequest(req)))
+  handleQuery(IPC.indasCancelFix, () => indas.cancelFix())
 }
 
 /** The shape of a Fix with AI request (sizes as the backend's FixRequest allows). */
@@ -395,6 +396,8 @@ function requireFixRequest(v: unknown): FixRequest {
   const str = (x: unknown, max: number) => typeof x === 'string' && x.length <= max
   const amount = (x: unknown) => x === null || (typeof x === 'number' && Number.isFinite(x))
   const statement = (x: unknown) => LINE_SHEETS.some((s) => s.key === x)
+  const line = (l: FixLine) =>
+    str(l?.id, 300) && statement(l.statement) && str(l.label, 500) && str(l.headings, 1000) && amount(l.cy) && amount(l.py) && str(l.concept, 300) && (l.periodRole === 'start' || l.periodRole === 'end')
   const ok =
     !!r &&
     Array.isArray(r.problems) &&
@@ -404,10 +407,10 @@ function requireFixRequest(v: unknown): FixRequest {
     Array.isArray(r.lines) &&
     r.lines.length >= 1 &&
     r.lines.length <= 600 &&
-    r.lines.every(
-      (l) =>
-        str(l?.id, 300) && statement(l.statement) && str(l.label, 500) && str(l.headings, 1000) && amount(l.cy) && amount(l.py) && str(l.concept, 300) && (l.periodRole === 'start' || l.periodRole === 'end'),
-    )
+    r.lines.every(line) &&
+    Array.isArray(r.filing) &&
+    r.filing.length <= 5000 &&
+    r.filing.every(line)
   if (!ok) throw new Error('Invalid Fix with AI request')
   return r
 }

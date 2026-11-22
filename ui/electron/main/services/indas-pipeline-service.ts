@@ -21,7 +21,7 @@ import type {
   StatementLine,
   TransformResult,
 } from '@shared/indas'
-import { LINE_SHEETS, RECOMMEND_CANCELLED } from '@shared/indas'
+import { FIX_STOPPED, LINE_SHEETS, RECOMMEND_CANCELLED } from '@shared/indas'
 import { sidecarCall } from '../infra/sidecar-call'
 import { checkDifferences } from './indas-difference-check'
 import { dryRun, type ProposedChange } from './indas-fix-dry-run'
@@ -120,21 +120,25 @@ export class IndasPipelineService {
 
   /**
    * Fix with AI (Problems panel): the backend's AI proposes tag changes for the totals that don't add up, and each
-   * one is dry-run here with the Difference check. Needs the user's AI consent (Settings): amounts go to the AI,
-   * never the company name, CIN or DINs (the request has no field for them). Nothing is applied here.
+   * one is dry-run here on the whole filing (`req.filing`; only `req.lines` go to the backend). Needs the user's AI
+   * consent (Settings): amounts go to the AI, never the company name, CIN or DINs (the request has no field for
+   * them). Nothing is applied here.
    */
-  async proposeFix(req: FixRequest): Promise<FixProposal> {
+  async proposeFix(req: FixRequest, signal?: AbortSignal): Promise<FixProposal> {
     if (!this.aiAllowed()) throw new Error('Fix with AI sends line items and amounts to the AI: allow AI in Settings first.')
     const sheetOf = new Map<string, string>(LINE_SHEETS.map((s) => [s.key, s.sheet]))
-    const [kb, answer] = await Promise.all([
-      this.knowledgeBase(),
-      sidecarCall<{ explanation: string; changes: ProposedChange[] }>(this.sidecar, 'POST', `${BASE}/fix`, {
-        body: { problems: req.problems, lines: req.lines.map((l) => ({ ...l, sheet: sheetOf.get(l.statement) ?? l.statement })) },
-        timeoutMs: SLOW_MS,
-        what: 'Fix with AI',
-      }),
-    ])
-    return { explanation: answer.explanation, changes: dryRun(kb, req.lines, answer.changes ?? []) }
+    const ask = sidecarCall<{ explanation: string; changes: ProposedChange[] }>(this.sidecar, 'POST', `${BASE}/fix`, {
+      body: { problems: req.problems, lines: req.lines.map((l) => ({ ...l, sheet: sheetOf.get(l.statement) ?? l.statement })) },
+      timeoutMs: SLOW_MS,
+      what: 'Fix with AI',
+      signal,
+    })
+    // Stop (the AI chat): the request is aborted and the answer, if any, is never used
+    const [kb, answer] = await Promise.all([this.knowledgeBase(), ask]).catch((e: unknown) => {
+      throw signal?.aborted ? new Error(FIX_STOPPED) : e
+    })
+    if (signal?.aborted) throw new Error(FIX_STOPPED)
+    return { explanation: answer.explanation, changes: dryRun(kb, req.filing?.length ? req.filing : req.lines, answer.changes ?? []) }
   }
 
   /** The mandatory company and auditor fields for the masters form. */

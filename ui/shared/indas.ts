@@ -142,6 +142,9 @@ export interface GenerateXmlInput {
   companyName: string
 }
 
+/** The error message of a Fix with AI request the user stopped (renderer and main agree on it). */
+export const FIX_STOPPED = 'Fix with AI was stopped.'
+
 /** The error message of a recommend call the user cancelled (renderer and main agree on it). */
 export const RECOMMEND_CANCELLED = 'Auto-tag was cancelled.'
 
@@ -277,7 +280,10 @@ export interface FixLine {
 
 export interface FixRequest {
   problems: FixProblem[]
+  /** the problems' statements: what the AI sees */
   lines: FixLine[]
+  /** every tagged line of every statement: the app's dry run scores each change on the whole filing (never sent to the AI) */
+  filing: FixLine[]
 }
 
 /** One proposed tag change: the line gets another concept ('' = no tag) and/or becomes an opening / closing balance. */
@@ -292,10 +298,12 @@ export interface FixChange {
   periodRole?: PeriodRole
   reason: string
   /**
-   * The app's own dry run of this change alone on its statement (the live Difference check): how many totals don't
-   * add up before and after, Σ |difference| before and after (decimal strings), and whether that is better.
+   * The app's own dry run of this change alone on the whole filing (the live Difference check of every statement +
+   * Generate's statement rules): how many problems before and after, Σ |difference| before and after (decimal
+   * strings), whether that is better, and whether it still helps together with the other helpful changes
+   * (`together`: what Accept all applies).
    */
-  effect: { before: number; after: number; totalBefore: string; totalAfter: string; better: boolean }
+  effect: { before: number; after: number; totalBefore: string; totalAfter: string; better: boolean; together: boolean }
 }
 
 export interface FixProposal {

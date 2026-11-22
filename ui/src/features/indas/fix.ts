@@ -17,11 +17,12 @@ export const FIX_MAX_LINES = 600
 export function fixRequestOf(problems: readonly FixProblem[], rows: readonly TagRow[]): FixRequest {
   const chosen = problems.slice(0, FIX_MAX_PROBLEMS)
   const statements = new Set(chosen.map((p) => p.statement))
-  const lines: FixLine[] = rows
-    .filter((r) => statements.has(r.statement))
-    .slice(0, FIX_MAX_LINES)
-    .map((r) => ({ id: r.id, statement: r.statement, label: r.label, headings: r.breadcrumb, cy: r.cy, py: r.py, concept: r.concept, periodRole: r.periodRole }))
-  return { problems: chosen, lines }
+  const line = (r: TagRow): FixLine => ({ id: r.id, statement: r.statement, label: r.label, headings: r.breadcrumb, cy: r.cy, py: r.py, concept: r.concept, periodRole: r.periodRole })
+  const lines = rows.filter((r) => statements.has(r.statement)).slice(0, FIX_MAX_LINES).map(line)
+  // the dry run scores each change on the whole filing (main only: the backend gets `lines`)
+  const sent = new Set(lines.map((l) => l.id))
+  const filing = [...lines, ...rows.filter((r) => r.concept && !sent.has(r.id)).map(line)]
+  return { problems: chosen, lines, filing }
 }
 
 /** A card's state: waiting for the user, done, declined, or no longer applicable (the line changed since). */
@@ -37,8 +38,8 @@ export function cardState(card: FixCard, row: Pick<TagRow, 'concept'> | undefine
   return row && row.concept === card.fromConcept ? 'open' : 'stale'
 }
 
-/** "2 → 1 totals don't add up" / "Σ difference 1,22,000 → 0" for a card. */
+/** "5 → 3 problems" / "…, difference 1,22,000 → 0" for a card (the whole filing: totals off + Generate's rules). */
 export function effectText(e: FixChange['effect'], format: (v: string) => string): string {
-  const issues = `${e.before} → ${e.after} total${e.after === 1 ? '' : 's'} off`
+  const issues = `${e.before} → ${e.after} problem${e.after === 1 ? '' : 's'}`
   return e.before === e.after ? `${issues}, difference ${format(e.totalBefore)} → ${format(e.totalAfter)}` : issues
 }

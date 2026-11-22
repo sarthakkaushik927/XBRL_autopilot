@@ -62,6 +62,8 @@ import {
   type IndasElr,
   type ProblemTarget,
   type RowKind,
+  type SheetEdit,
+  withCellEdits,
 } from '@/features/indas/workspace'
 import { unwrap } from '@/lib/result'
 import { toast } from './toast'
@@ -106,13 +108,17 @@ interface IndasState {
   mastersOpen: boolean
   projectId: string
   savedPath: string | null
+  /** when the project file was last written (ISO), and whether that was the auto-save */
+  savedAt: { at: string; auto: boolean } | null
   dirty: boolean
 
   /** New project: validated and saved in main; returns the problems to show in the dialog ([] = created) */
   create(details: IndasDetails): Promise<string[]>
   openSaved(path: string): Promise<void>
-  /** saves to the project's file; false when it failed */
-  save(): Promise<boolean>
+  /** saves to the project's file; false when it failed. `auto`: the timed auto-save (no toast) */
+  save(opts?: { auto?: boolean }): Promise<boolean>
+  /** the auto-save tick: saves when there are unsaved changes and nothing is running */
+  autosave(): Promise<void>
   /** saves unsaved work first; false when that failed (the filing stays open) */
   close(): Promise<boolean>
   /** Filing settings…: returns the problems ([] = applied) */
@@ -129,6 +135,8 @@ interface IndasState {
   revealRow(id: string, which?: 'label' | 'cy' | 'py'): void
   /** the Excel pane shows another sheet: the XBRL Form follows it (a statement of that sheet) */
   showSheet(sheet: string): void
+  /** cells edited in the Excel pane: the lines take the new amounts (tags kept) and the checks run again */
+  editCells(edits: SheetEdit[]): void
   /** double-click in Problems: the line's cell and fact, the concept in the Form, or the dialog that fixes it */
   goToProblem(target: ProblemTarget): void
 
@@ -162,6 +170,8 @@ interface IndasState {
   updateSignatory(index: number, patch: Partial<Signatory>): void
   removeSignatory(index: number): void
   generate(): Promise<void>
+  /** Generate's MCA checks again without blocking the editor (after accepted AI fixes); Problems shows the answer */
+  revalidate(): Promise<void>
 }
 
 const api = () => window.xap.indas
@@ -169,6 +179,9 @@ const blankSignatory = (): Signatory => ({ din: '', name: '', designation: 'Dire
 let textSeq = 0
 let seq = 0
 let checkTimer: ReturnType<typeof setTimeout> | undefined
+let savingAuto = false
+/** the parts of the state the project file holds (toDraft) */
+const SAVED_PARTS = ['rows', 'socie', 'ppe', 'texts', 'transform', 'company', 'auditor', 'signatories', 'details'] as const
 
 const closed = () => ({
   open: false,
@@ -194,6 +207,7 @@ const closed = () => ({
   mastersOpen: false,
   projectId: '',
   savedPath: null as string | null,
+  savedAt: null as { at: string; auto: boolean } | null,
   dirty: false,
 })
 
@@ -331,14 +345,28 @@ export const useIndas = create<IndasState>((set, get) => {
         toast.success(`Opened ${projectCompanyName(get())}`)
       }),
 
-    save: async () => {
+    save: async (opts) => {
       const s = get()
       if (!s.open || !s.details) return false
-      const saved = await unwrap(api().save({ projectId: s.projectId, path: s.savedPath, draft: toDraft({ ...s, details: s.details }), details: s.details }))
+      const saved = await unwrap(api().save({ projectId: s.projectId, path: s.savedPath, draft: toDraft({ ...s, details: s.details }), details: s.details }), { quiet: opts?.auto })
       if (!saved) return false
-      set({ savedPath: saved.path, dirty: false })
-      toast.success(`Saved ${saved.path}`)
+      // edits made while the file was being written stay unsaved
+      const now = get()
+      const unchanged = SAVED_PARTS.every((k) => now[k] === s[k])
+      set({ savedPath: saved.path, savedAt: { at: saved.savedAt, auto: !!opts?.auto }, dirty: unchanged ? false : now.dirty })
+      if (!opts?.auto) toast.success(`Saved ${saved.path}`)
       return true
+    },
+
+    autosave: async () => {
+      const s = get()
+      if (!s.open || !s.dirty || s.busy || savingAuto) return
+      savingAuto = true
+      try {
+        await get().save({ auto: true })
+      } finally {
+        savingAuto = false
+      }
     },
 
     close: async () => {
@@ -409,6 +437,16 @@ export const useIndas = create<IndasState>((set, get) => {
       const cell = cells?.[which] ?? cells?.label ?? null
       const kind = kindOfRow(get(), id)
       set({ selection: { id, field: kind === 'ppe' ? 'member' : 'concept' }, ...(cell ? { reveal: { cell, seq: ++seq } } : {}) })
+    },
+
+    editCells: (edits) => {
+      const { transform, rows, socie, ppe } = get()
+      if (!transform) return
+      const next = withCellEdits({ transform, rows, socie, ppe }, edits)
+      if (!next) return
+      // the grid already shows the new values: `workbook` keeps its identity, so the grid is not rebuilt
+      change(next)
+      get().runCheck()
     },
 
     showSheet: (sheet) => {
@@ -579,6 +617,18 @@ export const useIndas = create<IndasState>((set, get) => {
     addSignatory: () => change({ signatories: [...get().signatories, blankSignatory()] }),
     updateSignatory: (i, patch) => change({ signatories: get().signatories.map((s, j) => (j === i ? { ...s, ...patch } : s)) }),
     removeSignatory: (i) => change({ signatories: get().signatories.filter((_, j) => j !== i) }),
+
+    revalidate: async () => {
+      const s = get()
+      if (!s.open || !s.details || s.busy) return
+      const before = s.result && !s.result.ok ? s.result.errors.length : null
+      const result = await unwrap(api().generate(buildGenerateInput({ ...s, details: s.details })), { quiet: true })
+      if (!result || get().projectId !== s.projectId) return
+      set({ result })
+      const was = before === null ? '' : ` (was ${before})`
+      if (result.ok) toast.success(`MCA checks re-run: no problems${was}. XML saved: ${result.fileName}`)
+      else toast.info(`MCA checks re-run: ${result.errors.length} problem(s)${was}. See Problems.`)
+    },
 
     generate: () =>
       run('Validating and generating the XML…', async () => {
