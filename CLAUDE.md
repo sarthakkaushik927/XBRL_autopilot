@@ -23,21 +23,21 @@
 ## Commands
 ```bash
 pnpm install                         # JS deps (pnpm only, never npm/yarn)
-pnpm dev                             # Electron app in dev (also starts the Python sidecar via uv)
+make dev-server                      # terminal 1: the Python backend on :7860 (hosted separately in production, ADR-0018)
+pnpm dev                             # terminal 2: Electron app in dev; connects to XAP_API_URL (default http://127.0.0.1:7860)
 pnpm test                            # all JS tests (engine + ui)
 make engine-authority                # data/ → knowledge_base/*_engine_authority.json (Python; committed)
 make engine-rules                    # MCA rule workbooks → knowledge_base/*_engine_rules.json + coverage (Python; committed)
 pnpm --filter @xap/engine test       # engine tests only (vitest + ported legacy node:test suite; joins the KB files first)
 pnpm typecheck
 uv sync --extra dev                  # Python deps (dev extra: pytest, Arelle for the XSD tests)
-make dev                             # sidecar alone on :7860
 make test                            # pytest
 make rebuild                         # regenerate knowledge_base + Chroma index
 ```
 
 **Gotchas:**
 - **`ELECTRON_RUN_AS_NODE`:** when Claude launches Electron from inside VS Code, this variable is inherited and Electron runs as plain Node (`electron.app` is undefined). Launch with `env -u ELECTRON_RUN_AS_NODE pnpm dev`.
-- **First sidecar start:** it takes ~60 s while Python compiles bytecode; later starts take ~6 s. The health timeout is 120 s.
+- **Backend first start:** `make dev-server` takes ~60 s the first time while Python compiles bytecode; later starts take ~6 s. The app shows "Backend not reachable" until it answers (Reconnect in the Output tab checks at once).
 - **pnpm build scripts:** pnpm blocks dependency build scripts. Approved: `electron`. Denied: `electron-winstaller` (we use NSIS). See `pnpm-workspace.yaml`.
 
 ## Branching
@@ -54,7 +54,7 @@ make rebuild                         # regenerate knowledge_base + Chroma index
 2. **Deterministic core:** XML generation and validation live in `engine/` and are pure and deterministic. **AI only proposes**: suggestions and patch lists that the user accepts. The AI never writes facts directly.
 3. **Financial precision:** use the engine's decimal type for money. Never use JS floats for amounts.
 4. **Electron security:** `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. All privileged work goes through typed IPC in `ui/electron/preload`.
-5. **Sidecar is stateless:** the project state lives in Electron and `.axbrl`. The sidecar gets compact payloads per request.
+5. **Backend is stateless and hosted separately** ([ADR-0018](docs/decisions/ADR-0018-hosted-backend-and-responsive-editor.md)): the app never starts it; it connects to `XAP_API_URL`. The project state lives in Electron and `.axbrl`; the backend gets compact payloads per request.
 6. **Docs discipline:** after finishing a feature, update the matching doc in `docs/` and add a dated line to `docs/STATUS.md`. Record architecture changes as an ADR in `docs/decisions/`.
 7. **Clean code, SOLID, reusable:**
    - One responsibility per module.

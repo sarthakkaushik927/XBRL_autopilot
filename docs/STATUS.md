@@ -54,6 +54,27 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-22, Vashu's PR #15 review ([ADR-0018](decisions/ADR-0018-hosted-backend-and-responsive-editor.md), docs/17 log):**
+  - **Backend:** hosted separately (`BackendClient`, `XAP_API_URL`, `make dev-server`); the installer no longer bundles the sidecar.
+  - **Freeze fixed:** notes sheet 219 s → 0.64 s (`compactRanges`, overlay layers, `useShallow` selectors, memoised Form rows); the backend's `rank_scope` / rerank run in `asyncio.to_thread`.
+  - **New in the editor:**
+    - the busy overlay with overall Auto-tag progress, Cancel / Continue, `ProgressLine` and `Loading`;
+    - Auto-tag applies its tags (the Accept suggestions button is removed);
+    - Problems double-click → cell / Form / dialog;
+    - « / » side panel;
+    - the XBRL Form follows the Excel sheet.
+  - **Tests:**
+    - ui: 202 pass. The same 29 fail in the 3 files that read the removed `sample_financials.xlsx`. New: `backend-client` (9), `compact-ranges` (4), problem targets and auto-apply (+2).
+    - pytest: Ind AS 35 pass.
+    - e2e:
+      - `indas-valid-xml.mjs` 29/29 (0 MCA problems, Arelle 0);
+      - `indas-perf.mjs` (new): every action < 0.45 s;
+      - `indas-cancel.mjs` (new) 11/11: cancelled at 45/256, Continue asked for the 225 left;
+      - `indas-pipeline.mjs` on DGPL with the AI pick: all pass. 256/256 lines tagged without an Accept step, 56 AI picks, 173 s. Reopen restores 267/267. Generate lists 39 MCA problems for the unreviewed picks; double-click → BS!E22.
+  - **Groq:** a retired fallback model (404) is skipped like a rate-limited one. Before, a 429 then a 404 ended the chain and the batch lost its AI pick.
+  - **Not done:**
+    - the auditor-details table (700400: firm name, registration, partner) is not in the details form or the XML (open item §8 in docs/17);
+    - `masterFieldsOf` / `checkDifferences` key on ELR codes (`700300`, `700400`, `110000`), against the "never key on ELR codes" rule.
 - **2026-11-22, Ind AS in the webXBRL-style editor + New project ([ADR-0017](decisions/ADR-0017-indas-in-the-editor.md), [17](17-team-direction.md) §5):** the 4-step wizard (`IndasPipeline` and its steps) is gone. An Ind AS filing opens in the same Workbench as C&I:
   - Filing Explorer (ELRs of each canonical sheet's scope), Excel pane = the canonical sheets in Univer (row *i* ↔ grid row *i + 1*), XBRL Form (tree, values with cell chips, per-ELR Difference footer), XML / Preview, Problems / AI Agent / Output, status bar, menus (File: New Project, Open, Save, Close Project, Open Financial Statements, Save Standard Template; Filing: Filing Settings, Company & Auditor Details, Generate XML).
   - The shared panes read a `FilingWorkspace` adapter (`ui/src/app/workspace.ts`); `UniverGrid` is presentational (C&I connector `EditorGrid`); `XmlCode`, `DifferenceFooter`, `CellChip`, `useFormTree` shared.

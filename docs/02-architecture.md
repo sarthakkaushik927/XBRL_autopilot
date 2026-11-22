@@ -100,11 +100,10 @@ See [ADR-0001](decisions/ADR-0001-hybrid-engine.md).
 ## Processes and lifecycle
 - **App start:**
   1. Main starts.
-  2. The sidecar manager picks a free port and generates a random token.
-  3. It spawns the sidecar: `uv run uvicorn api.app:app` in dev, `resources/sidecar/xap-sidecar.exe` in prod. The port and token go in as env vars.
-  4. It polls `/health` (timeout 30 s) and pushes the status to the renderer.
-- **Crash:** the sidecar is restarted with backoff (max 3 tries). The UI keeps working without AI.
-- **Quit:** main sends SIGTERM to the sidecar, waits 2 s, then kills it.
+  2. **Since 2026-11-22 ([ADR-0018](decisions/ADR-0018-hosted-backend-and-responsive-editor.md)) the app no longer starts the backend.** Main's `BackendClient` connects to `XAP_API_URL`:
+     - **Locally:** `make dev-server` on `127.0.0.1:7860`.
+     - **Hosted:** `http://13.127.205.133:7860`, baked into packaged builds.
+     - **Health:** checked every 15 s (3 s while unreachable). A busy backend stays "connected"; only a refused connection marks it unreachable. The UI keeps working without it, and Reconnect checks at once.
 
 ## Directory conventions
 ```

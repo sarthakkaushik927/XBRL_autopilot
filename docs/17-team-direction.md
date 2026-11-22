@@ -86,6 +86,16 @@ The work is saved as `<Company>_FY yyyy-yy.axbrl` in the projects folder (from N
 - [ ] **Index `elr` metadata** (his ingestion) — would let the hybrid search scope too; the KB-based scope works without it.
 
 ## Log
+- **2026-11-22** — Vashu (chat): CI/CD deploys the backend; after the merge it is served at `http://13.127.205.133:7860` (http, not https). `make build-ui` bakes that URL into packaged builds (`XAP_API_URL`); local development uses `make dev-server` (`127.0.0.1:7860`).
+- **2026-11-22** — Vashu (PR #15 review + chat), done on `integrate/vashu-main` ([ADR-0018](decisions/ADR-0018-hosted-backend-and-responsive-editor.md)):
+  - **Hosted backend:** the app never starts or stops the Python backend. It connects to `XAP_API_URL`; local dev runs `make dev-server`, then `pnpm dev`.
+  - **No freezes:** the 219 s freeze on the notes sheet is fixed (grid overlay merged into rectangles, narrow store selectors). The backend ranks off its event loop.
+  - **Loading feedback:** a blocking progress overlay for Auto-tag / convert / Generate (step + bar over the whole run), a thin activity line for background calls, and spinners in panes that load.
+  - **No Accept step:** Auto-tag applies each untagged line's top suggestion; the "Accept suggestions" button is gone. This overrides CLAUDE.md non-negotiable 2 ("the user accepts") for Auto-tag. Every tag stays editable, and AI picks keep their ✦ mark.
+  - **Problems:** double-click goes to the line's cell in Excel and its fact in the Form; company / DIN problems open the details dialog; settings problems open Filing settings. MCA errors carry `concept` / `member` now (`ErrorDetail`).
+  - **Side panel:** « / » hide and show the side panel.
+  - **Cancel / Continue (Sarthak, chat):** the Auto-tag overlay has Cancel. It stops after the current batch, and the lines done keep their tags. The button then says "Continue auto-tag (N left)" and asks only for the rest.
+  - **Form follows the sheet:** switching sheets in Excel shows that sheet's statement or table, so one sheet's table no longer stays on screen for another.
 - **2026-11-22** — Sarthak: no old-architecture things in the app for now. The start screen and New project show Ind AS projects only. Filings saved by the earlier engine editor (e.g. DIXON, 11 Nov) are hidden from Recent / Saved; File → Open explains why they can't open. Import XBRL, Recover and the C&I choice are hidden. The code stays; it comes back if the engine editor is pointed at the new pipeline (open item §8).
 - **2026-11-22** — Sarthak: the Ind AS filing uses the webXBRL-style editor (Filing Explorer / Excel / XBRL Form / XML / Preview, Problems, status bar), not the 4-step wizard; one **New project** flow creates `<Company>_<FY>.axbrl`, and its settings prefill the masters. The left pane may show our parsed canonical sheets, since they are our own template. Done on `integrate/vashu-main` ([ADR-0017](decisions/ADR-0017-indas-in-the-editor.md)).
 - **2026-11-22** — Vashu (PR #15 review): notebooks hold only `.ipynb`; `data/canonical_sheets/` is the template's source of truth; no server round trip per cell edit (client-side checks; our plan keeps the TS engine for validation); no `/master-fields` (use `/authority`); no `api/__main__.py`. Done on `integrate/vashu-main`.
