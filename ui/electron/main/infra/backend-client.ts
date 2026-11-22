@@ -174,7 +174,9 @@ export class BackendClient extends EventEmitter {
       const next: SidecarStatus = { state: 'ready', url: this.opts.baseUrl, version: health.version, aiEnabled: Boolean(health.ai?.enabled), model: health.ai?.model ?? null }
       if (this.status.state !== 'ready') this.log('system', `Backend connected (v${health.version})`)
       if (!sameStatus(this.status, next)) this.setStatus(next)
-    } catch {
+    } catch (err) {
+      // a slow /health from a connected backend means it is busy (auto-tagging blocks its loop), not gone
+      if (this.status.state === 'ready' && !isConnectionError(err)) return
       this.setDown(this.unreachable())
     }
   }

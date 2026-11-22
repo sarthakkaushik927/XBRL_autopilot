@@ -35,11 +35,14 @@ build-sidecar:
 	@echo "==> Building Python sidecar bundle (PyInstaller)..."
 	uv run pyinstaller sidecar.spec --distpath sidecar-dist --workpath build/pyinstaller --noconfirm
 
+# The hosted backend a packaged app connects to (Vashu's CI/CD deploys it on merge); override with XAP_API_URL=...
+XAP_API_URL ?= http://13.127.205.133:7860
+
 build-ui:
 	@echo "==> Assembling deterministic engine authorities..."
 	node engine/scripts/assemble-authority.mjs
-	@echo "==> Building Electron + React UI bundles..."
-	pnpm --filter ui build
+	@echo "==> Building Electron + React UI bundles (backend: $(XAP_API_URL))..."
+	XAP_API_URL=$(XAP_API_URL) pnpm --filter ui build
 
 build-win: build-ui
 	@echo "==> Packaging Windows installer..."

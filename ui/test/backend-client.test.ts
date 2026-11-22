@@ -80,6 +80,18 @@ describe('BackendClient', () => {
     await expect(client.request('GET', '/docs')).rejects.toThrow(/not allowed/)
   })
 
+  it('stays connected when a busy backend answers /health too slowly', async () => {
+    let busy = false
+    const { client } = make(() => {
+      if (busy) throw Object.assign(new Error('timed out'), { name: 'TimeoutError' })
+      return json(health)
+    })
+    await client.start()
+    busy = true
+    await client.reconnect()
+    expect(client.getStatus().state).toBe('ready')
+  })
+
   it('marks the backend unreachable when a request is refused', async () => {
     let up = true
     const { client } = make(() => {
