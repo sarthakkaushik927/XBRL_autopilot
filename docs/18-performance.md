@@ -41,7 +41,7 @@ Ordered by expected gain. Points 1–3 come from numbers measured on 2026-11-22;
 3. **Measure the installed app.** All numbers above come from the dev build, which is several times slower. Time the packaged build to see what CAs actually feel; some items below may then be unnecessary.
 4. **Draw only what's on screen ("virtualize").** Long lists draw every row: the XBRL Form (notes statements), the taxonomy tree (up to 1,843 concepts) and Problems. Probably most of the remaining 0.64 s on the Notes sheet.
 5. **Faster first open.** The app downloads the whole knowledge base (`/authority`) on first open.
-   - **Compress responses:** switch on gzip on the server (`GZipMiddleware`, one line).
+   - ✅ **Compress responses (2026-11-22):** gzip on the server (`GZipMiddleware` in `api/app.py`, responses ≥ 1 KB, streamed chat left as is). `/indas/authority` goes from **4.3 MB to 356 KB** (12× smaller). The app's `fetch` asks for gzip and unpacks it by itself, so no app change was needed. Test: `tests/test_gzip.py`.
    - **Cache it on disk:** download again only when the server's version changes.
 6. **Fewer round trips to the remote server.** Send a whole sheet in one request and stream the progress back, instead of many small requests.
 7. **Keep it fast.** Run `ui/e2e/indas-perf.mjs` in CI, so a change that makes any action slower than its limit fails before it ships.
