@@ -55,8 +55,18 @@ import { SourceService } from './services/source-service'
 import { StatementService } from './services/statement-service'
 import { TaxonomyService } from './services/taxonomy-service'
 import { ProjectService } from './services/project-service'
+import { ProjectsFolder, projectsFolderCandidates } from './services/projects-folder'
+import { FsWritableDirProbe } from './infra/fs-writable-dir-probe'
+import { SavedProjectsService } from './services/saved-projects-service'
+import { RecentFilingsService } from './services/recent-filings-service'
+import { DirProjectLister } from './infra/dir-project-lister'
+import { IndasPipelineService } from './services/indas-pipeline-service'
+import { IndasController } from './indas/indas-controller'
+import { IndasProjectService } from './services/indas-project-service'
+import { readIndas, writeIndas } from './project/indas-file'
+import { readManifest } from './project/axbrl'
 import { SettingsService } from './services/settings-service'
-import { SidecarManager } from './sidecar'
+import { BackendClient, backendUrl } from './infra/backend-client'
 import { findProjectArg, parseDotEnv, windowTitle } from './util/launch'
 import { hardenConsole } from './util/safe-console'
 
@@ -80,12 +90,13 @@ mkdirSync(userData, { recursive: true })
 const db = new AppDatabase(join(userData, 'app.db'))
 const devEnv = isDev && existsSync(join(repoRoot, '.env')) ? parseDotEnv(readFileSync(join(repoRoot, '.env'), 'utf8')) : {}
 const settings = new SettingsService(db, new SafeStorageSecretStore(join(userData, 'secrets.bin')), devEnv.GROQ_API_KEY || null)
-const sidecar = new SidecarManager({
-  isPackaged: app.isPackaged,
-  repoRoot,
-  resourcesPath: process.resourcesPath,
-  // Settings win over the dev .env (pydantic-settings gives env vars priority over .env).
-  extraEnv: async () => ({ GROQ_API_KEY: (await settings.groqKey()) ?? undefined, GROQ_MODEL: settings.get().groqModel }),
+// The Python backend is hosted separately (PR #15 review): the app never starts it, it connects to XAP_API_URL
+// (process environment, then the dev .env, then the value baked in at build time; `make dev-server` serves :7860).
+// The Groq key and model live in the backend's own environment.
+declare const __XAP_API_URL__: string
+const sidecar = new BackendClient({
+  baseUrl: backendUrl(process.env.XAP_API_URL, devEnv.XAP_API_URL, typeof __XAP_API_URL__ === 'string' ? __XAP_API_URL__ : undefined),
+  token: process.env.XAP_API_TOKEN || devEnv.XAP_API_TOKEN || null,
 })
 // Engine authority: the taxonomy half (ADR-0010) and the business rules (ADR-0011), both from the knowledge base
 // through the sidecar routes.
@@ -96,7 +107,16 @@ const projects = new ProjectService({
   autosave: new DirAutosaveStore(join(userData, 'autosave')),
   appVersion: app.getVersion(),
 })
-const projectController = new ProjectController(projects, getWindow, new InstanceImportService(authorities, projects))
+// Default save / open folder: <Program Files>\XBRL_Autopilot\Projects (made writable by the installer), else Documents
+const projectsFolder = new ProjectsFolder(
+  projectsFolderCandidates({ programFiles: process.env.ProgramFiles, documents: app.getPath('documents'), userData }, join),
+  new FsWritableDirProbe(),
+)
+const savedProjects = new SavedProjectsService(() => projectsFolder.dir(), new DirProjectLister(), (kind) => kind === 'indas')
+const projectManifest = (p: string) => (existsSync(p) ? readManifest(p) : Promise.resolve(null))
+// the start screen shows the current architecture only (Sarthak, 2026-11-22): Ind AS projects
+const recentFilings = new RecentFilingsService(db, projectManifest)
+const projectController = new ProjectController(projects, getWindow, new InstanceImportService(authorities, projects), () => projectsFolder.dir())
 const autosave = new AutosaveScheduler(projects, () => settings.get().autosaveSeconds)
 
 // .xlsx in process (exceljs); old .xls through the sidecar's python-calamine route
@@ -132,6 +152,23 @@ const mcaTool = new McaToolService(
 // docs/14 Step 5: mandatory text / date / Yes-No items and Generate (only a clean filing is written)
 const mandatory = new MandatoryInputService(projects)
 const generate = new GenerateService(projects, new FileOutputWriter(join(userData, 'output')))
+// docs/17: Vashu's Ind AS pipeline (/indas routes); generated XML goes to the projects folder
+const indas = new IndasController(
+  new IndasPipelineService(
+    sidecar,
+    { write: (_p, name, text) => new FileOutputWriter(projectsFolder.dir()).write(null, name, text) },
+    () => settings.get().aiConsent,
+  ),
+  getWindow,
+  () => projectsFolder.dir(),
+  (done, total) => mainWindow?.webContents.send(IPC.indasProgress, { done, total }),
+  new IndasProjectService(
+    { write: writeIndas, read: readIndas, manifestOf: projectManifest },
+    () => projectsFolder.dir(),
+    app.getVersion(),
+  ),
+  recentFilings,
+)
 const preview = new PreviewService(projects, app.getVersion())
 const pdfExport = new PdfExportService(preview, new ElectronPdfRenderer(), (path, data) => writeFile(path, data))
 // docs/14 Step 9: the Masters panel (filing facts) and the master library (app.db, this machine only)
@@ -243,7 +280,7 @@ function wireEvents(): void {
   })
   settings.on('changed', (s) => mainWindow?.webContents.send(IPC.settingsChanged, s))
   settings.on('changed', pushAi)
-  settings.on('ai-config-changed', () => void sidecar.restart())
+  settings.on('ai-config-changed', () => void sidecar.reconnect())
   settings.on('changed', () => autosave.start()) // re-arm with a possibly new interval
   sidecar.on('status', (s) => {
     mainWindow?.webContents.send(IPC.sidecarStatusChanged, s)
@@ -283,6 +320,10 @@ if (!app.requestSingleInstanceLock()) {
       sidecar,
       projects,
       projectController,
+      savedProjects,
+      recentFilings,
+      indas,
+      openProjectsFolder: () => shell.openPath(projectsFolder.dir()).then(() => undefined),
       settings,
       sources,
       mapping,
@@ -322,14 +363,11 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   let quitting = false
-  app.on('before-quit', (e) => {
+  app.on('before-quit', () => {
     if (quitting) return
     quitting = true
-    e.preventDefault()
     autosave.stop()
-    void sidecar.stop().finally(() => {
-      db.close()
-      app.quit()
-    })
+    sidecar.stop()
+    db.close()
   })
 }

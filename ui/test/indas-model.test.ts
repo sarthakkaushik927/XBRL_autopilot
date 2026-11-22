@@ -1,0 +1,293 @@
+import { describe, expect, it } from 'vitest'
+import type { ConceptSuggestion, IndasDetails, MasterField, TransformResult } from '@shared/indas'
+import {
+  acceptTopSuggestions,
+  applyTopSuggestions,
+  autoTagRemaining,
+  amount,
+  buildGenerateInput,
+  detailsFromLegacy,
+  fieldKind,
+  knownMasters,
+  metaOf,
+  prefillMasters,
+  withoutKnown,
+  zeroRows,
+  readinessProblems,
+  isInstant,
+  ppeFromTransform,
+  rowsFromTransform,
+  socieFromTransform,
+  suggestionKey,
+  type TagRow,
+} from '../src/features/indas/model'
+
+const transform: TransformResult = {
+  fileName: 'fs.xlsx',
+  source: 'heuristic',
+  summary: {},
+  sheets: {
+    CANONICAL_BS: [
+      { Row_Index: 1, Line_Item: 'Share capital', Breadcrumb_Hierarchy: 'EQUITY AND LIABILITIES > Equity > Share capital', Note_No: 3.0, Current_Year_Amount: 417830, Previous_Year_Amount: 390220 },
+      { Row_Index: 2, Line_Item: 'Non-current assets', Breadcrumb_Hierarchy: 'Assets', Note_No: null, Current_Year_Amount: null, Previous_Year_Amount: null },
+      { Row_Index: 3, Line_Item: 'Inventories', Breadcrumb_Hierarchy: '', Note_No: null, Current_Year_Amount: '1,200.50', Previous_Year_Amount: '-' },
+    ],
+    CANONICAL_PL: [{ Row_Index: 1, Line_Item: 'Revenue from operations', Breadcrumb_Hierarchy: 'Income', Note_No: '18', Current_Year_Amount: 9000000, Previous_Year_Amount: null }],
+  },
+}
+
+const details = (over: Partial<IndasDetails> = {}): IndasDetails => ({
+  taxonomy: 'ind-as-2017',
+  companyName: 'Acme Pvt Ltd',
+  cin: 'U72200KA2010PTC123456',
+  reportType: 'Standalone',
+  cy: { start: '2025-04-01', end: '2026-03-31' },
+  py: { start: '2024-04-01', end: '2025-03-31' },
+  level: 'Lakhs',
+  statementPlaces: 2,
+  ...over,
+})
+
+const field = (qname: string, type = 'stringItemType'): MasterField => ({ qname, label: qname.split(':')[1], type })
+const sug = (qname: string, periodType: string | null = null): ConceptSuggestion => ({ qname, label: '', score: 0.9, type: null, periodType, balance: null, pickedBy: null })
+
+describe('amount', () => {
+  it('passes numbers through and reads numeric text; blanks and dashes are null', () => {
+    expect(amount(417830)).toBe(417830)
+    expect(amount('1,200.50')).toBe(1200.5)
+    expect(amount('-')).toBeNull()
+    expect(amount('')).toBeNull()
+    expect(amount('n/a')).toBeNull()
+    expect(amount(null)).toBeNull()
+  })
+})
+
+describe('rowsFromTransform', () => {
+  it('keeps the BS and PL lines that carry an amount, in sheet order', () => {
+    const rows = rowsFromTransform(transform)
+    expect(rows.map((r) => [r.id, r.label, r.note, r.cy, r.py])).toEqual([
+      ['balanceSheet:0', 'Share capital', '3', 417830, 390220],
+      ['balanceSheet:2', 'Inventories', '', 1200.5, null],
+      ['profitLoss:0', 'Revenue from operations', '18', 9000000, null],
+    ])
+    expect(rows.every((r) => r.concept === '' && r.suggestions.length === 0)).toBe(true)
+  })
+})
+
+describe('suggestionKey', () => {
+  it('searches with the line item (the headings go along as context)', () => {
+    expect(suggestionKey({ label: 'Share capital' })).toBe('Share capital')
+  })
+})
+
+describe('acceptTopSuggestions', () => {
+  it('fills only untagged rows that have a suggestion', () => {
+    const base = rowsFromTransform(transform)
+    const rows: TagRow[] = [
+      { ...base[0], suggestions: [sug('ind-as:EquityShareCapital')] },
+      { ...base[1], concept: 'ind-as:Inventories', suggestions: [sug('ind-as:Other')] },
+      base[2],
+    ]
+    expect(acceptTopSuggestions(rows).map((r) => r.concept)).toEqual(['ind-as:EquityShareCapital', 'ind-as:Inventories', ''])
+  })
+})
+
+describe('prefillMasters', () => {
+  const known = knownMasters(details({ reportType: 'Consolidated' }))
+  it('fills period, nature, company name and CIN from the filing settings, keeping what the user typed', () => {
+    const fields = [
+      field('in-ca:DateOfStartOfReportingPeriod', 'dateItemType'),
+      field('in-ca:DateOfEndOfReportingPeriod', 'dateItemType'),
+      field('in-ca:NatureOfReportStandaloneConsolidated'),
+      field('in-ca:NameOfCompany'),
+      field('in-ca:CorporateIdentityNumber', 'CINNumber'),
+      field('in-ca:PermanentAccountNumberOfEntity'),
+    ]
+    expect(prefillMasters(fields, known, { 'in-ca:DateOfEndOfReportingPeriod': '2026-03-30' })).toEqual({
+      'in-ca:DateOfStartOfReportingPeriod': '2025-04-01',
+      'in-ca:DateOfEndOfReportingPeriod': '2026-03-30',
+      'in-ca:NatureOfReportStandaloneConsolidated': 'Consolidated',
+      'in-ca:NameOfCompany': 'Acme Pvt Ltd',
+      'in-ca:CorporateIdentityNumber': 'U72200KA2010PTC123456',
+    })
+  })
+
+  it('a settings change drops the values the settings own, so they are filled again', () => {
+    const values = { 'in-ca:NameOfCompany': 'Old name', 'in-ca:PermanentAccountNumberOfEntity': 'AAACS1234A' }
+    expect(withoutKnown(values, known)).toEqual({ 'in-ca:PermanentAccountNumberOfEntity': 'AAACS1234A' })
+  })
+
+  it('gives /generateXML its period and nature', () => {
+    expect(metaOf(details())).toEqual({ nature: 'Standalone', startDate: '2025-04-01', endDate: '2026-03-31' })
+  })
+
+  it('reads an old draft\'s period and company into settings', () => {
+    const d = detailsFromLegacy({ nature: 'Consolidated', startDate: '2025-04-01', endDate: '2026-03-31' }, { 'in-ca:NameOfCompany': 'Acme', 'in-ca:CorporateIdentityNumber': 'U1' })
+    expect(d).toMatchObject({ companyName: 'Acme', cin: 'U1', reportType: 'Consolidated', cy: { start: '2025-04-01', end: '2026-03-31' }, py: { start: '2024-04-01', end: '2025-03-31' }, taxonomy: 'ind-as-2017' })
+  })
+})
+
+describe('fieldKind', () => {
+  it('maps XBRL item types to editors', () => {
+    expect(fieldKind('dateItemType')).toBe('date')
+    expect(fieldKind('booleanItemType')).toBe('boolean')
+    expect(fieldKind('textBlockItemType')).toBe('longtext')
+    expect(fieldKind('CINNumber')).toBe('text')
+  })
+})
+
+describe('readinessProblems and buildGenerateInput', () => {
+  const rows = rowsFromTransform(transform).map((r, i) => (i === 0 ? { ...r, concept: 'ind-as:EquityShareCapital' } : r))
+  const companyFields = [field('in-ca:NameOfCompany'), field('in-ca:CorporateIdentityNumber')]
+
+  it('lists what would make generation fail', () => {
+    const p = readinessProblems({ rows: rowsFromTransform(transform), details: details({ cy: { start: '2025-04-01', end: '' } }), signatories: [{ din: '123', name: '', designation: 'Director' }], companyFields, company: { 'in-ca:NameOfCompany': 'Acme' } })
+    expect(p).toEqual([
+      { message: 'Enter the financial year start and end dates (Filing → Filing settings).', fix: 'settings' },
+      { message: 'Tag at least one statement line.', fix: null },
+      { message: 'Fill the company details: CorporateIdentityNumber.', fix: 'masters' },
+      { message: 'Add at least 2 signatory directors.', fix: 'masters' },
+      { message: 'Signatory 1: DIN must be 8 digits.', fix: 'masters' },
+    ])
+  })
+
+  it('Auto-tag applies the top suggestion to every untagged line and keeps the ones tagged by hand', () => {
+    const s = (qname: string, pickedBy: 'ai' | null = null) => ({ qname, label: qname, score: 1, type: null, periodType: null, balance: null, pickedBy })
+    const base = rowsFromTransform(transform).slice(0, 3)
+    const lines = [
+      { ...base[0]!, concept: 'ind-as:ByHand', suggestions: [s('ind-as:Other')] },
+      { ...base[1]!, suggestions: [s('ind-as:Inventories', 'ai'), s('ind-as:Other')] },
+      { ...base[2]!, suggestions: [] },
+    ]
+    const ppe = [{ id: 'ppe:0', assetClass: 'Computers', amounts: {}, memberSuggestions: [s('ind-as:ComputerEquipmentsMember')], member: '' }]
+    const out = applyTopSuggestions({ rows: lines, socie: [], ppe, texts: [] })
+    expect(out.rows.map((r) => r.concept)).toEqual(['ind-as:ByHand', 'ind-as:Inventories', ''])
+    expect(out.ppe[0]!.member).toBe('ind-as:ComputerEquipmentsMember')
+    expect(out.applied).toBe(2)
+  })
+
+  it('counts what a cancelled Auto-tag still has to do (Continue asks only for those)', () => {
+    const s = { qname: 'ind-as:X', label: 'X', score: 1, type: null, periodType: null, balance: null, pickedBy: null }
+    const rows = rowsFromTransform(transform)
+    const ppe = [{ id: 'ppe:0', assetClass: 'Computers', amounts: {}, memberSuggestions: [], member: '' }]
+    const all = autoTagRemaining({ rows, socie: [], ppe, texts: [] })
+    expect(all).toBe(rows.length + 1)
+    const half = rows.map((r, i) => (i % 2 ? { ...r, suggestions: [s] } : r))
+    expect(autoTagRemaining({ rows: half, socie: [], ppe, texts: [] })).toBe(rows.filter((_, i) => i % 2 === 0).length + 1)
+  })
+
+  it('is ready when everything is filled', () => {
+    const signatories = [
+      { din: '01234567', name: 'A', designation: 'Director' },
+      { din: '76543210', name: 'B', designation: 'Director' },
+    ]
+    expect(readinessProblems({ rows, details: details(), signatories, companyFields, company: { 'in-ca:NameOfCompany': 'Acme', 'in-ca:CorporateIdentityNumber': 'U1' } })).toEqual([])
+  })
+
+  it('sends only accepted tags, per statement, and names the file after the company (filing settings first)', () => {
+    const input = buildGenerateInput({ rows, socie: [], ppe: [], texts: [], details: details({ companyName: ' ' }), company: { 'in-ca:NameOfCompany': 'Acme Pvt Ltd' }, auditor: {}, signatories: [] })
+    expect(input.statements).toEqual({ balanceSheet: [{ concept: 'ind-as:EquityShareCapital', cy: 417830, py: 390220, periodRole: 'end' }], profitLoss: [], cashFlow: [], noteLines: [] })
+    expect(input.companyName).toBe('Acme Pvt Ltd')
+    expect(buildGenerateInput({ rows, socie: [], ppe: [], texts: [], details: details(), company: {}, auditor: {}, signatories: [] }).companyName).toBe('Acme Pvt Ltd')
+  })
+
+  it('reports empty mandatory amounts as zero lines, once', () => {
+    const zeros = zeroRows('balanceSheet', [{ qname: 'ind-as:Goodwill', label: 'Goodwill' }], [])
+    expect(zeros).toEqual([expect.objectContaining({ id: 'zero:balanceSheet:ind-as:Goodwill', statement: 'balanceSheet', concept: 'ind-as:Goodwill', cy: 0, py: 0 })])
+    expect(zeroRows('balanceSheet', [{ qname: 'ind-as:Goodwill', label: 'Goodwill' }], zeros)).toEqual([])
+  })
+})
+
+describe('every canonical sheet (docs/15 §5)', () => {
+  const t: TransformResult = {
+    fileName: 'fs.xlsx',
+    source: 'standard_template',
+    summary: {},
+    sheets: {
+      CANONICAL_CF: [{ Line_Item: 'Cash and cash equivalents at beginning of the year', Breadcrumb_Hierarchy: 'Cash flow', Current_Year_Amount: 10, Previous_Year_Amount: 8 }],
+      CANONICAL_FINANCIAL_NOTES: [{ Note_No: 9, Line_Item: 'Raw materials', Breadcrumb_Hierarchy: 'Inventories', Current_Year_Amount: 7, Previous_Year_Amount: null }],
+      CANONICAL_SOCIE: [
+        { Equity_Component: 'Retained Earnings', Transaction_Description: 'Profit for the year', Current_Year_Amount: 50, Previous_Year_Amount: 40 },
+        { Equity_Component: 'Retained Earnings', Transaction_Description: 'Heading only', Current_Year_Amount: null, Previous_Year_Amount: null },
+      ],
+      CANONICAL_PPE_SCHEDULE: [
+        { Asset_Class: 'Buildings', Gross_Opening: 100, Gross_Additions: 20, Gross_Disposals: null, Gross_Closing: 120, Dep_Opening: 10, Dep_For_Year: 5, Dep_Disposals: null, Dep_Closing: 15, Net_Current_Year: 105, Net_Previous_Year: 90 },
+        { Asset_Class: '', Gross_Opening: 1 },
+      ],
+    },
+  }
+
+  it('reads cash flow and note lines as taggable lines', () => {
+    expect(rowsFromTransform(t).map((r) => [r.statement, r.label, r.note])).toEqual([
+      ['cashFlow', 'Cash and cash equivalents at beginning of the year', ''],
+      ['noteLines', 'Raw materials', '9'],
+    ])
+  })
+
+  it('reads changes in equity (rows with amounts) and fixed-asset classes', () => {
+    expect(socieFromTransform(t).map((r) => [r.component, r.description, r.cy])).toEqual([['Retained Earnings', 'Profit for the year', 50]])
+    const ppe = ppeFromTransform(t)
+    expect(ppe.map((r) => r.assetClass)).toEqual(['Buildings'])
+    expect(ppe[0].amounts.Gross_Disposals).toBeNull()
+  })
+
+  it('offers opening / closing only for instant concepts', () => {
+    expect(isInstant('ind-as:Cash', [sug('ind-as:Cash', 'instant')])).toBe(true)
+    expect(isInstant('ind-as:Profit', [sug('ind-as:Profit', 'duration')])).toBe(false)
+    expect(isInstant('ind-as:Typed', [])).toBe(false)
+  })
+
+  it('builds the equity table, the PPE table (blank = 0) and the text blocks', () => {
+    const socie = socieFromTransform(t).map((r) => ({ ...r, member: 'ind-as:RetainedEarningsMember', concept: 'ind-as:ProfitLossForPeriod' }))
+    const ppe = ppeFromTransform(t).map((r) => ({ ...r, member: 'ind-as:BuildingsMember' }))
+    const texts = [
+      { id: 'text:1', heading: 'PPE', content: 'Policy text', suggestions: [], concept: 'ind-as:DisclosureOfPropertyPlantAndEquipmentExplanatory' },
+      { id: 'text:2', heading: 'Untagged', content: 'x', suggestions: [], concept: '' },
+    ]
+    const cf = rowsFromTransform(t).map((r) => ({ ...r, concept: r.statement === 'cashFlow' ? 'ind-as:CashAndCashEquivalentsCashFlowStatement' : '', periodRole: 'start' as const }))
+    const input = buildGenerateInput({ rows: cf, socie, ppe, texts, details: details(), company: {}, auditor: {}, signatories: [] })
+    expect(input.statements.cashFlow).toEqual([{ concept: 'ind-as:CashAndCashEquivalentsCashFlowStatement', cy: 10, py: 8, periodRole: 'start' }])
+    expect(input.tables[0]).toEqual({
+      table: 'ind-as:StatementOfChangesInEquityTable',
+      axis: 'ind-as:ComponentsOfEquityAxis',
+      rows: [{ member: 'ind-as:RetainedEarningsMember', concept: 'ind-as:ProfitLossForPeriod', cy: 50, py: 40 }],
+    })
+    expect(input.tables[1].table).toContain('PropertyPlantAndEquipment') // his PPE checks key on this
+    expect(input.tables[1].rows).toEqual([
+      { member: 'ind-as:BuildingsMember', grossOpening: 100, grossAdditions: 20, grossDisposals: 0, grossClosing: 120, depOpening: 10, depForYear: 5, depDisposals: 0, depClosing: 15, netCurrentYear: 105, netPreviousYear: 90 },
+    ])
+    expect(input.notes).toEqual([{ concept: 'ind-as:DisclosureOfPropertyPlantAndEquipmentExplanatory', content: 'Policy text' }])
+  })
+})
+
+describe('split view helpers', () => {
+  it('groups note lines by note number in sheet order', async () => {
+    const { groupByNote } = await import('../src/features/indas/model')
+    const rows = rowsFromTransform({
+      fileName: 'x', source: 'heuristic', summary: {},
+      sheets: { CANONICAL_FINANCIAL_NOTES: [
+        { Note_No: 3, Line_Item: 'Authorised', Breadcrumb_Hierarchy: 'Equity > Share capital', Current_Year_Amount: 1, Previous_Year_Amount: 1 },
+        { Note_No: 4, Line_Item: 'Retained earnings', Breadcrumb_Hierarchy: 'Equity > Other equity', Current_Year_Amount: 2, Previous_Year_Amount: 2 },
+        { Note_No: 3, Line_Item: 'Issued', Breadcrumb_Hierarchy: 'Equity > Share capital', Current_Year_Amount: 3, Previous_Year_Amount: 3 },
+      ] },
+    })
+    expect(groupByNote(rows).map((g) => [g.note, g.rows.map((r) => r.label)])).toEqual([['3', ['Authorised', 'Issued']], ['4', ['Retained earnings']]])
+  })
+
+  it('sends only the tagged lines of one statement to the Difference check', async () => {
+    const { checkRows } = await import('../src/features/indas/model')
+    const rows = rowsFromTransform(transform).map((r, i) => ({ ...r, concept: i === 0 ? 'ind-as:EquityShareCapital' : '' }))
+    expect(checkRows(rows, 'balanceSheet')).toEqual([{ concept: 'ind-as:EquityShareCapital', cy: 417830, py: 390220, periodRole: 'end' }])
+    expect(checkRows(rows, 'profitLoss')).toEqual([])
+  })
+})
+
+describe('PPE amounts', () => {
+  it('sends disposals as positive amounts and blanks as 0', async () => {
+    const { ppeAmount } = await import('../src/features/indas/model')
+    expect(ppeAmount('Gross_Disposals', -81718)).toBe(81718)
+    expect(ppeAmount('Dep_Disposals', -35000)).toBe(35000)
+    expect(ppeAmount('Gross_Additions', -5)).toBe(-5)
+    expect(ppeAmount('Gross_Opening', null)).toBe(0)
+  })
+})

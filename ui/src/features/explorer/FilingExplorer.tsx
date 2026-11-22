@@ -1,24 +1,18 @@
 import { ChevronDown, ChevronRight, FolderTree } from 'lucide-react'
-import { maxDisplayPlaces } from '@xap/engine/basics'
 import { useMemo, useState } from 'react'
 import type { ElrInfo } from '@shared/project'
+import { useWorkspace } from '@/app/workspace'
 import { EmptyState } from '@/components/EmptyState'
 import { cn } from '@/lib/cn'
-import { useEditor } from '@/stores/editor'
-import { useProject } from '@/stores/project'
-import { useUi } from '@/stores/ui'
 
 const GROUPS: ElrInfo['group'][] = ['Statements', 'Notes', 'Disclosures']
 
-/** ELR tree of the open filing. Completion/error status dots arrive with validation (Phase 6). */
+/** ELR tree of the open filing (C&I or Ind AS, through the FilingWorkspace adapter). */
 export function FilingExplorer() {
-  const { summary, elrs, setStatementPlaces } = useProject()
-  const { activeElr, setActiveElr } = useEditor()
-  const setRightTab = useUi((s) => s.setRightTab)
-  const openElr = (uri: string) => {
-    void setActiveElr(uri)
-    setRightTab('form')
-  }
+  const ws = useWorkspace()
+  const elrs = ws?.elrs ?? []
+  const activeElr = ws?.activeElr ?? null
+  const openElr = (uri: string) => ws?.openElr(uri)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set(['Notes', 'Disclosures']))
   const [filter, setFilter] = useState('')
   const grouped = useMemo(() => {
@@ -27,7 +21,7 @@ export function FilingExplorer() {
     return GROUPS.map((g) => ({ group: g, items: elrs.filter((e) => e.group === g && match(e)) }))
   }, [elrs, filter])
 
-  if (!summary) {
+  if (!ws) {
     return (
       <EmptyState icon={FolderTree} title="No filing open">
         Create or open a filing to see its statements, notes and disclosures.
@@ -45,21 +39,21 @@ export function FilingExplorer() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-3 py-2">
-        <div className="truncate text-[13px] font-medium">{summary.company.name}</div>
-        <div className="truncate font-mono text-[11px] text-muted">{summary.company.cin}</div>
+        <div className="truncate text-[13px] font-medium" data-testid="explorer-company">{ws.header.company}</div>
+        <div className="truncate font-mono text-[11px] text-muted">{ws.header.cin}</div>
         <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
           <span className="truncate">
-            {summary.fyLabel} · {summary.reportType} · {summary.level} ·
+            {ws.header.fyLabel} · {ws.header.nature} · {ws.header.level} ·
           </span>
           <select
-            value={summary.statementPlaces}
-            onChange={(e) => void setStatementPlaces(Number(e.target.value))}
+            value={ws.header.places}
+            onChange={(e) => ws.header.setPlaces(Number(e.target.value))}
             title="Decimal places as presented in the statements. Tagged figures are re-read from Excel when this changes."
             aria-label="Decimal places as presented"
             data-testid="statement-places-edit"
             className="rounded border border-border bg-panel px-1 text-[11px] text-fg"
           >
-            {Array.from({ length: maxDisplayPlaces(summary.level) + 1 }, (_, n) => (
+            {Array.from({ length: ws.header.maxPlaces + 1 }, (_, n) => (
               <option key={n} value={n}>
                 {n} dp
               </option>
@@ -92,7 +86,9 @@ export function FilingExplorer() {
                   key={e.uri}
                   role="treeitem"
                   aria-selected={activeElr === e.uri}
-                  title={`[${e.code}] ${e.title}`}
+                  title={e.code ? `[${e.code}] ${e.title}` : e.title}
+                  data-testid="explorer-elr"
+                  data-elr={e.uri}
                   onClick={() => openElr(e.uri)}
                   className={cn('flex cursor-default items-baseline gap-2 truncate py-0.5 pr-2 pl-6 hover:bg-panel-2', activeElr === e.uri && 'bg-accent/10 text-fg')}
                 >

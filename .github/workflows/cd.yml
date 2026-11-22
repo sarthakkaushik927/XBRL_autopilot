@@ -1,0 +1,52 @@
+name: CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: self-hosted
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }}
+      GROQ_API_KEY: ${{ vars.GROQ_API_KEY }}
+      PYDANTIC_LOGFIRE_API_KEY: ${{ vars.PYDANTIC_LOGFIRE_API_KEY }}
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+      GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+      EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL }}
+      EMBEDDING_DIM: ${{ vars.EMBEDDING_DIM }}
+      QDRANT_API_KEY: ${{ vars.QDRANT_API_KEY }}
+      LANGFUSE_HOST: ${{ vars.LANGFUSE_HOST }}
+      QDRANT_CLUSTER_ENDPOINT: ${{ vars.QDRANT_CLUSTER_ENDPOINT }}
+      XAP_PORT: ${{ vars.XAP_PORT }}
+    steps:
+      - name: Pull Docker image
+        run: sudo docker pull "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
+
+      - name: Delete Old docker container
+        run: |
+          sudo docker rm -f "${DOCKER_IMAGE_NAME}-container" || true
+
+      - name: Pruning system df
+        run: |
+          sudo docker system prune -f
+          
+      - name: Run Docker Container
+        run: |
+          sudo docker run -d \
+            --name "${DOCKER_IMAGE_NAME}-container" \
+            -p {XAP_PORT}:{XAP_PORT} \
+            --env "GROQ_API_KEY=${GROQ_API_KEY}" \
+            --env "GROQ_MODEL=${GROQ_MODEL}" \
+            --env "EMBEDDING_MODEL=${EMBEDDING_MODEL}" \
+            --env "EMBEDDING_DIM=${EMBEDDING_DIM}" \
+            --env "QDRANT_API_KEY=${QDRANT_API_KEY}" \
+            --env "QDRANT_CLUSTER_ENDPOINT=${QDRANT_CLUSTER_ENDPOINT}" \
+            --env "SERVICE_NAME=${SERVICE_NAME}" \
+            --env "PYDANTIC_LOGFIRE_API_KEY=${PYDANTIC_LOGFIRE_API_KEY}" \
+            "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"

@@ -9,14 +9,15 @@ export function buildMenu(getWindow: () => BrowserWindow | null, isDev: boolean)
     {
       label: '&File',
       submenu: [
-        { label: 'New Filing…', accelerator: 'CmdOrCtrl+N', click: send('file:new') },
+        { label: 'New Project…', accelerator: 'CmdOrCtrl+N', click: send('file:new') },
         { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: send('file:open') },
         { type: 'separator' },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: send('file:save') },
         { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: send('file:save-as') },
+        { label: 'Close Project', accelerator: 'CmdOrCtrl+W', click: send('file:close') },
         { type: 'separator' },
-        { label: 'Import Excel…', accelerator: 'CmdOrCtrl+I', click: send('file:import-excel') },
-        { label: 'Import XBRL Instance…', click: send('file:import-xbrl') },
+        { label: 'Open Financial Statements…', accelerator: 'CmdOrCtrl+I', click: send('file:import-excel') },
+        { label: 'Save Standard Template…', click: send('file:save-template') },
         { type: 'separator' },
         { label: 'Settings', accelerator: 'CmdOrCtrl+,', click: send('tools:settings') },
         { type: 'separator' },
@@ -53,6 +54,9 @@ export function buildMenu(getWindow: () => BrowserWindow | null, isDev: boolean)
     {
       label: 'F&iling',
       submenu: [
+        { label: 'Filing Settings…', click: send('filing:settings') },
+        { label: 'Company && Auditor Details…', click: send('filing:masters') },
+        { type: 'separator' },
         { label: 'Validate', accelerator: 'CmdOrCtrl+Shift+V', click: send('filing:validate') },
         { label: 'Generate XML', accelerator: 'CmdOrCtrl+G', click: send('filing:generate-xml') },
       ],

@@ -11,6 +11,9 @@ class ErrorDetail(BaseModel):
     field: Optional[str] = None
     message: str
     type: Optional[str] = None
+    # what the problem is about, so the app can take the user to its line (PR #15 review, point 9)
+    concept: Optional[str] = None
+    member: Optional[str] = None
 
 
 class ApiResponse(BaseModel, Generic[T]):

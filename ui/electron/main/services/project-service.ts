@@ -13,13 +13,10 @@ import {
   defaultStatementPlaces,
   fyLabel,
   isFilingTaxonomy,
-  isValidCin,
   maxDisplayPlaces,
-  ROUNDING_LEVELS,
-  validateFilingPeriods,
   type TaxonomyId,
 } from '@xap/engine/basics'
-import type { NewFilingInput, Period, ProjectSummary, RecentProject, RecoveryItem } from '@shared/project'
+import { validateNewFiling, type NewFilingInput, type Period, type ProjectSummary, type RecentProject, type RecoveryItem } from '@shared/project'
 import {
   AXBRL_FORMAT,
   AXBRL_FORMAT_VERSION,
@@ -395,20 +392,5 @@ export class ProjectService extends EventEmitter<ProjectEvents> implements Proje
   }
 }
 
-/** Pure validation of the New Filing form; returns user-facing problems. */
-export function validateNewFiling(input: NewFilingInput): string[] {
-  const problems: string[] = []
-  if (input.taxonomy !== undefined && !isFilingTaxonomy(input.taxonomy)) problems.push('Choose a taxonomy: C&I 2016 or Ind AS 2017.')
-  if (!input.companyName?.trim()) problems.push('Enter the company name.')
-  if (!isValidCin(input.cin ?? '')) problems.push('Enter a valid 21-character CIN (e.g. U72200KA2010PTC123456).')
-  if (input.reportType !== 'Standalone' && input.reportType !== 'Consolidated') problems.push('Choose Standalone or Consolidated.')
-  if (!ROUNDING_LEVELS.includes(input.level)) problems.push('Choose a level of rounding.')
-  else if (input.statementPlaces !== undefined) {
-    const max = maxDisplayPlaces(input.level)
-    if (!Number.isInteger(input.statementPlaces) || input.statementPlaces < 0 || input.statementPlaces > max) {
-      problems.push(`Decimal places as presented must be a whole number from 0 to ${max} for amounts in ${input.level}.`)
-    }
-  }
-  problems.push(...validateFilingPeriods(input.cy, input.py))
-  return problems
-}
+/** Kept here for existing callers; the rule lives in @shared/project (the renderer and the Ind AS service use it too). */
+export { validateNewFiling } from '@shared/project'

@@ -22,6 +22,19 @@
 | project | `project:import-xbrl` | invoke | `mode: 'both' \| 'next', path?` (dialog if empty) → `{summary, report: ImportReportView}` (Phase 7; `InstanceImportService`) |
 | project | `project:save` / `project:save-as` | invoke | → `{path}` |
 | project | `project:recent` | invoke | → `RecentProject[]` |
+| project | `project:saved` | invoke | → `SavedProjectsListing` (the `.axbrl` files in the projects folder, newest first; docs/17) |
+| project | `project:open-folder` | invoke | opens the projects folder in the file manager |
+| indas | `indas:save-template` | invoke | Save dialog → writes `/indas/template` → `Result<path \| null>` (docs/17) |
+| indas | `indas:transform` | invoke | Open dialog → `/indas/transform` (multipart) → `Result<TransformResult \| null>` |
+| indas | `indas:recommend` | invoke | `RecommendRequest {keys, contexts?, scope, kind?}` → `/indas/recommend` (scoped to one sheet, `use_llm` = AI consent) in batches of 20 → `Result<ConceptSuggestion[][]>` (progress on `indas:progress`) |
+| indas | `indas:save` | invoke | `IndasSaveRequest` → writes the Ind AS project to the projects folder → `Result<{path, savedAt}>` |
+| indas | `indas:open` | invoke | `.axbrl` path → `Result<{path, projectId, draft}>` |
+| indas | `indas:master-fields` | invoke | → `Result<MasterFields>` (computed in main from `/indas/authority`, fetched once) |
+| indas | `indas:tree` | invoke | `scope, kind?` → `/indas/tree/{scope}` → `Result<SheetTree[]>` |
+| indas | `indas:check` | invoke | `StatementLine[]` → `Result<CheckResult>`: the live Difference bar, computed in main (`indas-difference-check.ts`, exact decimals), no sidecar call |
+| indas | `indas:generate` | invoke | `GenerateXmlInput` → `/indas/generateXML` → `Result<GenerateXmlResult>` (XML saved to the projects folder) |
+| indas | `indas:show-generated` | invoke | shows the last generated XML in Explorer |
+| indas | `indas:progress` | main → renderer | `{ done, total }` while suggesting tags |
 | excel | `workbook:import` | invoke | `path?` → `WorkbookModel` (.xlsx/.xlsm in process; .xls through `POST /api/v1/workbooks/read`) |
 | mapping | `mapping:cell-info` | invoke | `CellRef` → `CellInfo` (amount at the statement's precision + column period) |
 | mapping | `mapping:set-column-period` | invoke | `CellRef, 'CY' \| 'PY' \| null` → `ColumnPeriod` (remembered per sheet column in `mapping.json`) |

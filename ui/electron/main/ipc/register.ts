@@ -7,6 +7,10 @@ import { IPC, type AppInfo, type HttpMethod } from '@shared/ipc'
 import type { AppSettings, NewFilingInput } from '@shared/project'
 import { PREVIEW_SPACINGS, type PreviewFormat } from '@xap/engine/basics'
 import type { ProjectController } from '../project/project-controller'
+import type { IndasController } from '../indas/indas-controller'
+import type { RecentFilingsService } from '../services/recent-filings-service'
+import { LINE_SHEETS, type FixRequest, type GenerateXmlInput, type IndasDetails, type IndasSaveRequest, type RecommendRequest, type StatementLine } from '@shared/indas'
+import type { SavedProjectsService } from '../services/saved-projects-service'
 import type { AutoTagService } from '../services/auto-tag-service'
 import type { ColumnPeriodService } from '../services/column-period-service'
 import type { EditorQueryService } from '../services/editor-query-service'
@@ -29,7 +33,7 @@ import type { ValidationService } from '../services/validation-service'
 import type { FixAgentService } from '../services/fix-agent-service'
 import type { ProjectService } from '../services/project-service'
 import type { SettingsService } from '../services/settings-service'
-import type { SidecarManager } from '../sidecar'
+import type { BackendClient } from '../infra/backend-client'
 import { capWorkbook } from '../infra/workbook-parser'
 import { handleQuery, handleResult, requireString } from './handle'
 import { requireNoteCheckInput, requireNoteHtml, requireSaveNoteInput } from './notes-input'
@@ -38,9 +42,12 @@ import { requireAlsoInput, requireBlockInput, requireCell, requireIndex, require
 
 export interface IpcDeps {
   appInfo: () => AppInfo
-  sidecar: SidecarManager
+  sidecar: BackendClient
   projects: ProjectService
   projectController: ProjectController
+  savedProjects: SavedProjectsService
+  /** opens the projects folder in the OS file manager */
+  openProjectsFolder: () => Promise<void>
   settings: SettingsService
   sources: SourceService
   mapping: MappingService
@@ -62,6 +69,8 @@ export interface IpcDeps {
   masters: MastersService
   notes: NoteEditorService
   fixAgent: FixAgentService
+  indas: IndasController
+  recentFilings: RecentFilingsService
   getWindow: () => BrowserWindow | null
 }
 
@@ -78,6 +87,7 @@ export function registerIpc(d: IpcDeps): void {
   registerMastersIpc(d)
   registerNotesIpc(d)
   registerAiIpc(d)
+  registerIndasIpc(d)
 }
 
 function registerAppIpc(d: IpcDeps): void {
@@ -88,17 +98,19 @@ function registerSidecarIpc({ sidecar }: IpcDeps): void {
   const methods: HttpMethod[] = ['GET', 'POST', 'PUT', 'DELETE']
   handleQuery(IPC.sidecarStatus, () => sidecar.getStatus())
   handleQuery(IPC.sidecarLogs, () => sidecar.getLogs())
-  handleQuery(IPC.sidecarRestart, () => sidecar.restart())
+  handleQuery(IPC.sidecarReconnect, () => sidecar.reconnect())
   handleQuery(IPC.sidecarRequest, (_e, method: unknown, path: unknown, body: unknown) => {
     if (!methods.includes(method as HttpMethod) || typeof path !== 'string') throw new Error('Invalid sidecar request')
     return sidecar.request(method as HttpMethod, path, body)
   })
 }
 
-function registerProjectIpc({ projects, projectController: pc, taxonomy, filing }: IpcDeps): void {
+function registerProjectIpc({ projects, projectController: pc, taxonomy, filing, savedProjects, recentFilings, openProjectsFolder }: IpcDeps): void {
+  handleQuery(IPC.projectSaved, () => savedProjects.list())
+  handleQuery(IPC.projectOpenFolder, () => openProjectsFolder())
   handleQuery(IPC.projectCurrent, () => projects.summary())
-  handleQuery(IPC.projectRecent, () => projects.recentProjects())
-  handleQuery(IPC.projectForgetRecent, (_e, path: unknown) => projects.forgetRecent(requireString(path, 'path')))
+  handleQuery(IPC.projectRecent, () => recentFilings.list())
+  handleQuery(IPC.projectForgetRecent, (_e, path: unknown) => recentFilings.forget(requireString(path, 'path')))
   handleQuery(IPC.projectRecovery, () => projects.recoveryItems())
   handleQuery(IPC.projectDiscardRecovery, (_e, id: unknown) => projects.discardRecovery(requireString(id, 'id')))
   handleResult(IPC.projectCreate, (_e, input: NewFilingInput) => pc.create(input))
@@ -349,4 +361,127 @@ function requireSetSheetColumnsInput(v: unknown): SetSheetColumnsInput {
   const gap = typeof o.gap === 'number' ? o.gap : undefined
   const applyToAllSheets = o.applyToAllSheets === true
   return { workbook, sheet, cyColumn, pyColumn, gap, applyToAllSheets }
+}
+
+/** docs/17: Vashu's Ind AS pipeline over the sidecar's /indas routes. */
+function registerIndasIpc({ indas }: IpcDeps): void {
+  handleResult(IPC.indasSaveTemplate, () => indas.saveTemplate())
+  handleResult(IPC.indasTransform, (_e, path?: unknown) => indas.transform(path === undefined ? undefined : requireString(path, 'path')))
+  handleResult(IPC.indasRecommend, (_e, req: unknown) => indas.recommend(requireRecommendRequest(req)))
+  handleQuery(IPC.indasCancelRecommend, () => indas.cancelRecommend())
+  handleResult(IPC.indasMasterFields, () => indas.masterFields())
+  handleResult(IPC.indasGenerate, (_e, input: unknown) => indas.generate(requireGenerateInput(input)))
+  handleQuery(IPC.indasShowGenerated, () => indas.showGenerated())
+  handleResult(IPC.indasSave, (_e, req: unknown) => indas.save(requireSaveRequest(req)))
+  handleResult(IPC.indasOpen, (_e, path: unknown) => indas.open(requireProjectPath(path)))
+  // the service validates the settings (ValidationError → the dialog's problem list)
+  handleResult(IPC.indasCreate, (_e, details: unknown) => indas.create(requireDetails(details)))
+  handleResult(IPC.indasPickProject, () => indas.pickProject())
+  handleResult(IPC.indasTree, (_e, scope: unknown, kind?: unknown) => {
+    const s = requireString(scope, 'scope')
+    if (!/^[A-Z_]{1,40}$/.test(s) || (kind !== undefined && kind !== 'concept' && kind !== 'member')) throw new Error('Invalid tree request')
+    return indas.tree(s, (kind as 'concept' | 'member' | undefined) ?? 'concept')
+  })
+  handleResult(IPC.indasCheck, (_e, rows: unknown) => {
+    if (!Array.isArray(rows) || rows.length > 5000) throw new Error('Invalid rows')
+    return indas.check(rows as StatementLine[])
+  })
+  handleResult(IPC.indasFix, (_e, req: unknown) => indas.fix(requireFixRequest(req)))
+}
+
+/** The shape of a Fix with AI request (sizes as the backend's FixRequest allows). */
+function requireFixRequest(v: unknown): FixRequest {
+  const r = v as FixRequest
+  const str = (x: unknown, max: number) => typeof x === 'string' && x.length <= max
+  const amount = (x: unknown) => x === null || (typeof x === 'number' && Number.isFinite(x))
+  const statement = (x: unknown) => LINE_SHEETS.some((s) => s.key === x)
+  const ok =
+    !!r &&
+    Array.isArray(r.problems) &&
+    r.problems.length >= 1 &&
+    r.problems.length <= 50 &&
+    r.problems.every((p) => str(p?.id, 200) && str(p.message, 1000) && str(p.concept, 300) && (p.elr === null || str(p.elr, 40)) && (p.year === 'CY' || p.year === 'PY') && statement(p.statement)) &&
+    Array.isArray(r.lines) &&
+    r.lines.length >= 1 &&
+    r.lines.length <= 600 &&
+    r.lines.every(
+      (l) =>
+        str(l?.id, 300) && statement(l.statement) && str(l.label, 500) && str(l.headings, 1000) && amount(l.cy) && amount(l.py) && str(l.concept, 300) && (l.periodRole === 'start' || l.periodRole === 'end'),
+    )
+  if (!ok) throw new Error('Invalid Fix with AI request')
+  return r
+}
+
+function requireSaveRequest(v: unknown): IndasSaveRequest {
+  const r = v as IndasSaveRequest
+  const ok =
+    !!r &&
+    typeof r === 'object' &&
+    typeof r.projectId === 'string' &&
+    /^[a-zA-Z0-9-]{1,64}$/.test(r.projectId) &&
+    (r.path === null || (typeof r.path === 'string' && r.path.toLowerCase().endsWith('.axbrl'))) &&
+    !!r.draft &&
+    typeof r.draft.version === 'number'
+  if (!ok) throw new Error('Invalid project data')
+  return { ...r, details: requireDetails(r.details) }
+}
+
+/** The shape of the filing settings; their meaning (CIN, dates …) is validated by the service. */
+function requireDetails(v: unknown): IndasDetails {
+  const d = v as IndasDetails
+  const period = (p: unknown) => !!p && typeof (p as { start?: unknown }).start === 'string' && typeof (p as { end?: unknown }).end === 'string'
+  const ok =
+    !!d &&
+    typeof d === 'object' &&
+    typeof d.companyName === 'string' &&
+    typeof d.cin === 'string' &&
+    typeof d.reportType === 'string' &&
+    typeof d.level === 'string' &&
+    period(d.cy) &&
+    (d.py === null || period(d.py)) &&
+    (d.statementPlaces === undefined || typeof d.statementPlaces === 'number')
+  if (!ok) throw new Error('Invalid filing settings')
+  return d
+}
+
+function requireProjectPath(v: unknown): string {
+  const path = requireString(v, 'path')
+  if (!path.toLowerCase().endsWith('.axbrl')) throw new Error('Not a project file')
+  return path
+}
+
+function requireRecommendRequest(v: unknown): RecommendRequest {
+  const r = v as RecommendRequest
+  const strings = (a: unknown, max: number) => Array.isArray(a) && a.length <= max && a.every((k) => typeof k === 'string')
+  const ok =
+    !!r &&
+    typeof r === 'object' &&
+    strings(r.keys, 2000) &&
+    (r.contexts === undefined || strings(r.contexts, 2000)) &&
+    typeof r.scope === 'string' &&
+    /^[A-Z_]{1,40}$/.test(r.scope) &&
+    (r.kind === undefined || r.kind === 'concept' || r.kind === 'member')
+  if (!ok) throw new Error('Invalid suggestion request')
+  return r
+}
+
+function requireGenerateInput(v: unknown): GenerateXmlInput {
+  const i = v as GenerateXmlInput
+  const ok =
+    !!i &&
+    typeof i === 'object' &&
+    typeof i.companyName === 'string' &&
+    !!i.meta &&
+    typeof i.meta.startDate === 'string' &&
+    typeof i.meta.endDate === 'string' &&
+    (i.meta.nature === 'Standalone' || i.meta.nature === 'Consolidated') &&
+    !!i.master &&
+    Array.isArray(i.master.signatories) &&
+    !!i.statements &&
+    Array.isArray(i.statements.balanceSheet) &&
+    Array.isArray(i.statements.profitLoss) &&
+    Array.isArray(i.tables) &&
+    Array.isArray(i.notes)
+  if (!ok) throw new Error('Invalid filing data')
+  return i
 }

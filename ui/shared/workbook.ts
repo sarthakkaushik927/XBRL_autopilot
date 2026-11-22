@@ -115,6 +115,55 @@ export function rangeCells(ref: string): string[] {
   return out
 }
 
+/**
+ * The fewest rectangles covering the given cells / ranges (A1, one sheet): runs of rows in a column join, then
+ * neighbouring columns with the same run. The grid draws one shape per range, and Univer re-sorts every shape on each
+ * add, so 537 single cells took minutes to draw (PR #15 review: "the app hangs") where a handful of ranges is instant.
+ * A range larger than MAX_RANGE_CELLS is kept as it is.
+ */
+export function compactRanges(refs: readonly string[]): string[] {
+  const rowsByCol = new Map<number, Set<number>>()
+  const kept: string[] = []
+  for (const ref of refs) {
+    const g = rangeOf(ref)
+    if (!g) continue
+    if (rangeSize(ref) > MAX_RANGE_CELLS) {
+      kept.push(rangeA1(g))
+      continue
+    }
+    for (let c = g.c1; c <= g.c2; c++) {
+      const rows = rowsByCol.get(c) ?? new Set<number>()
+      for (let r = g.r1; r <= g.r2; r++) rows.add(r)
+      rowsByCol.set(c, rows)
+    }
+  }
+  // vertical runs per column, keyed by their rows so equal runs of neighbouring columns can join
+  const runs = new Map<string, number[]>()
+  for (const [c, set] of rowsByCol) {
+    const rows = [...set].sort((a, b) => a - b)
+    for (let i = 0; i < rows.length; ) {
+      let j = i
+      while (j + 1 < rows.length && rows[j + 1] === rows[j]! + 1) j++
+      const key = `${rows[i]}:${rows[j]}`
+      runs.set(key, [...(runs.get(key) ?? []), c])
+      i = j + 1
+    }
+  }
+  const out: CellRange[] = []
+  for (const [key, cols] of runs) {
+    const [r1, r2] = key.split(':').map(Number) as [number, number]
+    cols.sort((a, b) => a - b)
+    for (let i = 0; i < cols.length; ) {
+      let j = i
+      while (j + 1 < cols.length && cols[j + 1] === cols[j]! + 1) j++
+      out.push({ r1, r2, c1: cols[i]!, c2: cols[j]! })
+      i = j + 1
+    }
+  }
+  out.sort((a, b) => a.r1 - b.r1 || a.c1 - b.c1)
+  return [...kept, ...out.map(rangeA1)]
+}
+
 /** Do two references on the same workbook and sheet share a cell? */
 export function overlaps(a: CellRef, b: CellRef): boolean {
   if (a.workbook !== b.workbook || a.sheet !== b.sheet) return false

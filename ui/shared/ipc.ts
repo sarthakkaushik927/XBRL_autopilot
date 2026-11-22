@@ -1,5 +1,23 @@
 /** Shared IPC contract between main, preload and renderer. See docs/09-ipc-and-sidecar-api.md. */
 import type {
+  ConceptSuggestion,
+  FixProposal,
+  FixRequest,
+  GenerateXmlInput,
+  GenerateXmlResult,
+  IndasDetails,
+  IndasOpened,
+  IndasSaved,
+  IndasSaveRequest,
+  MasterFields,
+  ProjectPick,
+  RecommendRequest,
+  SheetTree,
+  CheckResult,
+  StatementLine,
+  TransformResult,
+} from './indas'
+import type {
   AppSettings,
   ElrInfo,
   ImportReportView,
@@ -7,6 +25,7 @@ import type {
   NewFilingInput,
   ProjectSummary,
   RecentProject,
+  SavedProjectsListing,
   RecoveryItem,
   SettingsState,
 } from './project'
@@ -62,11 +81,11 @@ import type { AiHistoryEntry, AiView } from './ai'
 export type IpcError = { kind: 'validation'; message: string; problems: string[] } | { kind: 'error'; message: string }
 export type Result<T> = { ok: true; value: T } | { ok: false; error: IpcError }
 
+/** The connection to the separately hosted backend (XAP_API_URL): 'starting' = first check still running. */
 export type SidecarStatus =
   | { state: 'starting' }
-  | { state: 'ready'; port: number; version: string; aiEnabled: boolean; model: string | null }
+  | { state: 'ready'; url: string; version: string; aiEnabled: boolean; model: string | null }
   | { state: 'error'; message: string }
-  | { state: 'stopped' }
 
 export interface SidecarLogLine {
   ts: number
@@ -93,8 +112,12 @@ export type MenuCommand =
   | 'file:open'
   | 'file:save'
   | 'file:save-as'
+  | 'file:close'
   | 'file:import-excel'
   | 'file:import-xbrl'
+  | 'file:save-template'
+  | 'filing:settings'
+  | 'filing:masters'
   | 'filing:validate'
   | 'filing:generate-xml'
   | 'view:toggle-sidebar'
@@ -110,7 +133,7 @@ export const IPC = {
   sidecarLog: 'sidecar:log',
   sidecarLogs: 'sidecar:logs',
   sidecarRequest: 'sidecar:request',
-  sidecarRestart: 'sidecar:restart',
+  sidecarReconnect: 'sidecar:reconnect',
   menuCommand: 'menu:command',
   projectCurrent: 'project:current',
   projectCreate: 'project:create',
@@ -121,6 +144,8 @@ export const IPC = {
   projectClose: 'project:close',
   projectRecent: 'project:recent',
   projectForgetRecent: 'project:forget-recent',
+  projectSaved: 'project:saved',
+  projectOpenFolder: 'project:open-folder',
   projectRecovery: 'project:recovery',
   projectRecover: 'project:recover',
   projectDiscardRecovery: 'project:discard-recovery',
@@ -209,6 +234,21 @@ export const IPC = {
   aiClear: 'ai:clear',
   aiHistory: 'ai:history',
   aiChanged: 'ai:changed',
+  indasSaveTemplate: 'indas:save-template',
+  indasTransform: 'indas:transform',
+  indasRecommend: 'indas:recommend',
+  indasCancelRecommend: 'indas:cancel-recommend',
+  indasMasterFields: 'indas:master-fields',
+  indasGenerate: 'indas:generate',
+  indasShowGenerated: 'indas:show-generated',
+  indasProgress: 'indas:progress',
+  indasSave: 'indas:save',
+  indasTree: 'indas:tree',
+  indasCheck: 'indas:check',
+  indasOpen: 'indas:open',
+  indasCreate: 'indas:create',
+  indasPickProject: 'indas:pick-project',
+  indasFix: 'indas:fix',
 } as const
 
 /** The API exposed on window.xap by the preload script. */
@@ -217,7 +257,8 @@ export interface XapApi {
   sidecar: {
     status(): Promise<SidecarStatus>
     logs(): Promise<SidecarLogLine[]>
-    restart(): Promise<void>
+    /** checks the backend again at once (after starting it) */
+    reconnect(): Promise<void>
     request<T = unknown>(method: HttpMethod, path: string, body?: unknown): Promise<SidecarResponse<T>>
     onStatus(cb: (s: SidecarStatus) => void): () => void
     onLog(cb: (l: SidecarLogLine) => void): () => void
@@ -237,6 +278,10 @@ export interface XapApi {
     close(): Promise<Result<boolean>>
     recent(): Promise<RecentProject[]>
     forgetRecent(path: string): Promise<void>
+    /** filings in the projects folder, newest first */
+    saved(): Promise<SavedProjectsListing>
+    /** opens the projects folder in Explorer */
+    openFolder(): Promise<void>
     recovery(): Promise<RecoveryItem[]>
     recover(id: string): Promise<Result<ProjectSummary | null>>
     discardRecovery(id: string): Promise<void>
@@ -388,5 +433,35 @@ export interface XapApi {
     /** the newest ai/history.jsonl entries (what was sent, what came back, decisions) */
     history(): Promise<Result<AiHistoryEntry[]>>
     onChanged(cb: (v: AiView) => void): () => void
+  }
+  /** Vashu's Ind AS pipeline (docs/17): Excel → canonical sheets → tags → masters → XML */
+  indas: {
+    /** asks where to save the standard template; the saved path, or null when cancelled */
+    saveTemplate(): Promise<Result<string | null>>
+    /** converts the workbook at `path` (no path → file dialog); null when cancelled */
+    transform(path?: string): Promise<Result<TransformResult | null>>
+    /** tag suggestions per key, in key order, from one sheet's scope (progress arrives through onProgress) */
+    recommend(req: RecommendRequest): Promise<Result<ConceptSuggestion[][]>>
+    /** stops the running Auto-tag after its current batch */
+    cancelRecommend(): Promise<void>
+    masterFields(): Promise<Result<MasterFields>>
+    generate(input: GenerateXmlInput): Promise<Result<GenerateXmlResult>>
+    /** shows the last generated XML in Explorer */
+    showGenerated(): Promise<void>
+    /** saves the work to the projects folder (or to its existing file) */
+    save(req: IndasSaveRequest): Promise<Result<IndasSaved>>
+    /** reopens a saved Ind AS project */
+    open(path: string): Promise<Result<IndasOpened>>
+    /** New project: validated (validation problems come back as such), saved in the projects folder, returned opened */
+    create(details: IndasDetails): Promise<Result<IndasOpened>>
+    /** File → Open dialog: the picked project and its kind; null when cancelled */
+    pickProject(): Promise<Result<ProjectPick | null>>
+    /** a sheet's taxonomy tree(s) for the split view */
+    tree(scope: string, kind?: 'concept' | 'member'): Promise<Result<SheetTree[]>>
+    /** the live Difference check of tagged lines */
+    check(rows: StatementLine[]): Promise<Result<CheckResult>>
+    /** Fix with AI: proposed tag changes for totals that don't add up, each dry-run by the Difference check */
+    fix(req: FixRequest): Promise<Result<FixProposal>>
+    onProgress(cb: (p: { done: number; total: number }) => void): () => void
   }
 }

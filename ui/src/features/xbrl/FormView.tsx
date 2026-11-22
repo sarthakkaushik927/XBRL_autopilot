@@ -1,7 +1,7 @@
-import { ArrowRightToLine, ChevronDown, ChevronRight, CircleSlash, Copy, FileSpreadsheet, Grid3x3, ListChecks, Table2 } from 'lucide-react'
+import { ArrowRightToLine, ChevronDown, ChevronRight, CircleSlash, Copy, Grid3x3, ListChecks, Table2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { formatIndian } from '@xap/engine/basics'
-import { rowTone, sourcesText, type FormCell, type FormDifference, type FormRow, type FormRowNote, type FormTable, type NoteTieView } from '@shared/editor'
+import { rowTone, sourcesText, type FormCell, type FormRow, type FormRowNote, type FormTable, type NoteTieView } from '@shared/editor'
 import { cellKey } from '@shared/workbook'
 import { EmptyState } from '@/components/EmptyState'
 import { Button, Select } from '@/components/ui/primitives'
@@ -11,6 +11,8 @@ import { useSources } from '@/stores/sources'
 import { useMandatory } from '@/stores/mandatory'
 import { useProject } from '@/stores/project'
 import { useValidation } from '@/stores/validation'
+import { CellChip } from './CellChip'
+import { DifferenceFooter } from './DifferenceFooter'
 import { useFormTree } from './form-tree'
 
 /**
@@ -349,15 +351,13 @@ function ValueCell(props: { cell: FormCell | undefined; selectedFact: string | n
         className={cn('tabular inline-flex items-center gap-1.5 rounded px-1 disabled:cursor-default', selected && 'outline outline-1 outline-accent', c.factKey && 'hover:bg-panel')}
       >
         {c.source && (
-          <span
-            className={cn('flex items-center gap-0.5 rounded bg-ok/15 px-1 font-mono text-[10px] text-ok', props.selectedCell === cellKey(c.source) && 'bg-accent/20 text-accent')}
+          <CellChip
+            text={c.sources ? sourcesText(c.sources) : c.source.ref}
+            active={props.selectedCell === cellKey(c.source)}
+            also={!!c.also}
             title={`${c.also ? 'Also reported from' : 'From'} ${sourcesText(chipSources(c))}${c.also ? ' (the same figure as that tag)' : ''}
 Double-click the value for details`}
-            data-testid="source-chip"
-          >
-            {c.also ? <Copy size={9} /> : <FileSpreadsheet size={9} />}
-            {c.sources ? sourcesText(c.sources) : c.source.ref}
-          </span>
+          />
         )}
         <span>{formatIndian(c.display)}</span>
       </button>
@@ -443,29 +443,4 @@ function noteTooltip(note: FormRowNote, hasPy: boolean): string {
     return `${label}: ${parts.length ? `${parts.join(' · ')} (${TIE_TEXT[y.status]})` : TIE_TEXT[y.status]}`
   }
   return [year('CY', note.cy), hasPy ? year('PY', note.py) : null, 'Go to note: F7'].filter(Boolean).join('\n')
-}
-
-/** "Difference CY 0 · PY 0": whether the statement's own totals add up; green at 0. Click: its problems. */
-function DifferenceFooter(props: { difference: FormDifference; hasPy: boolean; onShow(): void }) {
-  const d = props.difference
-  const years = [['CY', d.cy], ...(props.hasPy ? [['PY', d.py]] : [])].filter((y): y is [string, string] => y[1] != null)
-  const balanced = d.issues === 0 && years.every(([, v]) => v.replace(/[-0.,]/g, '') === '') // "0", "0.00", "-0": no float arithmetic on amounts
-  return (
-    <button
-      className={cn('flex shrink-0 items-center gap-2 border-t border-border px-3 py-1 text-left text-[11px] hover:bg-panel-2', balanced ? 'text-ok' : 'text-err')}
-      onClick={props.onShow}
-      title={balanced ? 'Every total of this statement adds up. Click to list its problems.' : `${d.issues} total${d.issues === 1 ? '' : 's'} of this statement don’t add up. Click to list them in Problems.`}
-      data-testid="form-difference"
-      data-balanced={balanced}
-    >
-      <span className="font-medium">Difference</span>
-      {years.map(([label, v], i) => (
-        <span key={label} className="tabular">
-          {i > 0 && '· '}
-          {label} {formatIndian(v)}
-        </span>
-      ))}
-      {d.issues > 0 && <span className="text-muted">({d.issues} total{d.issues === 1 ? '' : 's'} don’t add up)</span>}
-    </button>
-  )
 }

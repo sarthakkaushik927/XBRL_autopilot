@@ -23,29 +23,38 @@
 ## Commands
 ```bash
 pnpm install                         # JS deps (pnpm only, never npm/yarn)
-pnpm dev                             # Electron app in dev (also starts the Python sidecar via uv)
+make dev-server                      # terminal 1: the Python backend on :7860 (hosted separately in production, ADR-0018)
+pnpm dev                             # terminal 2: Electron app in dev; connects to XAP_API_URL (default http://127.0.0.1:7860)
 pnpm test                            # all JS tests (engine + ui)
 make engine-authority                # data/ → knowledge_base/*_engine_authority.json (Python; committed)
 make engine-rules                    # MCA rule workbooks → knowledge_base/*_engine_rules.json + coverage (Python; committed)
 pnpm --filter @xap/engine test       # engine tests only (vitest + ported legacy node:test suite; joins the KB files first)
 pnpm typecheck
 uv sync --extra dev                  # Python deps (dev extra: pytest, Arelle for the XSD tests)
-make dev                             # sidecar alone on :7860
 make test                            # pytest
 make rebuild                         # regenerate knowledge_base + Chroma index
 ```
 
 **Gotchas:**
 - **`ELECTRON_RUN_AS_NODE`:** when Claude launches Electron from inside VS Code, this variable is inherited and Electron runs as plain Node (`electron.app` is undefined). Launch with `env -u ELECTRON_RUN_AS_NODE pnpm dev`.
-- **First sidecar start:** it takes ~60 s while Python compiles bytecode; later starts take ~6 s. The health timeout is 120 s.
+- **Backend first start:** `make dev-server` takes ~60 s the first time while Python compiles bytecode; later starts take ~6 s. The app shows "Backend not reachable" until it answers (Reconnect in the Output tab checks at once).
 - **pnpm build scripts:** pnpm blocks dependency build scripts. Approved: `electron`. Denied: `electron-winstaller` (we use NSIS). See `pnpm-workspace.yaml`.
+
+## Branching
+- **`main` stays intact.** Never commit, merge or push directly to `main` (ours or `upstream`). It is the last known-good app.
+- **All work goes on a branch:** `feat/…`, `fix/…`, `arch/…`, `docs/…`; teammate code is merged on `integrate/<who>-<branch>` first.
+- **The architecture rework may break the old app** (routes, engine authority files, UI). That is allowed on branches; record what broke in `docs/STATUS.md`.
+- **Reaching `main`:** only through a reviewed PR, once the branch's tests pass.
+
+## Team direction
+**Vashu's (Vansh Sharma, remote `upstream`) calls take priority.** They are recorded in [`docs/17-team-direction.md`](docs/17-team-direction.md). Where it disagrees with docs/16, an ADR or a non-negotiable below, doc 17 wins. Add a dated entry there whenever he decides something.
 
 ## Non-negotiables
 1. **Secrets:** never commit `.env`, keys or customer data. The Groq key in dev comes from `.env`. In the packaged app it comes from Settings (safeStorage). Never hard-code or bundle a key.
 2. **Deterministic core:** XML generation and validation live in `engine/` and are pure and deterministic. **AI only proposes**: suggestions and patch lists that the user accepts. The AI never writes facts directly.
 3. **Financial precision:** use the engine's decimal type for money. Never use JS floats for amounts.
 4. **Electron security:** `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. All privileged work goes through typed IPC in `ui/electron/preload`.
-5. **Sidecar is stateless:** the project state lives in Electron and `.axbrl`. The sidecar gets compact payloads per request.
+5. **Backend is stateless and hosted separately** ([ADR-0018](docs/decisions/ADR-0018-hosted-backend-and-responsive-editor.md)): the app never starts it; it connects to `XAP_API_URL`. The project state lives in Electron and `.axbrl`; the backend gets compact payloads per request.
 6. **Docs discipline:** after finishing a feature, update the matching doc in `docs/` and add a dated line to `docs/STATUS.md`. Record architecture changes as an ADR in `docs/decisions/`.
 7. **Clean code, SOLID, reusable:**
    - One responsibility per module.
@@ -56,4 +65,4 @@ make rebuild                         # regenerate knowledge_base + Chroma index
    - Everything the UI shows about a taxonomy goes through the `TaxonomyCatalog` port: statement list (`/elrs`), Form structure (`/elrs/{code}/tree`), element search and details.
    - Never hardcode taxonomy data. `lagacy_js/` is reference reading only.
    - The engine authority is built by the Python ingestion too: the taxonomy half served by `/{id}/authority` ([ADR-0010](docs/decisions/ADR-0010-engine-authority-from-knowledge-base.md)), the executable business rules by `/{id}/engine-rules` ([ADR-0011](docs/decisions/ADR-0011-business-rules-from-knowledge-base.md)).
-9. **Scope:** v1 is C&I 2016 **and** Ind AS 2017 (AOC-4 XBRL). Keep code taxonomy-generic: never key on ELR codes (each taxonomy numbers differently), group ELRs by title (`classify_elr`). Costing is Phase 12. Real client fixtures are in `data/` (see `docs/12-reference-data.md`); never send them to an AI service.
+9. **Scope:** v1 is C&I 2016 **and** Ind AS 2017 (AOC-4 XBRL). Keep code taxonomy-generic: never key on ELR codes (each taxonomy numbers differently), group ELRs by title (`classify_elr`). Costing is Phase 12. Real client fixtures are in `data/` and `notebooks/user_data/` (see `docs/12-reference-data.md`). Team decisions (docs/17): line-item names and headings may go to the AI (2026-11-21); **amounts may too** (2026-11-22, Ind AS Fix with AI). Identity data (company name, CIN, PAN, DINs) and whole workbooks never do. The workbooks in `data/` and `notebooks/user_data/` are team sample data, usable for live AI runs.

@@ -1,6 +1,6 @@
 /** Renderer view of the open filing + the use cases the UI triggers. All state lives in main. */
 import { create } from 'zustand'
-import type { ElrInfo, ImportReportView, InstanceImportMode, NewFilingInput, ProjectSummary, RecentProject, RecoveryItem } from '@shared/project'
+import type { ElrInfo, ImportReportView, InstanceImportMode, NewFilingInput, ProjectSummary, RecentProject, RecoveryItem, SavedProjectsListing } from '@shared/project'
 import { unwrap } from '@/lib/result'
 import { toast } from './toast'
 
@@ -8,16 +8,23 @@ interface ProjectState {
   summary: ProjectSummary | null
   recent: RecentProject[]
   recovery: RecoveryItem[]
+  /** filings in the projects folder (docs/17) */
+  saved: SavedProjectsListing
   elrs: ElrInfo[]
   /** project id the ELR list belongs to (each project may use another taxonomy) */
   elrsFor: string | null
   newFilingOpen: boolean
+  /** the New project dialog creates a project, or edits the open Ind AS filing's settings (Filing settings…) */
+  newFilingMode: 'new' | 'settings'
   importXbrlOpen: boolean
   /** shown after an XBRL instance import */
   importReport: ImportReportView | null
   init(): () => void
   refreshLists(): Promise<void>
+  openProjectsFolder(): Promise<void>
   openNewFiling(): void
+  /** Filing → Filing settings: the same dialog, filled with the open filing's settings */
+  openFilingSettings(): void
   closeNewFiling(): void
   /** returns form problems on validation failure, [] on success */
   create(input: NewFilingInput): Promise<string[]>
@@ -59,9 +66,11 @@ export const useProject = create<ProjectState>((set, get) => {
     summary: null,
     recent: [],
     recovery: [],
+    saved: { dir: '', projects: [] },
     elrs: [],
     elrsFor: null,
     newFilingOpen: false,
+    newFilingMode: 'new',
     importXbrlOpen: false,
     importReport: null,
 
@@ -79,11 +88,14 @@ export const useProject = create<ProjectState>((set, get) => {
     },
 
     refreshLists: async () => {
-      const [recent, recovery] = await Promise.all([api().recent(), api().recovery()])
-      set({ recent, recovery })
+      const [recent, recovery, saved] = await Promise.all([api().recent(), api().recovery(), api().saved()])
+      set({ recent, recovery, saved })
     },
 
-    openNewFiling: () => set({ newFilingOpen: true }),
+    openProjectsFolder: () => api().openFolder(),
+
+    openNewFiling: () => set({ newFilingOpen: true, newFilingMode: 'new' }),
+    openFilingSettings: () => set({ newFilingOpen: true, newFilingMode: 'settings' }),
     closeNewFiling: () => set({ newFilingOpen: false }),
 
     create: async (input) => {

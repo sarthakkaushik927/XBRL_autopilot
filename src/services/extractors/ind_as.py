@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from python_calamine import CalamineWorkbook
@@ -9,6 +10,12 @@ from src.constants import (
 )
 from src.utils.main_utils import save_json
 from src.core.logger import logger
+
+SCHEMA_DATE_SUFFIX = re.compile(r"-\d{4}-\d{2}-\d{2}\.xsd$")
+# The entry point instances must reference. Not in the taxonomy files: it is where the MCA hosts them. MCA XBRL
+# Validator V3: "Please use new schema URL: https://www.mca.gov.in/V3XBRL/ instead of V2 Schema URL:
+# http://www.mca.gov.in/XBRL/ in all taxonomies"; this address is the one the MCA-accepted Dixon Ind AS instance uses.
+INDAS_SCHEMA_REF = "https://www.mca.gov.in/V3XBRL/2017/07/16/Taxonomy/Ind/in-ci-ent-2017-03-31.xsd"
 
 
 class IndASTaxonomyEngine:
@@ -23,6 +30,9 @@ class IndASTaxonomyEngine:
         self.calculation = {}
         self.definition = {}
         self.rules = {}
+        self.namespaces: dict[str, str] = {}
+        # xbrldt:contextElement of the hypercubes: where an instance writes its dimensions (segment / scenario)
+        self.context_elements: set[str] = set()
 
     @staticmethod
     def clean_tag(tag: str) -> str:
@@ -39,10 +49,14 @@ class IndASTaxonomyEngine:
         """Step 1: Parse Concepts from all .xsd files"""
         logger.info("indas_engine.parsing_schemas")
         for xsd in sorted(self.tax_dir.rglob("*.xsd")):
+            tree = ET.parse(xsd)
+            # the schema's own prefix is its file name without the version date (in-ca-2017-03-31.xsd -> in-ca)
+            target_ns = tree.getroot().attrib.get("targetNamespace")
+            if target_ns and SCHEMA_DATE_SUFFIX.search(xsd.name):
+                self.namespaces[SCHEMA_DATE_SUFFIX.sub("", xsd.name)] = target_ns
             prefix = "in-ca" if "in-ca" in xsd.name else ("ind-as" if "ind-as" in xsd.name else None)
             if not prefix:
                 continue
-            tree = ET.parse(xsd)
             for el in tree.getroot().iter():
                 if self.clean_tag(el.tag) == "element":
                     name = el.attrib.get("name")
@@ -60,6 +74,10 @@ class IndASTaxonomyEngine:
                         "abstract": el.attrib.get("abstract") == "true",
                         "labels": {},
                     }
+                    typed_domain = self.get_clean_attrib(el, "typedDomainRef")
+                    if typed_domain:
+                        # a typed axis: its member values are written inside this domain element (#in-ca_X -> in-ca:X)
+                        self.concepts[qname]["typedDomain"] = typed_domain.lstrip("#").replace("_", ":", 1)
                     if elem_id:
                         self.id_to_qname[elem_id] = qname
                         self.id_to_qname[f"{xsd.name}#{elem_id}"] = qname
@@ -187,6 +205,9 @@ class IndASTaxonomyEngine:
                         from_concept = locs.get(self.get_clean_attrib(arc, "from"))
                         to_concept = locs.get(self.get_clean_attrib(arc, "to"))
                         order = float(self.get_clean_attrib(arc, "order") or "1.0")
+                        context_element = self.get_clean_attrib(arc, "contextElement")
+                        if context_element:
+                            self.context_elements.add(context_element)
                         if from_concept and to_concept:
                             self.definition.setdefault(elr_code, []).append({
                                 "arcrole": arcrole,
@@ -269,6 +290,12 @@ class IndASTaxonomyEngine:
             consolidated_count=len(consolidated),
         )
 
+    def _dimension_context_element(self) -> str:
+        """The one context element every hypercube uses (Ind AS 2017: scenario)."""
+        if len(self.context_elements) != 1:
+            raise ValueError(f"hypercubes use more than one context element: {sorted(self.context_elements)}")
+        return next(iter(self.context_elements))
+
     def build(self) -> dict:
         """Master builder executing all steps in sequence."""
         with logger.span("indas_engine.build"):
@@ -282,6 +309,10 @@ class IndASTaxonomyEngine:
             final_kb = {
                 "meta": {
                     "taxonomy": "ind_as",
+                    # what an instance needs to point at this taxonomy (written by the XML generator)
+                    "schemaRef": INDAS_SCHEMA_REF,
+                    "namespaces": dict(sorted(self.namespaces.items())),
+                    "dimensionContextElement": self._dimension_context_element(),
                     "totalConcepts": len(self.concepts),
                     "totalPresentationELRs": len(self.presentation),
                     "totalCalculationELRs": len(self.calculation),

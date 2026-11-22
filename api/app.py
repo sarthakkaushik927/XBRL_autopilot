@@ -1,3 +1,20 @@
+"""The FastAPI sidecar app.
+
+`make dev-backend` serves it with `uvicorn api.app:app`. The desktop app starts it with `python -m api.app`
+(dev) or as the PyInstaller exe built from this file (sidecar.spec), which run `run()` below.
+"""
+import os
+import sys
+
+# In frozen PyInstaller mode, source code is not available on disk; disable logfire's pydantic plugin AST inspect
+if getattr(sys, "frozen", False):
+    os.environ["PYDANTIC_DISABLE_PLUGINS"] = "1"
+
+# One BLAS / OpenMP thread unless set: with a thread per core, OpenBLAS reserves buffers per thread and the
+# reranker / embedding load failed with "Memory allocation still failed" on a 16-thread laptop (2026-11-21).
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 import hmac
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -37,6 +54,21 @@ except Exception:
     pass
 
 
+@app.middleware("http")
+async def require_token(request: Request, call_next):
+    """When launched by the desktop app, every route except /health needs the per-launch token.
+
+    `make dev` (no XAP_TOKEN) keeps the API open for local development.
+    """
+    expected = get_app_config().xap_token
+    if expected and request.url.path not in PUBLIC_PATHS:
+        supplied = request.headers.get("authorization", "")
+        if not hmac.compare_digest(supplied, f"Bearer {expected}"):
+            return JSONResponse(
+                status_code=401,
+                content={"data": None, "message": "Unauthorized", "success": False, "errors": None},
+            )
+    return await call_next(request)
 
 
 @app.get("/health")
@@ -63,3 +95,18 @@ app.include_router(router=conversation_router.router, prefix="/api/v1")
 app.include_router(router=chat_router.router, prefix="/api/v1")
 
 
+def run() -> None:
+    """Desktop-app entry point: loopback only, exits with the app that launched it."""
+    import uvicorn
+
+    from src.core.parent_watch import watch_parent
+
+    # exit with the desktop app even when it crashes or is force-killed (no orphaned sidecars)
+    parent = os.environ.get("XAP_PARENT_PID", "")
+    watch_parent(int(parent) if parent.isdigit() else None)
+    # Loopback only — never expose the sidecar on the network.
+    uvicorn.run(app, host="127.0.0.1", port=get_app_config().xap_port, log_level="info", access_log=False)
+
+
+if __name__ == "__main__":
+    run()

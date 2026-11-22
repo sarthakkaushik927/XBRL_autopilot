@@ -1,0 +1,379 @@
+/**
+ * Pure helpers for the Ind AS pipeline screen (docs/17): canonical rows → taggable rows for every sheet
+ * (docs/15 §5), the suggestion keys, master-field prefill and the /generateXML input. No React, no IPC
+ * (tested in ui/test/indas-model.test.ts).
+ */
+import { previousYearOf } from '@xap/engine/basics'
+import {
+  LINE_SHEETS,
+  PPE_FIELDS,
+  PPE_TABLE,
+  SOCIE_TABLE,
+  type CanonicalRow,
+  type ConceptSuggestion,
+  type GenerateXmlInput,
+  type IndasDetails,
+  type IndasDraft,
+  type MasterField,
+  type NoteText,
+  type PeriodRole,
+  type Signatory,
+  type StatementKey,
+  type TransformResult,
+} from '@shared/indas'
+
+/** A line of a statement or of the notes ([L]). */
+export interface TagRow {
+  id: string
+  statement: StatementKey
+  label: string
+  breadcrumb: string
+  note: string
+  cy: number | null
+  py: number | null
+  suggestions: ConceptSuggestion[]
+  /** the concept the user accepted ('' = not tagged) */
+  concept: string
+  /** for an instant concept: closing (end) or opening (start) balance */
+  periodRole: PeriodRole
+}
+
+/** A changes-in-equity movement: concept (the movement) × member (the equity component). */
+export interface SocieRow {
+  id: string
+  component: string
+  description: string
+  cy: number | null
+  py: number | null
+  suggestions: ConceptSuggestion[]
+  concept: string
+  memberSuggestions: ConceptSuggestion[]
+  member: string
+  periodRole: PeriodRole
+}
+
+/** A PPE schedule row: one asset class (a member); the columns map to fixed fields (no AI needed). */
+export interface PpeRow {
+  id: string
+  assetClass: string
+  amounts: Record<string, number | null>
+  memberSuggestions: ConceptSuggestion[]
+  member: string
+}
+
+export interface TextBlockRow {
+  id: string
+  heading: string
+  content: string
+  suggestions: ConceptSuggestion[]
+  concept: string
+}
+
+export interface FilingMeta {
+  nature: 'Standalone' | 'Consolidated'
+  startDate: string
+  endDate: string
+}
+
+const text = (v: CanonicalRow[string] | undefined) => (v === null || v === undefined ? '' : String(v).trim())
+
+/** A canonical amount as a number; blanks, dashes and non-numbers are null. Values pass through unchanged. */
+export function amount(v: CanonicalRow[string] | undefined): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v !== 'string') return null
+  const t = v.replace(/,/g, '').trim()
+  if (t === '' || t === '-') return null
+  const n = Number(t)
+  return Number.isFinite(n) ? n : null
+}
+
+/** The lines of every line-tagged sheet (BS, P&L, cash flow, notes) that carry an amount, in sheet order. */
+export function rowsFromTransform(t: TransformResult): TagRow[] {
+  const out: TagRow[] = []
+  for (const st of LINE_SHEETS) {
+    ;(t.sheets[st.sheet] ?? []).forEach((r, i) => {
+      const cy = amount(r.Current_Year_Amount)
+      const py = amount(r.Previous_Year_Amount)
+      const label = text(r.Line_Item)
+      if (!label || (cy === null && py === null)) return
+      out.push({
+        id: `${st.key}:${i}`,
+        statement: st.key,
+        label,
+        breadcrumb: text(r.Breadcrumb_Hierarchy),
+        note: text(r.Note_No).replace(/\.0$/, ''),
+        cy,
+        py,
+        suggestions: [],
+        concept: '',
+        periodRole: 'end',
+      })
+    })
+  }
+  return out
+}
+
+export function socieFromTransform(t: TransformResult): SocieRow[] {
+  return (t.sheets[SOCIE_TABLE.sheet] ?? []).flatMap((r, i) => {
+    const cy = amount(r.Current_Year_Amount)
+    const py = amount(r.Previous_Year_Amount)
+    const description = text(r.Transaction_Description)
+    if (!description || (cy === null && py === null)) return []
+    return [{ id: `socie:${i}`, component: text(r.Equity_Component), description, cy, py, suggestions: [], concept: '', memberSuggestions: [], member: '', periodRole: 'end' as const }]
+  })
+}
+
+export function ppeFromTransform(t: TransformResult): PpeRow[] {
+  return (t.sheets[PPE_TABLE.sheet] ?? []).flatMap((r, i) => {
+    const assetClass = text(r.Asset_Class)
+    if (!assetClass) return []
+    const amounts = Object.fromEntries(Object.keys(PPE_FIELDS).map((c) => [c, amount(r[c])]))
+    return [{ id: `ppe:${i}`, assetClass, amounts, memberSuggestions: [], member: '' }]
+  })
+}
+
+/** What the tagger searches with: the line item; its headings go along as context (docs/15 §3). */
+export function suggestionKey(r: Pick<TagRow, 'label'>): string {
+  return r.label
+}
+
+/** Accept the top suggestion on every row the user hasn't tagged yet. */
+export function acceptTopSuggestions<T extends { concept: string; suggestions: ConceptSuggestion[] }>(rows: T[]): T[] {
+  return rows.map((r) => (r.concept || !r.suggestions[0] ? r : { ...r, concept: r.suggestions[0].qname }))
+}
+
+export function acceptTopMembers<T extends { member: string; memberSuggestions: ConceptSuggestion[] }>(rows: T[]): T[] {
+  return rows.map((r) => (r.member || !r.memberSuggestions[0] ? r : { ...r, member: r.memberSuggestions[0].qname }))
+}
+
+/**
+ * What Auto-tag still has to ask for: the lines with no suggestions yet. A cancelled run keeps what it got, so running
+ * it again continues with these only.
+ */
+export const autoTagTodo = {
+  lines: (rows: readonly TagRow[], statement: StatementKey) => rows.filter((r) => r.statement === statement && r.suggestions.length === 0 && !r.id.startsWith('zero:')),
+  socie: (socie: readonly SocieRow[]) => socie.filter((r) => r.suggestions.length === 0),
+  components: (socie: readonly SocieRow[]) => [...new Set(socie.filter((r) => r.memberSuggestions.length === 0).map((r) => r.component).filter(Boolean))],
+  ppe: (ppe: readonly PpeRow[]) => ppe.filter((r) => r.memberSuggestions.length === 0),
+  texts: (texts: readonly TextBlockRow[]) => texts.filter((r) => r.heading.trim() && r.suggestions.length === 0),
+}
+
+/** How many lines Auto-tag would still ask for (0 = everything has suggestions). */
+export function autoTagRemaining(w: Pick<FilingDraft, 'rows' | 'socie' | 'ppe' | 'texts'>): number {
+  return (
+    LINE_SHEETS.reduce((n, st) => n + autoTagTodo.lines(w.rows, st.key).length, 0) +
+    autoTagTodo.socie(w.socie).length +
+    autoTagTodo.components(w.socie).length +
+    autoTagTodo.ppe(w.ppe).length +
+    autoTagTodo.texts(w.texts).length
+  )
+}
+
+/**
+ * After Auto-tag, every line the user hasn't tagged takes its top suggestion (PR #15 review, point 8: no "Accept
+ * suggestions" step). Lines tagged by hand are kept; the AI's picks stay marked so they can be checked.
+ */
+export function applyTopSuggestions(w: Pick<FilingDraft, 'rows' | 'socie' | 'ppe' | 'texts'>): Pick<FilingDraft, 'rows' | 'socie' | 'ppe' | 'texts'> & { applied: number } {
+  const rows = acceptTopSuggestions(w.rows)
+  const socie = acceptTopMembers(acceptTopSuggestions(w.socie))
+  const ppe = acceptTopMembers(w.ppe)
+  const texts = acceptTopSuggestions(w.texts)
+  const changed = <T,>(a: readonly T[], b: readonly T[]) => a.filter((x, i) => x !== b[i]).length
+  return { rows, socie, ppe, texts, applied: changed(rows, w.rows) + changed(socie, w.socie) + changed(ppe, w.ppe) + changed(texts, w.texts) }
+}
+
+/** Whether the accepted concept is reported at an instant (then the row can be an opening balance). */
+export function isInstant(concept: string, suggestions: ConceptSuggestion[]): boolean {
+  return suggestions.find((s) => s.qname === concept)?.periodType === 'instant'
+}
+
+/** The /generateXML period and nature, from the filing settings. */
+export function metaOf(d: IndasDetails): FilingMeta {
+  return { nature: d.reportType, startDate: d.cy.start, endDate: d.cy.end }
+}
+
+/** The master values the filing settings already give (period, nature, company name, CIN, rounding), by local name. */
+export function knownMasters(d: IndasDetails): Record<string, string> {
+  return {
+    DateOfStartOfReportingPeriod: d.cy.start,
+    DateOfEndOfReportingPeriod: d.cy.end,
+    NatureOfReportStandaloneConsolidated: d.reportType,
+    NameOfCompany: d.companyName,
+    CorporateIdentityNumber: d.cin,
+    LevelOfRoundingUsedInFinancialStatements: d.level,
+  }
+}
+
+/** Fills the master fields the settings already know; the user's own values win. */
+export function prefillMasters(fields: MasterField[], known: Record<string, string>, current: Record<string, string>): Record<string, string> {
+  const out = { ...current }
+  for (const f of fields) {
+    const local = f.qname.split(':').pop() ?? f.qname
+    if (!out[f.qname] && known[local]) out[f.qname] = known[local]
+  }
+  return out
+}
+
+/** The master values that follow the settings: dropped so a settings change recomputes them. */
+export function withoutKnown(values: Record<string, string>, known: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(values).filter(([k]) => !((k.split(':').pop() ?? k) in known)))
+}
+
+/** Old (version 1) drafts kept the period in `meta` and the company in the masters: their settings. */
+export function detailsFromLegacy(meta: FilingMeta, company: Record<string, string>): IndasDetails {
+  const by = (local: string) => Object.entries(company).find(([k]) => k.endsWith(`:${local}`))?.[1] ?? ''
+  return {
+    taxonomy: 'ind-as-2017',
+    companyName: by('NameOfCompany'),
+    cin: by('CorporateIdentityNumber'),
+    reportType: meta.nature,
+    cy: { start: meta.startDate, end: meta.endDate },
+    // old drafts always reported a previous year: the year before the current one
+    py: previousYearOf({ start: meta.startDate, end: meta.endDate }),
+    level: 'Actual',
+    statementPlaces: 0,
+  }
+}
+
+/** How a master field is edited, from its XBRL item type. */
+export function fieldKind(type: string): 'date' | 'boolean' | 'text' | 'longtext' {
+  if (/date/i.test(type)) return 'date'
+  if (/boolean/i.test(type)) return 'boolean'
+  if (/textBlock/i.test(type)) return 'longtext'
+  return 'text'
+}
+
+export interface FilingDraft {
+  rows: TagRow[]
+  socie: SocieRow[]
+  ppe: PpeRow[]
+  texts: TextBlockRow[]
+  details: IndasDetails
+  company: Record<string, string>
+  auditor: Record<string, string>
+  signatories: Signatory[]
+}
+
+/** Something Generate still needs, and where it is fixed (double-click in Problems goes there). */
+export interface Readiness {
+  message: string
+  fix: 'settings' | 'masters' | null
+}
+
+/** Problems that would make /generateXML refuse, found before sending (the backend checks again). */
+export function readinessProblems(input: Pick<FilingDraft, 'rows' | 'details' | 'signatories' | 'company'> & { companyFields: MasterField[] }): Readiness[] {
+  const p: Readiness[] = []
+  const meta = metaOf(input.details)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(meta.endDate)) p.push({ message: 'Enter the financial year start and end dates (Filing → Filing settings).', fix: 'settings' })
+  if (!input.rows.some((r) => r.concept)) p.push({ message: 'Tag at least one statement line.', fix: null })
+  const missing = input.companyFields.filter((f) => !(input.company[f.qname] ?? '').trim())
+  if (missing.length) p.push({ message: `Fill the company details: ${missing.map((f) => f.label).join(', ')}.`, fix: 'masters' })
+  if (input.signatories.length < 2) p.push({ message: 'Add at least 2 signatory directors.', fix: 'masters' })
+  input.signatories.forEach((s, i) => {
+    if (!/^\d{8}$/.test(s.din.trim())) p.push({ message: `Signatory ${i + 1}: DIN must be 8 digits.`, fix: 'masters' })
+  })
+  return p
+}
+
+export function buildGenerateInput(s: FilingDraft & { companyNameField?: string }): GenerateXmlInput {
+  const lines = (key: StatementKey) =>
+    s.rows.filter((r) => r.statement === key && r.concept).map((r) => ({ concept: r.concept, cy: r.cy, py: r.py, periodRole: r.periodRole }))
+  const statements = Object.fromEntries(LINE_SHEETS.map((st) => [st.key, lines(st.key)])) as GenerateXmlInput['statements']
+  const socieRows = s.socie
+    .filter((r) => r.concept && r.member)
+    .map((r) => ({ member: r.member, concept: r.concept, cy: r.cy, py: r.py, ...(r.periodRole === 'start' ? { periodRole: 'start' } : {}) }))
+  // his PPE checks do arithmetic on every field: a blank schedule cell is 0. Disposals are a reduction his
+  // roll-forward subtracts (opening + additions - disposals = closing), so they go as positive amounts even when
+  // the schedule prints them with a minus sign.
+  const ppeRows = s.ppe
+    .filter((r) => r.member)
+    .map((r) => ({
+      member: r.member,
+      ...Object.fromEntries(Object.entries(PPE_FIELDS).map(([col, field]) => [field, ppeAmount(col, r.amounts[col] ?? null)])),
+    }))
+  const notes: NoteText[] = s.texts.filter((t) => t.concept && t.content.trim()).map((t) => ({ concept: t.concept, content: t.content }))
+  const nameKey = s.companyNameField ?? Object.keys(s.company).find((k) => k.endsWith(':NameOfCompany')) ?? ''
+  return {
+    meta: metaOf(s.details),
+    master: { company: s.company, auditor: s.auditor, signatories: s.signatories },
+    statements,
+    tables: [
+      { table: SOCIE_TABLE.table, axis: SOCIE_TABLE.axis, rows: socieRows },
+      { table: PPE_TABLE.table, axis: PPE_TABLE.axis, rows: ppeRows },
+    ],
+    notes,
+    companyName: s.details.companyName.trim() || (nameKey && s.company[nameKey]) || 'Filing',
+  }
+}
+
+/** Amounts with Indian digit grouping (display only); blank for no amount. */
+export function formatAmount(v: number | null): string {
+  return v === null ? '' : v.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+}
+
+/** What a saved Ind AS project holds (indas.json). Bump DRAFT_VERSION when the shape changes. */
+export const DRAFT_VERSION = 2
+export interface IndasWork extends FilingDraft {
+  transform: TransformResult | null
+}
+
+export function toDraft(w: IndasWork): IndasDraft {
+  const { transform, rows, socie, ppe, texts, details, company, auditor, signatories } = w
+  return { version: DRAFT_VERSION, transform, rows, socie, ppe, texts, details, company, auditor, signatories }
+}
+
+/** The saved work back as state; missing parts become empty, a version 1 draft's `meta` becomes its settings. */
+export function fromDraft(d: Record<string, unknown>): IndasWork {
+  const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+  const obj = <T>(v: unknown, fallback: T): T => (v && typeof v === 'object' ? (v as T) : fallback)
+  const company = obj<Record<string, string>>(d.company, {})
+  const legacyMeta = obj<FilingMeta>(d.meta, { nature: 'Standalone', startDate: '', endDate: '' })
+  return {
+    details: (d.details as IndasDetails | undefined) ?? detailsFromLegacy(legacyMeta, company),
+    transform: (d.transform as TransformResult | null) ?? null,
+    rows: arr<TagRow>(d.rows),
+    socie: arr<SocieRow>(d.socie),
+    ppe: arr<PpeRow>(d.ppe),
+    texts: arr<TextBlockRow>(d.texts),
+    company,
+    auditor: obj<Record<string, string>>(d.auditor, {}),
+    signatories: arr<Signatory>(d.signatories),
+  }
+}
+
+/** The name a project is saved under: the company field, else the workbook's name. */
+export function projectCompanyName(w: Pick<IndasWork, 'company' | 'transform'> & { details?: IndasDetails | null }): string {
+  const typed = w.details?.companyName.trim() || Object.entries(w.company).find(([k]) => k.endsWith(':NameOfCompany'))?.[1]?.trim()
+  return typed || (w.transform?.fileName ?? '').replace(/\.[^.]+$/, '') || 'Untitled company'
+}
+
+/** "Empty mandatory → 0": a zero line for each mandatory amount nothing reports yet (no workbook cell behind it). */
+export function zeroRows(statement: StatementKey, nodes: readonly { qname: string; label: string }[], existing: readonly TagRow[]): TagRow[] {
+  const have = new Set(existing.map((r) => r.id))
+  return nodes
+    .map((n) => ({ id: `zero:${statement}:${n.qname}`, statement, label: n.label, breadcrumb: '', note: '', cy: 0, py: 0, suggestions: [], concept: n.qname, periodRole: 'end' as const }))
+    .filter((r) => !have.has(r.id))
+}
+
+/** Notes rows grouped by note number, in sheet order (the Notes tab shows one collapsible group per note). */
+export function groupByNote(rows: TagRow[]): { note: string; rows: TagRow[] }[] {
+  const out: { note: string; rows: TagRow[] }[] = []
+  for (const r of rows) {
+    const key = r.note || '—'
+    const g = out.find((x) => x.note === key)
+    if (g) g.rows.push(r)
+    else out.push({ note: key, rows: [r] })
+  }
+  return out
+}
+
+/** The tagged lines of a statement, as the Difference check takes them. */
+export function checkRows(rows: TagRow[], statement: StatementKey) {
+  return rows.filter((r) => r.statement === statement && r.concept).map((r) => ({ concept: r.concept, cy: r.cy, py: r.py, periodRole: r.periodRole }))
+}
+
+/** A PPE schedule amount as /generateXML's roll-forward expects it: blank = 0, disposals positive. */
+export function ppeAmount(column: string, v: number | null): number {
+  if (v === null) return 0
+  return /Disposals$/.test(column) ? Math.abs(v) : v
+}

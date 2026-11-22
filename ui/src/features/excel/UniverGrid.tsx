@@ -1,16 +1,16 @@
 /**
- * Read-only Excel view (Univer) with the mapping overlay and two-way linkage.
- * Overlay colours are highlight layers, never cell styles, so the client's workbook is never modified.
+ * Read-only Excel view (Univer) with a tag overlay and two-way linkage. Presentational: what is highlighted, which
+ * cell to reveal and what a click does come in as props, so a C&I filing (mapping) and an Ind AS filing (canonical
+ * sheets) use the same grid (ADR-0017). Overlay colours are highlight layers, never cell styles: the workbook is
+ * never modified.
  */
 import { useEffect, useRef } from 'react'
 import { createUniver, LocaleType, mergeLocales, type FUniver, type IDisposable } from '@univerjs/presets'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
 import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-US'
 import '@univerjs/preset-sheets-core/lib/index.css'
-import type { MappingView } from '@shared/editor'
-import { cellKey, MAX_BLOCK_CELLS, MAX_RANGE_CELLS, rangeA1, rangeOf, type CellRef, type WorkbookModel } from '@shared/workbook'
+import { cellKey, compactRanges, MAX_BLOCK_CELLS, MAX_RANGE_CELLS, rangeA1, rangeOf, type CellRef, type WorkbookModel } from '@shared/workbook'
 import { registerTestHook } from '@/lib/test-hooks'
-import { useEditor } from '@/stores/editor'
 import { toUniverWorkbook } from './univer-data'
 
 /** Overlay palette (docs/08-ui-ux.md "Mapping colours"). */
@@ -50,14 +50,40 @@ function revealCell(univerAPI: FUniver | null, cell: CellRef): boolean {
   }
 }
 
-export function UniverGrid({ model }: { model: WorkbookModel }) {
+/** The overlay: cells by tag status, suggested table blocks (outlined) and the cells linked to the selected fact. */
+export interface GridMarks {
+  approved: CellRef[]
+  suggested: CellRef[]
+  rejected?: CellRef[]
+  blocks?: CellRef[]
+  linked: CellRef[]
+}
+
+export interface UniverGridProps {
+  model: WorkbookModel
+  marks: GridMarks
+  /** a request to show a cell; `seq` changes on every request */
+  reveal: { cell: CellRef; seq: number } | null
+  /** the selected cell (shown as data-cellkey for tests) */
+  selected: CellRef | null
+  /** a click / drag: the selected cell (a one-column run is a range) and, for a block over rows and columns, the block */
+  onSelect(cell: CellRef, block: CellRef | null): void
+  /** a double-click on the selected cell */
+  onActivate?(cell: CellRef): void
+  /** the user (or a reveal) switched the shown sheet */
+  onSheetChange?(sheet: string): void
+}
+
+export function UniverGrid(props: UniverGridProps) {
+  const { model, marks, reveal, selected } = props
   const host = useRef<HTMLDivElement>(null)
   const apiRef = useRef<FUniver | null>(null)
-  const overlays = useRef<IDisposable[]>([])
-  const mappings = useEditor((s) => s.mappings)
-  const blockSuggestions = useEditor((s) => s.blockSuggestions)
-  const selection = useEditor((s) => s.selection)
-  const reveal = useEditor((s) => s.reveal)
+  // two overlay layers: the tag status colours, and the selected line (redrawn alone on every click)
+  const statusLayer = useRef<IDisposable[]>([])
+  const linkedLayer = useRef<IDisposable[]>([])
+  // Univer's event handlers are registered once per workbook: they read the latest props through this ref
+  const latest = useRef(props)
+  latest.current = props
 
   // ---- create Univer for this workbook
   useEffect(() => {
@@ -92,7 +118,10 @@ export function UniverGrid({ model }: { model: WorkbookModel }) {
 
       // Univer 1.4: the selection events (SelectionMoveEnd, not SelectionChanged) start firing only after the grid's
       // first few clicks, while CellPointerUp fires on every click and after a drag. The payloads' `selections` can be
-      // empty, so the active range is read from the workbook itself (selectCell ignores repeats).
+      // empty, so the active range is read from the workbook itself. Univer also fires them for its own work (drawing
+      // the overlay, a reveal), so only a changed selection is reported; a click always is (a repeat click re-focuses
+      // the fact). Reporting every event looped: report → overlay redrawn → event → report (renderer out of memory).
+      let lastSelection = ''
       const onSelection = () => {
         const wb = univerAPI.getActiveWorkbook()
         const range = wb?.getActiveRange()
@@ -102,10 +131,14 @@ export function UniverGrid({ model }: { model: WorkbookModel }) {
         let g = { r1: range.getRow(), c1: range.getColumn(), r2: range.getLastRow(), c2: range.getLastColumn() }
         // a block over several rows and columns can be mapped to a table ("Map as table"); the selection is its first cell
         const isBlock = g.c2 > g.c1 && g.r2 > g.r1 && (g.r2 - g.r1 + 1) * (g.c2 - g.c1 + 1) <= MAX_BLOCK_CELLS
-        useEditor.getState().setBlockRange(isBlock ? { workbook: model.source, sheet: ws.getSheetName(), ref: rangeA1(g) } : null)
+        const block = isBlock ? { workbook: model.source, sheet: ws.getSheetName(), ref: rangeA1(g) } : null
         // only a one-column run of cells can be summed; a block, a whole column or the whole sheet means its first cell
         if (g.c2 !== g.c1 || g.r2 - g.r1 + 1 > MAX_RANGE_CELLS) g = { r1: g.r1, c1: g.c1, r2: g.r1, c2: g.c1 }
-        useEditor.getState().selectCell({ workbook: model.source, sheet: ws.getSheetName(), ref: rangeA1(g) })
+        const cell = { workbook: model.source, sheet: ws.getSheetName(), ref: rangeA1(g) }
+        const key = `${cellKey(cell)}|${block?.ref ?? ''}`
+        if (key === lastSelection) return
+        lastSelection = key
+        latest.current.onSelect(cell, block)
       }
 
       // Double-click interaction for manual XBRL tagging
@@ -117,16 +150,15 @@ export function UniverGrid({ model }: { model: WorkbookModel }) {
         const now = Date.now()
         if (now - lastOpenTime < 500) return
         lastOpenTime = now
-        const cell = useEditor.getState().selection.cell
-        if (cell) {
-          useEditor.getState().openManualTag({ cell })
-        }
+        const cell = latest.current.selected
+        if (cell) latest.current.onActivate?.(cell)
       }
 
       const onPointerUp = () => {
+        lastSelection = ''
         onSelection()
         const now = Date.now()
-        const cur = useEditor.getState().selection.cell
+        const cur = latest.current.selected
         const key = cur ? cellKey(cur) : ''
         if (key && key === lastCell && now - lastClickTime < 450) {
           lastClickTime = 0
@@ -148,7 +180,11 @@ export function UniverGrid({ model }: { model: WorkbookModel }) {
         univerAPI.addEvent(univerAPI.Event.CellPointerUp, onPointerUp),
         univerAPI.addEvent(univerAPI.Event.SelectionMoveEnd, onSelection),
         univerAPI.addEvent(univerAPI.Event.SelectionChanged, onSelection),
-        univerAPI.addEvent(univerAPI.Event.ActiveSheetChanged, () => drawOverlay()),
+        univerAPI.addEvent(univerAPI.Event.ActiveSheetChanged, () => {
+          drawOverlay()
+          const name = univerAPI.getActiveWorkbook()?.getActiveSheet()?.getSheetName()
+          if (name) latest.current.onSheetChange?.(name)
+        }),
       ]
       drawOverlay()
     }, 0)
@@ -156,8 +192,8 @@ export function UniverGrid({ model }: { model: WorkbookModel }) {
       clearTimeout(create)
       if (dblClickCleanup) dblClickCleanup()
       subs.forEach((d) => d.dispose())
-      overlays.current.forEach((d) => d.dispose())
-      overlays.current = []
+      clearLayer(statusLayer)
+      clearLayer(linkedLayer)
       apiRef.current = null
       const univer = instance
       if (univer) setTimeout(() => univer.dispose(), 0)
@@ -165,32 +201,43 @@ export function UniverGrid({ model }: { model: WorkbookModel }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model])
 
-  // ---- overlay: tag status colours + the cell linked to the selected fact
-  function drawOverlay(): void {
-    const univerAPI = apiRef.current
-    const ws = univerAPI?.getActiveWorkbook()?.getActiveSheet()
-    if (!univerAPI || !ws) return
-    overlays.current.forEach((d) => d.dispose())
-    overlays.current = []
-    const { mappings, selection, blockSuggestions } = useEditor.getState()
-    const sheetName = ws.getSheetName()
-    const groups = new Map<keyof typeof STYLE, string[]>()
-    const onSheet = (c: CellRef) => c.workbook === model.source && c.sheet === sheetName
-    for (const m of mappings as MappingView[]) {
-      // every source of a summed tag is highlighted (ADR-0015)
-      const refs = m.sources.filter((s) => onSheet(s.cell)).map((s) => s.cell.ref)
-      if (refs.length) groups.set(m.status, [...(groups.get(m.status) ?? []), ...refs])
-    }
-    for (const [status, refs] of groups) {
-      overlays.current.push(ws.highlightRanges(refs.map((a1) => ws.getRange(a1)), overlayStyle(STYLE[status])))
-    }
-    const blocks = blockSuggestions.filter((b) => b.status === 'suggested' && b.cell.workbook === model.source && b.cell.sheet === sheetName)
-    for (const b of blocks) overlays.current.push(ws.highlightRanges([ws.getRange(b.cell.ref)], overlayStyle(STYLE.block, 2, 8)))
-    const linked = (selection.factKey ? useEditor.getState().byFact.get(selection.factKey)?.sources ?? [] : []).filter((s) => onSheet(s.cell))
-    if (linked.length) overlays.current.push(ws.highlightRanges(linked.map((s) => ws.getRange(s.cell.ref)), overlayStyle(STYLE.linked, 2)))
+  // ---- overlay: tag status colours + the cells linked to the selected fact. Cells are merged into as few rectangles
+  // as possible first: Univer re-sorts every shape on each add, so one shape per cell froze the window for minutes.
+  function activeSheet() {
+    const ws = apiRef.current?.getActiveWorkbook()?.getActiveSheet()
+    if (!ws) return null
+    const name = ws.getSheetName()
+    const onSheet = (cells: CellRef[] | undefined) => compactRanges((cells ?? []).filter((c) => c.workbook === model.source && c.sheet === name).map((c) => c.ref))
+    return { ws, onSheet }
   }
 
-  useEffect(drawOverlay, [mappings, blockSuggestions, selection.factKey])
+  function drawStatus(): void {
+    clearLayer(statusLayer)
+    const at = activeSheet()
+    if (!at) return
+    const m = latest.current.marks
+    for (const status of ['approved', 'suggested', 'rejected'] as const) {
+      const refs = at.onSheet(m[status])
+      if (refs.length) statusLayer.current.push(at.ws.highlightRanges(refs.map((a1) => at.ws.getRange(a1)), overlayStyle(STYLE[status])))
+    }
+    const blocks = at.onSheet(m.blocks)
+    if (blocks.length) statusLayer.current.push(at.ws.highlightRanges(blocks.map((a1) => at.ws.getRange(a1)), overlayStyle(STYLE.block, 2, 8)))
+  }
+
+  function drawLinked(): void {
+    clearLayer(linkedLayer)
+    const at = activeSheet()
+    const linked = at?.onSheet(latest.current.marks.linked) ?? []
+    if (at && linked.length) linkedLayer.current.push(at.ws.highlightRanges(linked.map((a1) => at.ws.getRange(a1)), overlayStyle(STYLE.linked, 2)))
+  }
+
+  function drawOverlay(): void {
+    drawStatus()
+    drawLinked()
+  }
+
+  useEffect(drawStatus, [marks.approved, marks.suggested, marks.rejected, marks.blocks])
+  useEffect(drawLinked, [marks.linked])
 
   // ---- reveal requests from the XBRL side (Form/XML/Inspector)
   // Univer registers a sheet's render unit some frames after the grid (or a newly activated sheet) appears; until then
@@ -208,5 +255,10 @@ export function UniverGrid({ model }: { model: WorkbookModel }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reveal?.seq])
 
-  return <div ref={host} className="univer-host h-full w-full" data-testid="univer-host" data-cellkey={selection.cell ? cellKey(selection.cell) : ''} />
+  return <div ref={host} className="univer-host h-full w-full" data-testid="univer-host" data-cellkey={selected ? cellKey(selected) : ''} />
+}
+
+function clearLayer(layer: { current: IDisposable[] }): void {
+  layer.current.forEach((d) => d.dispose())
+  layer.current = []
 }

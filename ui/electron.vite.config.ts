@@ -8,6 +8,8 @@ const shared = resolve(__dirname, 'shared')
 export default defineConfig({
   main: {
     resolve: { alias: { '@shared': shared } },
+    // the backend URL of a packaged build: XAP_API_URL at build time (at run time the environment wins)
+    define: { __XAP_API_URL__: JSON.stringify(process.env.XAP_API_URL ?? '') },
     build: {
       // the engine workspace package ships TS/ESM source: bundle it into main instead of require()-ing it
       externalizeDeps: { exclude: ['@xap/engine'] },

@@ -15,8 +15,6 @@ extraResources:
   - from: ../knowledge_base
     to: knowledge_base
     filter: ['*.json']
-  - from: ../sidecar-dist/xap-sidecar
-    to: sidecar
 asar: true
 # Double-clicking a .axbrl project opens it in the app (ui/electron/main/index.ts → findProjectArg).
 fileAssociations:
@@ -39,7 +37,10 @@ win:
       arch: [x64]
 nsis:
   oneClick: false
-  perMachine: false
+  # Per-machine (asks for admin once): the installer creates <Program Files>\XBRL_Autopilot\Projects and lets every
+  # user write to it, the app's default save folder (docs/17, ui/electron/main/services/projects-folder.ts).
+  perMachine: true
+  include: build/installer.nsh
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true

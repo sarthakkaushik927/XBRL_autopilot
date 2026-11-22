@@ -1,6 +1,9 @@
-import { RotateCw } from 'lucide-react'
+import { ChevronDown, RotateCw, Sparkles } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { useWorkspace } from '@/app/workspace'
+import { EmptyState } from '@/components/EmptyState'
 import { Tabs } from '@/components/Tabs'
+import { IndasProblemsPanel } from '@/features/indas/IndasProblemsPanel'
 import { cn } from '@/lib/cn'
 import { useSidecar } from '@/stores/sidecar'
 import { useUi } from '@/stores/ui'
@@ -32,8 +35,11 @@ function OutputLog() {
 }
 
 export function BottomPanel() {
-  const { bottomTab, setBottomTab } = useUi()
-  const errors = useValidation((s) => s.view?.summary.errors ?? 0)
+  const { bottomTab, setBottomTab, toggleBottom } = useUi()
+  const ws = useWorkspace()
+  const indas = ws?.kind === 'indas'
+  const ciErrors = useValidation((s) => s.view?.summary.errors ?? 0)
+  const errors = indas ? (ws.problems?.errors ?? 0) : ciErrors
   const toReview = useAi((s) => openCards(s.view).length)
   return (
     <section className="flex h-full flex-col bg-panel" aria-label="Bottom panel">
@@ -42,24 +48,42 @@ export function BottomPanel() {
         onChange={setBottomTab}
         tabs={[
           { id: 'problems', label: 'Problems', badge: errors },
-          { id: 'ai', label: 'AI Agent', badge: toReview },
+          { id: 'ai', label: 'AI Agent', badge: indas ? 0 : toReview },
           { id: 'output', label: 'Output' },
         ]}
         right={
-          bottomTab === 'output' ? (
+          <>
+            {bottomTab === 'output' && (
+              <button
+                className="flex items-center gap-1 px-3 text-muted hover:text-fg"
+                title="Check the backend again (start it with make dev-server, or set XAP_API_URL)"
+                onClick={() => void window.xap?.sidecar.reconnect()}
+              >
+                <RotateCw size={12} /> Reconnect
+              </button>
+            )}
             <button
-              className="flex items-center gap-1 px-3 text-muted hover:text-fg"
-              title="Restart AI engine"
-              onClick={() => void window.xap?.sidecar.restart()}
+              className="flex items-center px-2 text-muted hover:text-fg"
+              title="Hide the panel (Ctrl+J). Show it again from the status bar or View → Toggle Bottom Panel."
+              aria-label="Hide the bottom panel"
+              onClick={toggleBottom}
+              data-testid="bottom-hide"
             >
-              <RotateCw size={12} /> Restart AI engine
+              <ChevronDown size={14} />
             </button>
-          ) : null
+          </>
         }
       />
       <div className="min-h-0 flex-1">
-        {bottomTab === 'problems' && <ProblemsPanel />}
-        {bottomTab === 'ai' && <AiPanel />}
+        {bottomTab === 'problems' && (indas ? <IndasProblemsPanel /> : <ProblemsPanel />)}
+        {bottomTab === 'ai' &&
+          (indas ? (
+            <EmptyState icon={Sparkles} title="AI fix proposals">
+              For an Ind AS filing the AI proposes tags (Auto-tag in the Excel pane); fixes for the MCA problems are proposed for C&amp;I filings only for now.
+            </EmptyState>
+          ) : (
+            <AiPanel />
+          ))}
         {bottomTab === 'output' && <OutputLog />}
       </div>
     </section>

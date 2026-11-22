@@ -15,6 +15,8 @@ export const AXBRL_EXTENSION = '.axbrl'
 export interface AxbrlManifest {
   format: typeof AXBRL_FORMAT
   formatVersion: number
+  /** absent = an engine filing; 'indas' = an Ind AS pipeline project (project/indas-file.ts, docs/17) */
+  kind?: 'indas'
   appVersion: string
   projectId: string
   createdAt: string

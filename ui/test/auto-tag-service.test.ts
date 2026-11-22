@@ -21,20 +21,20 @@ import { ProjectService } from '../electron/main/services/project-service'
 import { SourceService } from '../electron/main/services/source-service'
 import { TableMappingService } from '../electron/main/services/table-mapping-service'
 import { TableSuggestionService } from '../electron/main/services/table-suggestion-service'
-import { SidecarManager } from '../electron/main/sidecar'
+import { BackendClient, backendUrl } from '../electron/main/infra/backend-client'
 
 const AUTHORITY = resolve(__dirname, '../../engine/authority/ci-2016.authority.json')
 const SAMPLE = resolve(__dirname, '../../data/sample_financials.xlsx')
 const REPO = resolve(__dirname, '../..')
 
-let sidecar: SidecarManager
+let sidecar: BackendClient
 beforeAll(async () => {
-  sidecar = new SidecarManager({ isPackaged: false, repoRoot: REPO, resourcesPath: '' })
+  sidecar = new BackendClient({ baseUrl: backendUrl(process.env.XAP_API_URL) }) // make dev-server
   void sidecar.start()
   await sidecar.whenReady(170_000)
 }, 180_000)
 afterAll(async () => {
-  await sidecar?.stop()
+  sidecar?.stop()
 })
 
 /** The real suggester, recording what it was sent. */

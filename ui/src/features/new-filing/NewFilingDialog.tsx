@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  DEFAULT_TAXONOMY,
-  FILING_TAXONOMIES,
   defaultStatementPlaces,
   defaultReportingYear,
   fyLabel,
@@ -15,8 +13,13 @@ import {
   type TaxonomyId,
 } from '@xap/engine/basics'
 import type { NewFilingInput } from '@shared/project'
-import { Button, Checkbox, ChoiceCards, Dialog, Field, Input, Section, Select } from '@/components/ui/primitives'
+import { createIndasProject } from '@/app/filings'
+import { Button, Checkbox, Dialog, Field, Input, Section, Select } from '@/components/ui/primitives'
+import { useIndas } from '@/stores/indas'
 import { useProject } from '@/stores/project'
+
+/** New projects are Ind AS 2017 (the current architecture only, Sarthak 2026-11-22; C&I's editor needs removed routes). */
+export const NEW_PROJECT_TAXONOMY: TaxonomyId = 'ind-as-2017'
 
 interface FormState {
   taxonomy: TaxonomyId
@@ -32,12 +35,34 @@ interface FormState {
   pyTouched: boolean
   level: RoundingLevel
   statementPlaces: number
+  /** after creating, open the client's financial statements (file dialog) */
+  openWorkbook: boolean
 }
 
 function initialForm(): FormState {
   const cy = defaultReportingYear(new Date())
   const py = previousYearOf(cy)!
-  return { taxonomy: DEFAULT_TAXONOMY, companyName: '', cin: '', reportType: 'Standalone', cyStart: cy.start, cyEnd: cy.end, firstYear: false, pyStart: py.start, pyEnd: py.end, pyTouched: false, level: 'Lakhs', statementPlaces: defaultStatementPlaces('Lakhs') }
+  return { taxonomy: NEW_PROJECT_TAXONOMY, companyName: '', cin: '', reportType: 'Standalone', cyStart: cy.start, cyEnd: cy.end, firstYear: false, pyStart: py.start, pyEnd: py.end, pyTouched: false, level: 'Lakhs', statementPlaces: defaultStatementPlaces('Lakhs'), openWorkbook: true }
+}
+
+/** The form filled from existing settings (Filing settings…). */
+export function formOf(d: NewFilingInput): FormState {
+  const py = d.py ?? previousYearOf(d.cy) ?? { start: '', end: '' }
+  return {
+    taxonomy: d.taxonomy ?? NEW_PROJECT_TAXONOMY,
+    companyName: d.companyName,
+    cin: d.cin,
+    reportType: d.reportType,
+    cyStart: d.cy.start,
+    cyEnd: d.cy.end,
+    firstYear: d.py === null,
+    pyStart: py.start,
+    pyEnd: py.end,
+    pyTouched: d.py !== null,
+    level: d.level,
+    statementPlaces: d.statementPlaces ?? defaultStatementPlaces(d.level),
+    openWorkbook: false,
+  }
 }
 
 export function toInput(f: FormState): NewFilingInput {
@@ -53,9 +78,15 @@ export function toInput(f: FormState): NewFilingInput {
   }
 }
 
-/** New Filing wizard (docs/08-ui-ux.md). Excel import comes with the editor in Phase 4. */
+/**
+ * New project (File → New project, Ctrl+N, start screen, activity bar) and Filing settings (Filing menu): one dialog.
+ * Projects are Ind AS, created by main (validated, saved straight away as `<Company>_<FY>.axbrl` in the projects
+ * folder). In settings mode it edits the open Ind AS filing.
+ */
 export function NewFilingDialog() {
-  const { newFilingOpen, closeNewFiling, create } = useProject()
+  const { newFilingOpen, newFilingMode, closeNewFiling } = useProject()
+  const details = useIndas((s) => s.details)
+  const editing = newFilingMode === 'settings' && !!details
   const [f, setF] = useState<FormState>(initialForm)
   const [serverProblems, setServerProblems] = useState<string[]>([])
   const [submitted, setSubmitted] = useState(false)
@@ -63,11 +94,12 @@ export function NewFilingDialog() {
 
   useEffect(() => {
     if (newFilingOpen) {
-      setF(initialForm())
+      setF(editing ? formOf(details!) : initialForm())
       setServerProblems([])
       setSubmitted(false)
     }
-  }, [newFilingOpen])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newFilingOpen, editing])
 
   const patch = (p: Partial<FormState>) =>
     setF((cur) => {
@@ -89,14 +121,28 @@ export function NewFilingDialog() {
     setSubmitted(true)
     if (!canSubmit) return
     setBusy(true)
-    setServerProblems(await create(input))
-    setBusy(false)
+    try {
+      if (editing) {
+        const problems = useIndas.getState().updateDetails(input)
+        setServerProblems(problems)
+        if (!problems.length) closeNewFiling()
+      } else {
+        const problems = await createIndasProject(input)
+        setServerProblems(problems)
+        if (!problems.length) {
+          closeNewFiling()
+          if (f.openWorkbook) void useIndas.getState().upload()
+        }
+      }
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <Dialog
       open={newFilingOpen}
-      title="New filing — AOC-4 XBRL"
+      title={editing ? 'Filing settings' : 'New project — AOC-4 XBRL (Ind AS 2017)'}
       onClose={closeNewFiling}
       width={620}
       footer={
@@ -105,7 +151,7 @@ export function NewFilingDialog() {
             Cancel
           </Button>
           <Button variant="primary" onClick={() => void submit()} disabled={busy || (submitted && !canSubmit)}>
-            {busy ? 'Creating…' : 'Create filing'}
+            {busy ? 'Saving…' : editing ? 'Apply' : 'Create project'}
           </Button>
         </>
       }
@@ -117,14 +163,11 @@ export function NewFilingDialog() {
           void submit()
         }}
       >
-        <Section title="Taxonomy">
-          <ChoiceCards label="Taxonomy" value={f.taxonomy} options={FILING_TAXONOMIES} onChange={(taxonomy) => patch({ taxonomy })} testIdPrefix="taxonomy" />
-        </Section>
 
         <Section title="Company">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Company name" error={nameError} className="col-span-2">
-              <Input value={f.companyName} onChange={(e) => patch({ companyName: e.target.value })} placeholder="Acme Private Limited" autoFocus />
+              <Input value={f.companyName} onChange={(e) => patch({ companyName: e.target.value })} placeholder="Acme Private Limited" autoFocus data-testid="new-company" />
             </Field>
             <Field label="CIN" error={cinError} hint="Corporate Identity Number">
               <Input
@@ -133,6 +176,7 @@ export function NewFilingDialog() {
                 className="font-mono uppercase"
                 onChange={(e) => patch({ cin: e.target.value.toUpperCase() })}
                 placeholder="U72200KA2010PTC123456"
+                data-testid="new-cin"
               />
             </Field>
             <Field label="Nature of report">
@@ -195,6 +239,16 @@ export function NewFilingDialog() {
             </Select>
           </Field>
         </Section>
+
+        {!editing && (
+          <Section title="Financial statements">
+            <Checkbox
+              checked={f.openWorkbook}
+              onChange={(openWorkbook) => patch({ openWorkbook })}
+              label="Open the client's Excel right after creating (you can also do it later: File → Open financial statements)"
+            />
+          </Section>
+        )}
 
         {serverProblems.length > 0 && (
           <ul className="rounded border border-err/40 bg-err/5 p-3 text-[12px] text-err">

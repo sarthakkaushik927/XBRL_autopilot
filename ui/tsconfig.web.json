@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
@@ -9,7 +13,20 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "noEmit": true,
-    "paths": { "@/*": ["./src/*"], "@shared/*": ["./shared/*"] }
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@shared/*": [
+        "./shared/*"
+      ]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "shared/**/*.ts", "electron/preload/api.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "shared/**/*.ts",
+    "electron/preload/api.d.ts",
+    "test/**/*.renderer.test.ts"
+  ]
 }

@@ -4,18 +4,22 @@ import uuid
 from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from ...responses import error_response, success_response
 from src.constants import BASE_DIR, INDAS_OUTPUT_JSON_PATH, IND_AS_TAXONOMY_VDB, OUTPUT_DIR, DELETE_FILE_AFTER
 from src.core.logger import logger
 from src.utils.main_utils import load_file, load_json, save_file
 from src.pipeline.recom_taxonomies_pipeline import RecommendationPipeline
-from api.v1.schemas.indas_schema import RecommendSchema, GenerateXML
+from api.v1.schemas.indas_schema import FixRequest, RecommendSchema, GenerateXML
 from src.pipeline.xml_generation_pipeline import XMLGenerationPipeline
 from api.helper.delete_file import delete_file_after
 from src.pipeline.indas_transformation import IndasTransformationPipeline
 from api.middlewares.multi_middleware import multer_middleware
+from src.transformation.template import TEMPLATE_FILE_NAME, canonical_sheets_workbook
+from src.services.sheet_scope import knowledge_base
+from src.services.sheet_tree import sheet_trees
+from src.services.indas_fix import propose_fix
 recomm_pipeline = RecommendationPipeline()
 router = APIRouter()
 
@@ -35,6 +39,33 @@ async def get_autherity():
             return error_response(message=f"Failed to load authority: {str(e)}", status_code=500)
 
 
+@router.get("/tree/{scope}")
+async def get_sheet_tree(scope: str, kind: str = "concept"):
+    """The split view's right pane: the presentation tree(s) of a sheet's ELRs, or its table axis members."""
+    with logger.span("indas.sheet_tree", scope=scope, kind=kind):
+        try:
+            data = sheet_trees(knowledge_base(), scope, "member" if kind == "member" else "concept")
+            return success_response(data=data, message="sheet tree", status_code=200)
+        except (KeyError, ValueError) as e:
+            return error_response(message=f"Unknown sheet: {scope}", status_code=400, errors=e)
+
+
+@router.get("/template")
+async def download_template():
+    """The standard template (docs/17, input path 1): the canonical sheets in data/canonical_sheets/ as one workbook."""
+    with logger.span("indas.download_template"):
+        try:
+            content = await asyncio.to_thread(canonical_sheets_workbook)
+        except FileNotFoundError as e:
+            logger.error("indas.template_sheets_missing", error=str(e))
+            return error_response(message=str(e), status_code=500)
+        return Response(
+            content=content,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{TEMPLATE_FILE_NAME}"'},
+        )
+
+
 @router.post("/recommend/")
 async def recommend_taxonomies(payload: RecommendSchema):
     with logger.span("indas.recommend_taxonomies", keys_count=len(payload.keys), top_k=payload.top_k):
@@ -44,15 +75,36 @@ async def recommend_taxonomies(payload: RecommendSchema):
                 collection=IND_AS_TAXONOMY_VDB,
                 top_k=payload.top_k,
                 filter=payload.filter,
+                scope=payload.scope,
+                kind=payload.kind,
+                contexts=payload.contexts,
+                use_llm=payload.use_llm,
             )
             logger.info("indas.recommend_taxonomies_completed", count=len(data) if data else 0)
             return success_response(data=data, message="taxonomies taged returned", status_code=200)
+        except ValueError as e:
+            logger.warning("indas.recommend_bad_scope", error=str(e))
+            return error_response(message=str(e), status_code=400)
         except TimeoutError as e:
             logger.error("indas.recommend_taxonomies_timeout", error=str(e))
             return error_response(message="timeout", status_code=500, errors=e)
         except Exception as e:
             logger.error("indas.recommend_taxonomies_failed", error=str(e))
             return error_response(message=f"Recommendation failed: {str(e)}", status_code=500)
+
+
+@router.post("/fix")
+async def fix_problems(payload: FixRequest):
+    """Fix with AI: tag changes for the totals that don't add up. Stateless; the app dry-runs and the user accepts."""
+    with logger.span("indas.fix", problems=len(payload.problems), lines=len(payload.lines)):
+        body = payload.model_dump()
+        try:
+            kb = await asyncio.to_thread(knowledge_base)
+            data = await propose_fix(kb, body["problems"], body["lines"])
+        except Exception as e:  # no key, network, every model rate limited
+            logger.error("indas.fix_failed", error=str(e))
+            return error_response(message=f"The AI could not propose a fix: {e}", status_code=502)
+        return success_response(data=data, message="fix proposed", status_code=200)
 
 
 @router.post("/generateXML")
@@ -205,7 +257,9 @@ async def transform_file(
                         "filePath": str(output_file_path),
                         "fileSizeKb": file_size_kb,
                         "downloadUrl": download_url,
-                        "summary": data.get("summary", {}),
+                        "summary": {k: v for k, v in data.get("summary", {}).items() if k != "sheets"},
+                        # canonical rows as JSON (sheet -> rows), so the app needn't read the xlsx back
+                        "sheets": data.get("summary", {}).get("sheets", {}),
                     },
                     message="Workbook transformed successfully. Download URL is valid for 15 minutes.",
                     status_code=200,
