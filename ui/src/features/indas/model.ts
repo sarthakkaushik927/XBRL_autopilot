@@ -3,6 +3,7 @@
  * (docs/15 §5), the suggestion keys, master-field prefill and the /generateXML input. No React, no IPC
  * (tested in ui/test/indas-model.test.ts).
  */
+import { previousYearOf } from '@xap/engine/basics'
 import {
   LINE_SHEETS,
   PPE_FIELDS,
@@ -191,7 +192,8 @@ export function detailsFromLegacy(meta: FilingMeta, company: Record<string, stri
     cin: by('CorporateIdentityNumber'),
     reportType: meta.nature,
     cy: { start: meta.startDate, end: meta.endDate },
-    py: null,
+    // old drafts always reported a previous year: the year before the current one
+    py: previousYearOf({ start: meta.startDate, end: meta.endDate }),
     level: 'Actual',
     statementPlaces: 0,
   }

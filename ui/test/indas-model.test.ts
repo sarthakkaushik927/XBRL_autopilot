@@ -121,7 +121,7 @@ describe('prefillMasters', () => {
 
   it('reads an old draft\'s period and company into settings', () => {
     const d = detailsFromLegacy({ nature: 'Consolidated', startDate: '2025-04-01', endDate: '2026-03-31' }, { 'in-ca:NameOfCompany': 'Acme', 'in-ca:CorporateIdentityNumber': 'U1' })
-    expect(d).toMatchObject({ companyName: 'Acme', cin: 'U1', reportType: 'Consolidated', cy: { start: '2025-04-01', end: '2026-03-31' }, taxonomy: 'ind-as-2017' })
+    expect(d).toMatchObject({ companyName: 'Acme', cin: 'U1', reportType: 'Consolidated', cy: { start: '2025-04-01', end: '2026-03-31' }, py: { start: '2024-04-01', end: '2025-03-31' }, taxonomy: 'ind-as-2017' })
   })
 })
 
