@@ -5,6 +5,8 @@
 // (with a saved, auto-tagged project the run skips New project and the ~3-minute Auto-tag)
 // XAP_PERF_AI=1: Auto-tag with the AI pick (the user's AI consent on); the backend then calls Groq (its .env key).
 // XAP_PERF_PARALLEL=1: Settings → Faster Auto-tag on (several batches at once); otherwise off, one at a time.
+// Packaged app (docs/18): build with XAP_TEST_BUILD=1 (keeps the hooks), run release/win-unpacked with
+// --remote-debugging-port and XAP_USER_DATA, then pass the same port.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { newProject } from './indas-new-project.mjs'
@@ -12,7 +14,7 @@ const [port, outDir, workbook, budget = '600'] = process.argv.slice(2)
 mkdirSync(outDir, { recursive: true })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 let targets
-for (let i = 0; i < 240; i++) { try { targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json(); if (targets.some((t) => t.type === 'page' && t.url.startsWith('http'))) break } catch {} await sleep(500) }
+for (let i = 0; i < 240; i++) { try { targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json(); if (targets.some((t) => t.type === 'page' && /^(http|file):/.test(t.url))) break } catch {} await sleep(500) }
 const ws = new WebSocket(targets.find((t) => t.type === 'page').webSocketDebuggerUrl)
 await new Promise((r) => ws.addEventListener('open', r))
 let id = 0; const pending = new Map(); const errors = []
@@ -32,9 +34,13 @@ const check = (ok, what, detail = '') => { console.log(ok ? 'PASS' : 'FAIL', wha
 
 await send('Runtime.enable')
 await send('Page.enable')
+await send('Performance.enable')
+const heapMb = async () => Math.round((await send('Performance.getMetrics')).result.metrics.find((m) => m.name === 'JSHeapUsedSize').value / 1048576)
+const tReload = Date.now()
 await send('Page.reload')
-await sleep(2000)
+await sleep(200)
 await waitFor(`!!window.__xap_test__?.indas && !!document.querySelector('[data-testid="activity-new-project"]')`, 'start screen', 120000)
+console.log(`  reload → start screen ${Date.now() - tReload} ms`)
 await waitFor(`window.xap.sidecar.status().then(s => s.state === 'ready')`, 'backend connected', 60000)
 const ai = process.env.XAP_PERF_AI === '1'
 const parallel = process.env.XAP_PERF_PARALLEL === '1'
@@ -46,11 +52,14 @@ if (project) {
   await waitFor(`${S}.open && ${S}.busy === null && ${S}.transform !== null`, 'project opened', 60000)
 } else {
   check(await newProject(ev, waitFor, 'activity-new-project', { company: 'Synthetic Perf Private Limited', cin: 'U72200KA2010PTC654321', start: '2025-04-01', end: '2026-03-31', level: 'Lakhs' }), 'New project')
+  const tUpload = Date.now()
   await ev(`${S}.upload(${J(workbook)})`)
   await waitFor(`${S}.busy === null && ${S}.transform !== null`, 'transform', 240000)
+  console.log(`  open workbook (transform) ${Date.now() - tUpload} ms`)
 }
 await waitFor(`!!document.querySelector('[data-testid="univer-host"] canvas')`, 'Excel grid', 30000)
 await waitFor(`${S}.elrs().length > 5`, 'Filing Explorer', 60000)
+console.log(`  JS heap after opening ${await heapMb()} MB`)
 
 // each action: wall time until its render and effects have run (two macrotask turns; requestAnimationFrame
 // doesn't fire while the window is hidden)
@@ -80,6 +89,7 @@ const sheets = await ev(`window.__xap_test__.univer.getActiveWorkbook().getSheet
 for (let k = 0; k < 2; k++) for (const name of sheets) await timed('switch sheet', `window.__xap_test__.univer.getActiveWorkbook().getSheetByName(${J(name)}).activate()`)
 for (let k = 0; k < 6; k++) await timed('open a problem', `document.querySelectorAll('[data-testid="problem"]')[${k}]?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`)
 await shot('perf-end.png')
+console.log(`  JS heap at the end ${await heapMb()} MB`)
 
 let longest = 0
 for (const [p, list] of Object.entries(timings)) {
