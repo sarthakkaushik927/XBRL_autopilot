@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { GenerateXmlInput } from '@shared/indas'
 import type { HttpMethod, SidecarResponse } from '@shared/ipc'
@@ -172,12 +174,31 @@ describe('split view calls', () => {
       { concept: 'ind-as:NoncurrentAssets', cy: 7, py: null },
     ]
     expect(await svc.check(rows)).toMatchObject({ total: '3', differences: [{ concept: 'ind-as:Assets', label: 'Assets', reported: '10', calculated: '7' }] })
-    expect(await svc.check([{ concept: 'ind-as:Assets', cy: 1, py: null }])).toEqual({ differences: [], total: '0', facts: { 'ind-as:Assets': { cy: '1', py: null } }, byElr: {} })
+    expect(await svc.check([{ concept: 'ind-as:Assets', cy: 1, py: null }])).toEqual({ differences: [], total: '0', facts: { 'ind-as:Assets': { cy: '1', py: null } }, byElr: {}, derived: [] })
     expect((await svc.masterFields()).company).toEqual([{ qname: 'in-ca:NameOfCompany', label: 'Name of company', type: 'stringItemType' }])
     expect(calls.map((c) => [c.method, c.path])).toEqual([
       ['GET', '/api/v1/indas/tree/CANONICAL_PPE_SCHEDULE?kind=member'],
       ['GET', '/api/v1/indas/authority'],
     ])
+  })
+
+  it('derives the totals the statement implies from its ELRs, and Generate files them (issue #20, point 5)', async () => {
+    const kb = JSON.parse(readFileSync(join(__dirname, '../../knowledge_base/ind_as_knowledge_base.json'), 'utf8'))
+    const { sidecar, calls } = fakeSidecar({ '/api/v1/indas/authority': () => ok(kb), '/api/v1/indas/generateXML': () => ok({ xmlContent: '<xbrl/>' }) })
+    const svc = new IndasPipelineService(sidecar, writer())
+    const bs = [
+      { concept: 'ind-as:EquityShareCapital', cy: 100, py: 90 },
+      { concept: 'ind-as:OtherEquity', cy: 300, py: 200 },
+    ]
+    // no ELRs: nothing derived (the trees aren't loaded yet)
+    expect((await svc.check(bs)).derived).toEqual([])
+    const check = await svc.check(bs, ['110000'])
+    expect(check.facts['ind-as:Equity']).toEqual({ cy: '400', py: '290' })
+    expect(check.derived.map((d) => d.concept)).toEqual(['ind-as:EquityAttributableToOwnersOfParent', 'ind-as:Equity', 'ind-as:EquityAndLiabilities'])
+
+    await svc.generate(input({ statements: { balanceSheet: bs, profitLoss: [], cashFlow: [], noteLines: [] }, elrs: { balanceSheet: ['110000'] } }))
+    const sent = (calls.find((c) => c.path.endsWith('/generateXML'))!.body as ReturnType<typeof toPayload>).statements.balanceSheet
+    expect(sent).toEqual([...bs, { concept: 'ind-as:EquityAttributableToOwnersOfParent', cy: 400, py: 290 }, { concept: 'ind-as:Equity', cy: 400, py: 290 }, { concept: 'ind-as:EquityAndLiabilities', cy: 400, py: 290 }])
   })
 
   it('fetches the knowledge base again after a failed fetch', async () => {

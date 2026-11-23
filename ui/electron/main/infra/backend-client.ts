@@ -108,11 +108,12 @@ export class BackendClient extends EventEmitter {
   }
 
   /** A JSON request to an allowed path; the answer is parsed as JSON when it is JSON. */
-  async request<T>(method: HttpMethod, path: string, body?: unknown, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<SidecarResponse<T>> {
+  async request<T>(method: HttpMethod, path: string, body?: unknown, timeoutMs = DEFAULT_TIMEOUT_MS, signal?: AbortSignal): Promise<SidecarResponse<T>> {
     const res = await this.send(
       path,
       { method, body: body !== undefined ? JSON.stringify(body) : undefined, headers: body !== undefined ? { 'Content-Type': 'application/json' } : {} },
       timeoutMs,
+      signal,
     )
     return { status: res.status, data: parseBody<T>(await res.text()) }
   }
@@ -131,13 +132,13 @@ export class BackendClient extends EventEmitter {
     return { status: res.status, bytes: new Uint8Array(await res.arrayBuffer()) }
   }
 
-  private async send(path: string, init: { method: string; body?: BodyInit; headers?: Record<string, string> }, timeoutMs: number): Promise<Response> {
+  private async send(path: string, init: { method: string; body?: BodyInit; headers?: Record<string, string> }, timeoutMs: number, stop?: AbortSignal): Promise<Response> {
     if (!isAllowedSidecarPath(path)) throw new Error(`Backend path not allowed: ${path}`)
     try {
       return await this.fetch(`${this.opts.baseUrl}${path}`, {
         ...init,
         headers: { ...this.auth(), ...(init.headers ?? {}) },
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: stop ? AbortSignal.any([AbortSignal.timeout(timeoutMs), stop]) : AbortSignal.timeout(timeoutMs),
       })
     } catch (err) {
       // a refused connection means the backend went away: say so and look again soon

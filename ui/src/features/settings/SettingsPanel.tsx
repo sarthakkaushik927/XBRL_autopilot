@@ -30,14 +30,15 @@ export function SettingsPanel() {
       </Section>
 
       <Section title="Saving">
-        <Field label="Autosave interval (seconds)" hint="Unsaved work is copied for crash recovery; your project file is only written when you save.">
+        <Field label="Auto-save every (minutes)" hint="An Ind AS project is saved to its file; a C&I filing's unsaved work is copied for crash recovery. 1 to 60 minutes.">
           <Input
             key={state.autosaveSeconds}
             type="number"
-            min={10}
-            max={600}
-            defaultValue={state.autosaveSeconds}
-            onBlur={(e) => void update({ autosaveSeconds: Number(e.target.value) })}
+            min={1}
+            max={60}
+            defaultValue={Math.round(state.autosaveSeconds / 60)}
+            onBlur={(e) => void update({ autosaveSeconds: Number(e.target.value) * 60 })}
+            data-testid="autosave-minutes"
           />
         </Field>
       </Section>

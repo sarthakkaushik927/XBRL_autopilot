@@ -7,7 +7,7 @@
  * Assets vs Equity and liabilities. Totals with no tagged children are not checked (nothing to compare).
  */
 import { decimal as Dec } from '@xap/engine'
-import type { CheckResult, Difference, ElrDifference, FactValue, StatementLine } from '@shared/indas'
+import type { CheckResult, DerivedTotal, Difference, ElrDifference, FactValue, StatementLine } from '@shared/indas'
 import { conceptLabel, type IndasKnowledgeBase, type KbCalculation } from './indas-knowledge-base'
 
 type Dec = ReturnType<typeof Dec.parse>
@@ -33,7 +33,7 @@ function amount(v: unknown): Dec | null {
  * One fact per tagged concept and year: lines tagged with the same concept are added (webXBRL's "Add",
  * statement_lines.merge_lines on the sidecar). Opening balances (periodRole "start") are not totals' children.
  */
-function facts(rows: readonly StatementLine[], year: Year): Map<string, Dec> {
+function facts(rows: readonly StatementLine[], year: Year, derived: readonly DerivedTotal[] = []): Map<string, Dec> {
   const out = new Map<string, Dec>()
   for (const r of rows) {
     if (!r.concept || r.periodRole === 'start') continue
@@ -41,6 +41,11 @@ function facts(rows: readonly StatementLine[], year: Year): Map<string, Dec> {
     if (v === null) continue
     const prev = out.get(r.concept)
     out.set(r.concept, prev ? Dec.add(prev, v) : v)
+  }
+  // totals summed from their parts (indas-derived-totals): parts of the next total up, never reported by a line
+  for (const d of derived) {
+    const v = amount(d[year])
+    if (v !== null && !out.has(d.concept)) out.set(d.concept, v)
   }
   return out
 }
@@ -55,12 +60,13 @@ function byParent(eqs: readonly KbCalculation[]): Map<string, KbCalculation[]> {
  * The totals the check compares: reported, with at least one tagged part (either year). A dry run keeps checking
  * them after a change (`keepChecking`), so removing a total's last tagged part can't hide its difference.
  */
-export function checkedTotals(kb: IndasKnowledgeBase, rows: readonly StatementLine[]): Set<string> {
+export function checkedTotals(kb: IndasKnowledgeBase, rows: readonly StatementLine[], derived: readonly DerivedTotal[] = []): Set<string> {
   const out = new Set<string>()
+  const own = new Set(derived.map((d) => d.concept))
   for (const year of ['cy', 'py'] as const) {
-    const f = facts(rows, year)
+    const f = facts(rows, year, derived)
     for (const eqs of Object.values(kb.calculation ?? {})) {
-      for (const [parent, children] of byParent(eqs)) if (f.has(parent) && children.some((ch) => f.has(ch.to))) out.add(parent)
+      for (const [parent, children] of byParent(eqs)) if (f.has(parent) && !own.has(parent) && children.some((ch) => f.has(ch.to))) out.add(parent)
     }
   }
   return out
@@ -69,8 +75,16 @@ export function checkedTotals(kb: IndasKnowledgeBase, rows: readonly StatementLi
 /**
  * Tagged lines → the facts they make, the totals that don't tie (amounts as decimal strings) and Σ |difference|.
  * A total in `keepChecking` is compared even when none of its parts is tagged (their sum is then 0).
+ * `derived` (deriveTotals) are facts too, as parts of the totals above them; they are not compared themselves: they
+ * equal their parts by construction, and another ELR's parts of them are not this statement's calculation.
  */
-export function checkDifferences(kb: IndasKnowledgeBase, rows: readonly StatementLine[], keepChecking: ReadonlySet<string> = new Set()): CheckResult {
+export function checkDifferences(
+  kb: IndasKnowledgeBase,
+  rows: readonly StatementLine[],
+  keepChecking: ReadonlySet<string> = new Set(),
+  derived: readonly DerivedTotal[] = [],
+): CheckResult {
+  const own = new Set(derived.map((d) => d.concept))
   const differences: Difference[] = []
   const gaps: Dec[] = []
   const factValues: Record<string, FactValue> = {}
@@ -82,13 +96,13 @@ export function checkDifferences(kb: IndasKnowledgeBase, rows: readonly Statemen
 
   for (const year of ['cy', 'py'] as const) {
     const label: Difference['year'] = year === 'cy' ? 'CY' : 'PY'
-    const f = facts(rows, year)
+    const f = facts(rows, year, derived)
     for (const [concept, v] of f) (factValues[concept] ??= { cy: null, py: null })[year] = Dec.toString(v)
     const seen = new Set<string>()
     for (const [elr, eqs] of Object.entries(kb.calculation ?? {})) {
       for (const [parent, children] of byParent(eqs)) {
         const reported = f.get(parent)
-        if (reported === undefined || seen.has(parent)) continue
+        if (reported === undefined || seen.has(parent) || own.has(parent)) continue
         const present = children.filter((ch) => f.has(ch.to))
         if (present.length === 0 && !keepChecking.has(parent)) continue
         seen.add(parent)
@@ -113,7 +127,7 @@ export function checkDifferences(kb: IndasKnowledgeBase, rows: readonly Statemen
       )
     }
   }
-  return { differences, total: Dec.toString(Dec.sum(gaps.map(abs))), facts: factValues, byElr: perElr(differences) }
+  return { differences, total: Dec.toString(Dec.sum(gaps.map(abs))), facts: factValues, byElr: perElr(differences), derived: [...derived] }
 }
 
 /** Σ |difference| per ELR and year, and the number of totals that don't add up. */

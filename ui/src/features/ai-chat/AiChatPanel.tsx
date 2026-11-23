@@ -1,4 +1,4 @@
-import { ChevronDown, Copy, Check, FileText, Loader2, MessageSquare, Plus, RefreshCw, Send, Sparkles, Trash2, X } from 'lucide-react'
+import { ChevronDown, Copy, Check, FileText, Loader2, MessageSquare, Plus, RefreshCw, Send, Sparkles, Square, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { Button } from '@/components/ui/primitives'
@@ -33,6 +33,7 @@ export function AiChatPanel() {
     createThread,
     deleteThread,
     sendMessage,
+    stopSending,
     clearError,
   } = useChat()
 
@@ -242,15 +243,15 @@ export function AiChatPanel() {
           />
           <div className="flex items-center justify-between border-t border-border/40 px-2 py-1 text-[10px] text-muted">
             <span>Enter to send · Shift+Enter for newline</span>
-            <Button
-              variant="primary"
-              className="h-6 px-2 text-[11px]"
-              disabled={!input.trim() || sending}
-              onClick={() => void handleSend()}
-              title="Send message"
-            >
-              <Send size={11} className="mr-1" /> Send
-            </Button>
+            {sending ? (
+              <Button variant="ghost" className="h-6 px-2 text-[11px]" onClick={stopSending} title="Stop waiting for the AI's answer" data-testid="chat-stop">
+                <Square size={10} className="mr-1 fill-current" /> Stop
+              </Button>
+            ) : (
+              <Button variant="primary" className="h-6 px-2 text-[11px]" disabled={!input.trim()} onClick={() => void handleSend()} title="Send message">
+                <Send size={11} className="mr-1" /> Send
+              </Button>
+            )}
           </div>
         </div>
       </div>
