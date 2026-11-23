@@ -1,5 +1,5 @@
 import re
-import sys
+
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
@@ -72,8 +72,8 @@ async def guardrail_node(state: AgentState, config: RunnableConfig | None = None
                 "block_reason": None,
             }
 
-        except Exception as e:
-            logger.error("guardrail.fallback_on_error", error=str(e))
+        except (RuntimeError, ValueError, KeyError, TypeError, TimeoutError) as e:
+            logger.exception("guardrail.fallback_on_error", error=str(e))
             return {
                 "is_blocked": False,
                 "block_reason": None,

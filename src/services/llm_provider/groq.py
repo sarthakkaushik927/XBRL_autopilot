@@ -1,5 +1,5 @@
+from collections.abc import Iterable
 from functools import lru_cache
-from typing import Iterable, Optional
 
 import groq
 from langchain_core.language_models import BaseChatModel
@@ -75,6 +75,6 @@ def _chat_groq(model: str) -> ChatGroq:
 
 
 @lru_cache
-def get_llm(model: Optional[str] = None):
+def get_llm(model: str | None = None):
     chain = fallback_chain(model or DEFAULT_MODEL, configured_fallbacks())
     return with_rate_limit_fallback([_chat_groq(m) for m in chain])

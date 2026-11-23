@@ -1,5 +1,4 @@
-from typing import Any, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class FixRequest(BaseModel):

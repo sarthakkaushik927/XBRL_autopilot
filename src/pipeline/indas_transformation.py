@@ -1,13 +1,13 @@
 import asyncio
 import math
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 
-from .base import Pipeline
+from ..core.logger import logger
 from ..transformation.indas import MasterFinancialExtractor
 from ..transformation.template import is_standard_template, read_standard_template
-from ..core.logger import logger
+from .base import Pipeline
 
 
 def _cell(v: Any) -> Any:
@@ -25,14 +25,14 @@ class IndasTransformationPipeline(Pipeline):
     def __init__(self):
         pass
 
-    def _execute(self, input_file_path: str, output_file_path: str) -> Dict[str, Any]:
+    def _execute(self, input_file_path: str, output_file_path: str) -> dict[str, Any]:
         if input_file_path.lower().endswith(".xlsx") and is_standard_template(input_file_path):
             # Path 1 (docs/17): the CA filled our standard template, so it is read as-is, without guessing.
             sheets = read_standard_template(input_file_path)
             with pd.ExcelWriter(output_file_path, engine="openpyxl") as xw:
                 for name, df in sheets.items():
                     df.to_excel(xw, sheet_name=name, index=False)
-            summary: Dict[str, Any] = {"source": "standard_template"}
+            summary: dict[str, Any] = {"source": "standard_template"}
         else:
             # Path 2: heuristic transformation of the client's own workbook.
             master_financial_extractor = MasterFinancialExtractor(path=input_file_path)
@@ -42,7 +42,7 @@ class IndasTransformationPipeline(Pipeline):
         summary["sheets"] = {s: _records(df) for s, df in sheets.items()}
         return summary
 
-    async def initiate(self, input_file_path: str, output_file_path: str) -> Dict[str, Any]:
+    async def initiate(self, input_file_path: str, output_file_path: str) -> dict[str, Any]:
         with logger.span("pipeline.indas_transformation", input=input_file_path, output=output_file_path):
             try:
                 summary = await asyncio.to_thread(self._execute, input_file_path, output_file_path)
@@ -51,6 +51,6 @@ class IndasTransformationPipeline(Pipeline):
                     "file_path": output_file_path,
                     "summary": summary,
                 }
-            except Exception as e:
-                logger.error("pipeline.indas_transformation_failed", error=str(e))
+            except (ValueError, KeyError, IndexError, OSError, TypeError) as e:
+                logger.exception("pipeline.indas_transformation_failed", error=str(e))
                 return {"success": False, "err": str(e)}

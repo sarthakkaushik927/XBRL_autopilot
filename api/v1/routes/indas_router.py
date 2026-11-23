@@ -2,24 +2,32 @@ import asyncio
 import os
 import uuid
 from pathlib import Path
-from typing import List, Optional
+
 from fastapi import APIRouter, Depends, Form
 from fastapi.responses import FileResponse, Response
 
-from ...responses import error_response, success_response
-from src.constants import BASE_DIR, INDAS_OUTPUT_JSON_PATH, IND_AS_TAXONOMY_VDB, OUTPUT_DIR, DELETE_FILE_AFTER
-from src.core.logger import logger
-from src.utils.main_utils import load_file, load_json, save_file
-from src.pipeline.recom_taxonomies_pipeline import RecommendationPipeline
-from api.v1.schemas.indas_schema import FixRequest, RecommendSchema, GenerateXML
-from src.pipeline.xml_generation_pipeline import XMLGenerationPipeline
 from api.helper.delete_file import delete_file_after
-from src.pipeline.indas_transformation import IndasTransformationPipeline
 from api.middlewares.multi_middleware import multer_middleware
-from src.transformation.template import TEMPLATE_FILE_NAME, canonical_sheets_workbook
+from api.v1.schemas.indas_schema import FixRequest, GenerateXML, RecommendSchema
+from src.constants import (
+    BASE_DIR,
+    DELETE_FILE_AFTER,
+    IND_AS_TAXONOMY_VDB,
+    INDAS_OUTPUT_JSON_PATH,
+    OUTPUT_DIR,
+)
+from src.core.logger import logger
+from src.pipeline.indas_transformation import IndasTransformationPipeline
+from src.pipeline.recom_taxonomies_pipeline import RecommendationPipeline
+from src.pipeline.xml_generation_pipeline import XMLGenerationPipeline
+from src.services.indas_fix import propose_fix
 from src.services.sheet_scope import knowledge_base
 from src.services.sheet_tree import sheet_trees
-from src.services.indas_fix import propose_fix
+from src.transformation.template import TEMPLATE_FILE_NAME, canonical_sheets_workbook
+from src.utils.main_utils import load_json
+
+from ...responses import error_response, success_response
+
 recomm_pipeline = RecommendationPipeline()
 router = APIRouter()
 
@@ -32,11 +40,8 @@ async def get_autherity():
             logger.info("indas.authority_served", path=str(INDAS_OUTPUT_JSON_PATH))
             return success_response(data=data)
         except FileNotFoundError as e:
-            logger.error("indas.authority_not_found", path=str(INDAS_OUTPUT_JSON_PATH), error=str(e))
+            logger.exception("indas.authority_not_found", path=str(INDAS_OUTPUT_JSON_PATH), error=str(e))
             return error_response(message="Knowledge Base file not found", status_code=500, errors=e)
-        except Exception as e:
-            logger.error("indas.authority_error", error=str(e))
-            return error_response(message=f"Failed to load authority: {str(e)}", status_code=500)
 
 
 @router.get("/tree/{scope}")
@@ -86,11 +91,8 @@ async def recommend_taxonomies(payload: RecommendSchema):
             logger.warning("indas.recommend_bad_scope", error=str(e))
             return error_response(message=str(e), status_code=400)
         except TimeoutError as e:
-            logger.error("indas.recommend_taxonomies_timeout", error=str(e))
+            logger.exception("indas.recommend_taxonomies_timeout", error=str(e))
             return error_response(message="timeout", status_code=500, errors=e)
-        except Exception as e:
-            logger.error("indas.recommend_taxonomies_failed", error=str(e))
-            return error_response(message=f"Recommendation failed: {str(e)}", status_code=500)
 
 
 @router.post("/fix")
@@ -101,8 +103,8 @@ async def fix_problems(payload: FixRequest):
         try:
             kb = await asyncio.to_thread(knowledge_base)
             data = await propose_fix(kb, body["problems"], body["lines"])
-        except Exception as e:  # no key, network, every model rate limited
-            logger.error("indas.fix_failed", error=str(e))
+        except (RuntimeError, TimeoutError, ConnectionError, ValueError, OSError) as e:  # no key, network, every model rate limited
+            logger.exception("indas.fix_failed", error=str(e))
             return error_response(message=f"The AI could not propose a fix: {e}", status_code=502)
         return success_response(data=data, message="fix proposed", status_code=200)
 
@@ -111,54 +113,50 @@ async def fix_problems(payload: FixRequest):
 async def generate_xml(payload: GenerateXML):
     unique_id = payload.unique_id or str(uuid.uuid4())[:8]
     with logger.span("indas.generate_xml", unique_id=unique_id):
-        try:
-            pipeline = XMLGenerationPipeline(payload=payload.model_dump())
-            data = await pipeline.initiate(unique_id=unique_id)
+        pipeline = XMLGenerationPipeline(payload=payload.model_dump())
+        data = await pipeline.initiate(unique_id=unique_id)
 
-            if data.get("success"):
-                file_path = data["file_path"]
-                file_name = data.get("file_name", "MCA_AOC4_XML.xml")
-                download_url = f"/api/v1/indas/download/{unique_id}/{file_name}"
+        if data.get("success"):
+            file_path = data["file_path"]
+            file_name = data.get("file_name", "MCA_AOC4_XML.xml")
+            download_url = f"/api/v1/indas/download/{unique_id}/{file_name}"
 
-                # Auto cleanup directory after 15 minutes (non-blocking)
-                asyncio.create_task(delete_file_after(file_path=file_path, after=DELETE_FILE_AFTER))
+            # Auto cleanup directory after 15 minutes (non-blocking)
+            asyncio.create_task(delete_file_after(file_path=file_path, after=DELETE_FILE_AFTER))
 
-                logger.info(
-                    "indas.xml_generated_successfully",
-                    unique_id=unique_id,
-                    file_name=file_name,
-                    file_size_kb=data.get("file_size_kb", 0.0),
-                    download_url=download_url,
-                )
-
-                return success_response(
-                    data={
-                        "status": "SUCCESS",
-                        "canExport": True,
-                        "uniqueId": unique_id,
-                        "fileName": file_name,
-                        "filePath": file_path,
-                        "fileSizeKb": data.get("file_size_kb", 0.0),
-                        "downloadUrl": download_url,
-                        "xmlContent": data.get("xml_content"),
-                    },
-                    message="XML generated successfully. Download URL is valid for 15 minutes.",
-                    status_code=200,
-                )
-
-            logger.warning(
-                "indas.xml_validation_rejected",
+            logger.info(
+                "indas.xml_generated_successfully",
                 unique_id=unique_id,
-                error_count=len(data.get("errors", [])),
+                file_name=file_name,
+                file_size_kb=data.get("file_size_kb", 0.0),
+                download_url=download_url,
             )
-            return error_response(
-                message="Failed to generate XML: statutory validation failed",
-                status_code=422,
-                errors=data.get("errors", []),
+
+            return success_response(
+                data={
+                    "status": "SUCCESS",
+                    "canExport": True,
+                    "uniqueId": unique_id,
+                    "fileName": file_name,
+                    "filePath": file_path,
+                    "fileSizeKb": data.get("file_size_kb", 0.0),
+                    "downloadUrl": download_url,
+                    "xmlContent": data.get("xml_content"),
+                },
+                message="XML generated successfully. Download URL is valid for 15 minutes.",
+                status_code=200,
             )
-        except Exception as e:
-            logger.error("indas.generate_xml_failed", unique_id=unique_id, error=str(e))
-            return error_response(message=f"XML generation failed: {str(e)}", status_code=500)
+
+        logger.warning(
+            "indas.xml_validation_rejected",
+            unique_id=unique_id,
+            error_count=len(data.get("errors", [])),
+        )
+        return error_response(
+            message="Failed to generate XML: statutory validation failed",
+            status_code=422,
+            errors=data.get("errors", []),
+        )
 
 
 @router.get("/download/{unique_id}/{file_name}")
@@ -197,80 +195,76 @@ async def download_file(unique_id: str, file_name: str):
 
 @router.post("/transform")
 async def transform_file(
-    saved_paths: List[str] = Depends(multer_middleware),
-    unique_id: Optional[str] = Form(None),
+    saved_paths: list[str] = Depends(multer_middleware),  # noqa: B008
+    unique_id: str | None = Form(None),
 ):
     unique_id = unique_id or str(uuid.uuid4())[:8]
     with logger.span("indas.transform_file", unique_id=unique_id):
-        try:
-            if not saved_paths or not saved_paths[0]:
-                logger.warning("indas.transform_no_file_uploaded")
-                return error_response(
-                    message="No file uploaded. Please upload a valid .xls or .xlsx file under field 'file'.",
-                    status_code=400,
-                )
-
-            input_file_path = saved_paths[0]
-            filename = Path(input_file_path).name
-            lower_name = filename.lower()
-            if not (lower_name.endswith(".xlsx") or lower_name.endswith(".xls")):
-                logger.warning("indas.transform_invalid_file_type", filename=filename)
-                return error_response(
-                    message="Invalid file format. Only Excel files (.xls, .xlsx) are supported.",
-                    status_code=400,
-                )
-
-            work_dir = BASE_DIR / OUTPUT_DIR / unique_id
-            work_dir.mkdir(parents=True, exist_ok=True)
-
-            output_file_name = f"CANONICAL_MASTER_{Path(filename).stem}.xlsx"
-            output_file_path = work_dir / output_file_name
-
-            # Initiate transformation pipeline
-            pipeline = IndasTransformationPipeline()
-            data = await pipeline.initiate(
-                input_file_path=str(input_file_path),
-                output_file_path=str(output_file_path),
-            )
-
-            if data.get("success"):
-                file_size_kb = round(os.path.getsize(output_file_path) / 1024, 2)
-                download_url = f"/api/v1/indas/download/{unique_id}/{output_file_name}"
-
-                # Auto cleanup output directory after 15 minutes (non-blocking)
-                asyncio.create_task(delete_file_after(file_path=output_file_path, after=DELETE_FILE_AFTER))
-
-                logger.info(
-                    "indas.workbook_transformed_successfully",
-                    unique_id=unique_id,
-                    file_name=output_file_name,
-                    file_size_kb=file_size_kb,
-                    download_url=download_url,
-                )
-
-                return success_response(
-                    data={
-                        "status": "SUCCESS",
-                        "canExport": True,
-                        "uniqueId": unique_id,
-                        "fileName": output_file_name,
-                        "filePath": str(output_file_path),
-                        "fileSizeKb": file_size_kb,
-                        "downloadUrl": download_url,
-                        "summary": {k: v for k, v in data.get("summary", {}).items() if k != "sheets"},
-                        # canonical rows as JSON (sheet -> rows), so the app needn't read the xlsx back
-                        "sheets": data.get("summary", {}).get("sheets", {}),
-                    },
-                    message="Workbook transformed successfully. Download URL is valid for 15 minutes.",
-                    status_code=200,
-                )
-
-            logger.error("indas.transform_failed", unique_id=unique_id, error=data.get("err"))
+        if not saved_paths or not saved_paths[0]:
+            logger.warning("indas.transform_no_file_uploaded")
             return error_response(
-                message=f"Transformation failed: {data.get('err', 'Unknown error')}",
-                status_code=500,
+                message="No file uploaded. Please upload a valid .xls or .xlsx file under field 'file'.",
+                status_code=400,
             )
-        except Exception as e:
-            logger.error("indas.transform_exception", unique_id=unique_id, error=str(e))
-            return error_response(message=f"Workbook transformation failed: {str(e)}", status_code=500)
+
+        input_file_path = saved_paths[0]
+        filename = Path(input_file_path).name
+        lower_name = filename.lower()
+        if not (lower_name.endswith((".xlsx", ".xls"))):
+            logger.warning("indas.transform_invalid_file_type", filename=filename)
+            return error_response(
+                message="Invalid file format. Only Excel files (.xls, .xlsx) are supported.",
+                status_code=400,
+            )
+
+        work_dir = BASE_DIR / OUTPUT_DIR / unique_id
+        work_dir.mkdir(parents=True, exist_ok=True)
+
+        output_file_name = f"CANONICAL_MASTER_{Path(filename).stem}.xlsx"
+        output_file_path = work_dir / output_file_name
+
+        # Initiate transformation pipeline
+        pipeline = IndasTransformationPipeline()
+        data = await pipeline.initiate(
+            input_file_path=str(input_file_path),
+            output_file_path=str(output_file_path),
+        )
+
+        if data.get("success"):
+            file_size_kb = round(os.path.getsize(output_file_path) / 1024, 2)
+            download_url = f"/api/v1/indas/download/{unique_id}/{output_file_name}"
+
+            # Auto cleanup output directory after 15 minutes (non-blocking)
+            asyncio.create_task(delete_file_after(file_path=output_file_path, after=DELETE_FILE_AFTER))
+
+            logger.info(
+                "indas.workbook_transformed_successfully",
+                unique_id=unique_id,
+                file_name=output_file_name,
+                file_size_kb=file_size_kb,
+                download_url=download_url,
+            )
+
+            return success_response(
+                data={
+                    "status": "SUCCESS",
+                    "canExport": True,
+                    "uniqueId": unique_id,
+                    "fileName": output_file_name,
+                    "filePath": str(output_file_path),
+                    "fileSizeKb": file_size_kb,
+                    "downloadUrl": download_url,
+                    "summary": {k: v for k, v in data.get("summary", {}).items() if k != "sheets"},
+                    # canonical rows as JSON (sheet -> rows), so the app needn't read the xlsx back
+                    "sheets": data.get("summary", {}).get("sheets", {}),
+                },
+                message="Workbook transformed successfully. Download URL is valid for 15 minutes.",
+                status_code=200,
+            )
+
+        logger.error("indas.transform_failed", unique_id=unique_id, error=data.get("err"))
+        return error_response(
+            message=f"Transformation failed: {data.get('err', 'Unknown error')}",
+            status_code=500,
+        )
 

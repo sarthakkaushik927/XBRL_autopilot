@@ -17,6 +17,7 @@ import math
 from typing import Any
 
 from python_calamine import CalamineWorkbook, SheetTypeEnum, SheetVisibleEnum
+
 from src.core.logger import logger
 
 
@@ -50,14 +51,14 @@ def _load_xls_formats(data: bytes) -> dict[str, dict[tuple[int, int], str]]:
     try:
         import xlrd
         book = xlrd.open_workbook(file_contents=data, formatting_info=True)
-    except Exception:
+    except (ImportError, OSError, ValueError):
         return {}
 
     formats: dict[str, dict[tuple[int, int], str]] = {}
     for name in book.sheet_names():
         try:
             s = book.sheet_by_name(name)
-        except Exception:
+        except (KeyError, IndexError):
             continue
         sheet_fmts = {}
         for r in range(s.nrows):
@@ -70,7 +71,7 @@ def _load_xls_formats(data: bytes) -> dict[str, dict[tuple[int, int], str]]:
                     fmt = book.format_map.get(xf.format_key)
                     if fmt and fmt.format_str and fmt.format_str != "General":
                         sheet_fmts[(r, c)] = fmt.format_str
-                except Exception:
+                except (IndexError, KeyError, AttributeError):
                     continue
         formats[name] = sheet_fmts
     return formats
@@ -81,7 +82,7 @@ def read_workbook(data: bytes) -> dict:
         try:
             wb = CalamineWorkbook.from_filelike(io.BytesIO(data))
         except Exception as exc:  # calamine raises several error types for unreadable input
-            logger.error("workbook.unreadable", error=str(exc))
+            logger.exception("workbook.unreadable", error=str(exc))
             raise UnreadableWorkbookError("The file could not be read as an Excel workbook.") from exc
 
     xls_formats = _load_xls_formats(data)

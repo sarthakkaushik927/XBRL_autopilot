@@ -1,26 +1,29 @@
 from __future__ import annotations
-from typing import Any, Generic, List, Optional, TypeVar
-from pydantic import BaseModel
+
+from typing import Any, TypeVar
+
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
 from src.core.logger import logger
 
 T = TypeVar("T")
 
 
 class ErrorDetail(BaseModel):
-    field: Optional[str] = None
+    field: str | None = None
     message: str
-    type: Optional[str] = None
+    type: str | None = None
     # what the problem is about, so the app can take the user to its line (PR #15 review, point 9)
-    concept: Optional[str] = None
-    member: Optional[str] = None
+    concept: str | None = None
+    member: str | None = None
 
 
-class ApiResponse(BaseModel, Generic[T]):
-    data: Optional[T] = None
+class ApiResponse[T](BaseModel):
+    data: T | None = None
     message: str
     success: bool
-    errors: Optional[List[ErrorDetail]] = None
+    errors: list[ErrorDetail] | None = None
 
 
 def _sanitize_payload(obj: Any) -> Any:
@@ -56,11 +59,11 @@ def success_response(
 def error_response(
     message: str,
     status_code: int = 400,
-    errors: Optional[List[dict]] = None,
+    errors: list[dict] | None = None,
     data: Any = None,
 ) -> JSONResponse:
     logger.warning("api.error_response", status_code=status_code, message=message, error_count=len(errors) if errors else 0)
-    formatted_errors: Optional[List[ErrorDetail]] = None
+    formatted_errors: list[ErrorDetail] | None = None
     if errors:
         formatted_errors = [
             err if isinstance(err, ErrorDetail) else ErrorDetail(**err)

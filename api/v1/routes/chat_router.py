@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -87,6 +87,6 @@ async def run_workflow(request: Request, payload: ChatRequest):
                     "X-Accel-Buffering": "no",
                 },
             )
-        except Exception as e:
-            logger.error("chat.endpoint_failed", thread_id=thread_id, error=str(e))
+        except (ValueError, TypeError, RuntimeError) as e:
+            logger.exception("chat.endpoint_failed", thread_id=thread_id, error=str(e))
             return JSONResponse(content={"error": str(e)}, status_code=500)

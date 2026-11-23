@@ -1,11 +1,12 @@
 import json
 import pickle
 from pathlib import Path
+
 from src.core.logger import logger
 
 
 async def load_json(path: str | Path):
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:  # noqa: ASYNC230
         data = json.load(f)
     logger.debug("utils.json_loaded", path=str(path))
     return data
@@ -14,7 +15,7 @@ async def load_json(path: str | Path):
 async def save_json(path: str | Path, data):
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w", encoding="utf-8") as f:
+    with open(p, "w", encoding="utf-8") as f:  # noqa: ASYNC230
         json.dump(data, f)
     logger.debug("utils.json_saved", path=str(path))
 
@@ -43,10 +44,10 @@ def restore_metadata(meta: dict) -> dict:
         return {}
     restored = {}
     for k, v in meta.items():
-        if isinstance(v, str) and (v.startswith("{") or v.startswith("[")):
+        if isinstance(v, str) and (v.startswith(("{", "["))):
             try:
                 restored[k] = json.loads(v)
-            except Exception:
+            except (json.JSONDecodeError, TypeError):
                 restored[k] = v
         else:
             restored[k] = v
@@ -67,7 +68,7 @@ class _PortablePathUnpickler(pickle.Unpickler):
 
 
 async def load_object(file_path: str | Path):
-    with open(file_path, "rb") as f:
+    with open(file_path, "rb") as f:  # noqa: ASYNC230
         obj = _PortablePathUnpickler(f).load()
     logger.debug("utils.object_loaded", file_path=str(file_path))
     return obj
@@ -76,7 +77,7 @@ async def load_object(file_path: str | Path):
 async def save_object(file_path: str | Path, object: object):
     path = Path(file_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
+    with open(path, "wb") as f:  # noqa: ASYNC230
         pickle.dump(object, f)
     logger.debug("utils.object_saved", file_path=str(file_path))
 
@@ -84,14 +85,14 @@ async def save_object(file_path: str | Path, object: object):
 async def save_xml(file_path: str | Path, content: str):
     path = Path(file_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8") as f:  # noqa: ASYNC230
         f.write(content)
     logger.debug("utils.xml_saved", file_path=str(file_path))
 
 
 async def load_xml(file_path: str | Path) -> str:
     path = Path(file_path)
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:  # noqa: ASYNC230
         data = f.read()
     logger.debug("utils.xml_loaded", file_path=str(file_path))
     return data
@@ -100,14 +101,14 @@ async def load_xml(file_path: str | Path) -> str:
 async def save_file(file_path: str | Path, content: bytes):
     path = Path(file_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
+    with open(path, "wb") as f:  # noqa: ASYNC230
         f.write(content)
     logger.debug("utils.file_saved", file_path=str(file_path))
 
 
 async def load_file(file_path: str | Path) -> bytes:
     path = Path(file_path)
-    with open(path, "rb") as f:
+    with open(path, "rb") as f:  # noqa: ASYNC230
         data = f.read()
     logger.debug("utils.file_loaded", file_path=str(file_path))
     return data

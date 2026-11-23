@@ -1,19 +1,19 @@
+import html
 import json
 import os
-import re
-import html
-import xml.etree.ElementTree as ET
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
-from typing import Dict, List, Any, Tuple
+from typing import Any
+
 from src.constants import BASE_DIR, INDAS_OUTPUT_JSON_PATH, OUTPUT_DIR
 from src.core.logger import logger
-from .base import Pipeline
 from src.services.statement_lines import merge_lines
-from src.utils.main_utils import save_xml, load_xml
+from src.utils.main_utils import save_xml
+
+from .base import Pipeline
 
 # XBRL item type -> (unit id, decimals). Anything else numeric is an amount in rupees.
-NUMERIC_UNITS: Dict[str, Tuple[str, int]] = {
+NUMERIC_UNITS: dict[str, tuple[str, int]] = {
     "perShareItemType": ("INR_per_share", 2),
     "sharesItemType": ("shares", 0),
     "pureItemType": ("pure", 2),
@@ -55,15 +55,15 @@ class IndASValidator:
             non_negative=len(self.non_negative_concepts),
         )
 
-    def validate(self, payload: Dict[str, Any]) -> Tuple[bool, List[Dict[str, Any]]]:
+    def validate(self, payload: dict[str, Any]) -> tuple[bool, list[dict[str, Any]]]:
         """Validates filing payload dynamically against KB rules. Returns (is_valid, errors)."""
         errors = []
 
         # -------------------------------------------------------------
         # 1. Flatten Facts (CY & PY)
         # -------------------------------------------------------------
-        facts_cy: Dict[str, Any] = {}
-        facts_py: Dict[str, Any] = {}
+        facts_cy: dict[str, Any] = {}
+        facts_py: dict[str, Any] = {}
 
         # Master Company & Auditor facts
         for k, v in payload.get("master", {}).get("company", {}).items():
@@ -73,7 +73,7 @@ class IndASValidator:
 
         # Statement line items (Pure concept, cy, py - NO noteNo needed)
         statements = payload.get("statements", {})
-        for st_name, rows in statements.items():
+        for rows in statements.values():
             for row in rows:
                 concept = row.get("concept")
                 if not concept or row.get("periodRole") == "start":
@@ -85,8 +85,8 @@ class IndASValidator:
 
         # The same fact twice with different amounts: an opening balance (periodRole "start") is the instant
         # one year earlier, so the CY opening must equal the PY closing of the same concept.
-        seen_at: Dict[tuple, Any] = {}
-        for st_name, rows in statements.items():
+        seen_at: dict[tuple, Any] = {}
+        for rows in statements.values():
             for row in rows:
                 concept = row.get("concept")
                 if not concept:
@@ -177,7 +177,7 @@ class IndASValidator:
         # -------------------------------------------------------------
         # Evaluates sum(child * weight) == parent across all 37 calculation ELRs
         for elr, equations in self.calculation.items():
-            parents: Dict[str, List[Dict[str, Any]]] = {}
+            parents: dict[str, list[dict[str, Any]]] = {}
             for eq in equations:
                 parents.setdefault(eq["from"], []).append(eq)
 
@@ -241,16 +241,15 @@ class IndASValidator:
         # Checked against all 211 concepts marked 'Should be greater than or equal to zero' in MCA rules
         # Zero hardcoded exempt_negative list needed!
         for qname, val in facts_cy.items():
-            if qname in self.non_negative_concepts:
-                if isinstance(val, (int, float)) and val < 0:
-                    lbl = self.concepts.get(qname, {}).get("name", qname)
-                    errors.append({
-                        "level": "ERROR",
-                        "type": "NEGATIVE_VALUE_NOT_PERMITTED",
-                        "concept": qname,
-                        "value": val,
-                        "message": f"MCA statutory rule violation: {lbl} ({qname}) cannot be negative (reported: {val:,})"
-                    })
+            if qname in self.non_negative_concepts and isinstance(val, (int, float)) and val < 0:
+                lbl = self.concepts.get(qname, {}).get("name", qname)
+                errors.append({
+                    "level": "ERROR",
+                    "type": "NEGATIVE_VALUE_NOT_PERMITTED",
+                    "concept": qname,
+                    "value": val,
+                    "message": f"MCA statutory rule violation: {lbl} ({qname}) cannot be negative (reported: {val:,})"
+                })
 
         # -------------------------------------------------------------
         # 8. Gate 7: PPE 2D Multi-dimensional Table Schedule Reconciliations
@@ -306,7 +305,7 @@ class IndASValidator:
 class XbrlXmlGenerator:
     """Compiles validated JSON payload into standard MCA AOC-4 XBRL instance document."""
 
-    def __init__(self, payload: Dict[str, Any], concepts: Dict[str, Any] | None = None, taxonomy: Dict[str, Any] | None = None):
+    def __init__(self, payload: dict[str, Any], concepts: dict[str, Any] | None = None, taxonomy: dict[str, Any] | None = None):
         self.payload = payload
         # concept -> KB entry; its periodType decides instant vs duration contexts, its type the unit
         self.concepts = concepts or {}

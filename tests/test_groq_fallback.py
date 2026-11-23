@@ -1,6 +1,6 @@
 """Rate-limit model switching (docs/17): a 429 on one Groq model retries the same call on the next one."""
-import httpx
 import groq
+import httpx
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
@@ -16,7 +16,7 @@ def _rate_limit() -> groq.RateLimitError:
 class RateLimitedModel(FakeListChatModel):
     calls: int = 0
 
-    def _call(self, *args, **kwargs):  # noqa: D401
+    def _call(self, *args, **kwargs):
         self.calls += 1
         raise _rate_limit()
 

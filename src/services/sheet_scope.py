@@ -6,8 +6,9 @@ candidates are reranked directly. The sheet -> ELR table is the one in docs/15 Â
 """
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import Any, Iterable
+from collections.abc import Iterable
+from functools import cache
+from typing import Any
 
 from langchain_core.documents import Document
 
@@ -107,7 +108,7 @@ def scope_documents(kb: dict[str, Any], qnames: Iterable[str]) -> list[Document]
     return [concept_document(kb, q) for q in qnames]
 
 
-@lru_cache(maxsize=None)
+@cache
 def _cached_kb() -> dict[str, Any]:
     import json
 

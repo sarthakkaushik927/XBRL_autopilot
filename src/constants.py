@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+
 # ===================== EXTRACTORS =======================
 _env_res = os.environ.get("XAP_RESOURCES")
 if _env_res and Path(_env_res).exists():

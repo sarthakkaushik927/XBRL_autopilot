@@ -1,10 +1,10 @@
-import sys
+
 from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
 
-from src.core.exception import MyException
 from src.core.logger import logger
 from src.services.llm_provider.groq import get_llm
+
 from ..models.state import AgentState
 from ..models.structure import PlannerStructure
 from ..prompts import PLANNER_PROMPT
@@ -35,5 +35,5 @@ async def planner_node(state: AgentState, config: RunnableConfig | None = None):
             logger.info("planner.decision", route_to=route_to, queries=queries)
             return {"route_to": route_to, "queries": queries}
         except Exception as e:
-            logger.error("planner.failed", error=str(e))
-            raise MyException(e, sys)
+            logger.exception("planner.failed", error=str(e))
+            raise

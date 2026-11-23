@@ -5,7 +5,16 @@ import pytest
 
 from src.constants import INDAS_OUTPUT_JSON_PATH
 from src.services import indas_fix
-from src.services.indas_fix import FixAnswer, ProposedChange, allowed_concepts, equations, plan, relevant_lines, render, valid_changes
+from src.services.indas_fix import (
+    FixAnswer,
+    ProposedChange,
+    allowed_concepts,
+    equations,
+    plan,
+    relevant_lines,
+    render,
+    valid_changes,
+)
 
 
 @pytest.fixture(scope="module")

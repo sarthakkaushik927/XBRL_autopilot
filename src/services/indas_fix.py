@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
@@ -44,11 +44,11 @@ MAX_LINES_PER_PROBLEM = 40
 class ProposedChange(BaseModel):
     problem_id: str = Field(description="the id of the problem this change fixes")
     line_id: str = Field(description="the id of the line to change")
-    concept: Optional[str] = Field(
+    concept: str | None = Field(
         description="the concept qname the line should be tagged with (one of the allowed concepts); "
         "null to remove the line's tag (e.g. a line counted twice)"
     )
-    period_role: Optional[Literal["start", "end"]] = Field(
+    period_role: Literal["start", "end"] | None = Field(
         default=None,
         description="only for balances: 'start' = the line is an opening balance, 'end' = a closing balance",
     )
@@ -63,7 +63,7 @@ class FixAnswer(BaseModel):
 PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
-        "You are an Indian chartered accountant reviewing the XBRL tags of an AOC-4 Ind AS filing. Each problem is a "
+        ("You are an Indian chartered accountant reviewing the XBRL tags of an AOC-4 Ind AS filing. Each problem is a "
         "total that does not equal the sum of its tagged parts under the taxonomy's calculation relationships (given "
         "with their weights). How the check works: the calculated sum adds the parts that are tagged (lines tagged "
         "with the same concept are added together); untagged parts and lines marked [opening balance] do not count; "
@@ -76,7 +76,7 @@ PROMPT = ChatPromptTemplate.from_messages([
         "that total. Never tag a part with its total's concept just to make a sum work (share capital stays share "
         "capital): when the line that reports a total is missing or untagged, say so instead. In the explanation and "
         "the reasons, name lines by their line item (never by id or qname alone) and don't mention field names; "
-        "write for an accountant.",
+        "write for an accountant."),
     ),
     ("human", "{body}"),
 ])
@@ -88,18 +88,18 @@ def _label(kb: dict[str, Any], qname: str) -> str:
     return (c.get("labels") or {}).get("label") or c.get("name") or qname
 
 
-def _period_type(kb: dict[str, Any], qname: str) -> Optional[str]:
+def _period_type(kb: dict[str, Any], qname: str) -> str | None:
     return (kb.get("concepts", {}).get(qname) or {}).get("periodType")
 
 
-def _arcs(kb: dict[str, Any], elr: Optional[str]) -> list[dict[str, Any]]:
+def _arcs(kb: dict[str, Any], elr: str | None) -> list[dict[str, Any]]:
     calc = kb.get("calculation", {})
     if elr and elr in calc:
         return calc[elr]
     return [a for arcs in calc.values() for a in arcs]
 
 
-def equations(kb: dict[str, Any], concept: str, elr: Optional[str]) -> list[tuple[str, list[tuple[str, float]]]]:
+def equations(kb: dict[str, Any], concept: str, elr: str | None) -> list[tuple[str, list[tuple[str, float]]]]:
     """The calculations that hold the concept: its own (as the total), then the one it is a part of."""
     arcs = _arcs(kb, elr)
     out: list[tuple[str, list[tuple[str, float]]]] = []
@@ -111,7 +111,7 @@ def equations(kb: dict[str, Any], concept: str, elr: Optional[str]) -> list[tupl
     return out
 
 
-def neighbourhood(kb: dict[str, Any], concept: str, elr: Optional[str]) -> list[str]:
+def neighbourhood(kb: dict[str, Any], concept: str, elr: str | None) -> list[str]:
     """The concept, its parts (two levels), the totals it belongs to and their other parts."""
     arcs = [a for arcs in kb.get("calculation", {}).values() for a in arcs]
     children: dict[str, list[str]] = {}
@@ -292,8 +292,8 @@ async def propose_fix(kb: dict[str, Any], problems: list[dict], lines: list[dict
         allowed = allowed_concepts(kb, aliased, part_lines)
         try:
             answer = await _ask(chain, render(kb, aliased, part_lines, allowed), deadline)
-        except Exception as e:  # no key, network, every model of the chain rate limited
-            logger.warning("indas_fix.part_failed", problems=len(part_problems), error=str(e)[:300])
+        except (RuntimeError, TimeoutError, ConnectionError, ValueError, OSError) as e:  # no key, network, every model of the chain rate limited
+            logger.exception("indas_fix.part_failed", problems=len(part_problems), error=str(e)[:300])
             failed.append((part_problems, e))
             continue
         explanations.append(answer.explanation.strip())

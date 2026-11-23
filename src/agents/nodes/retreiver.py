@@ -1,15 +1,13 @@
-import sys
-from typing import List
+
 from langchain_core.documents import Document
 from langsmith import traceable
 
-from src.app_config import get_app_config
 from src.constants import AGENT_COLLECTION_NAME
-from src.core.exception import MyException
 from src.core.logger import logger
 from src.services.embeddings.huggingface import HuggingFaceEmbedding
 from src.services.retrieval.reranker import flaskreranker
 from src.services.vectordb.qdrant import get_qdrant_service
+
 from ..models.state import AgentState
 
 observe = traceable
@@ -20,7 +18,7 @@ def _get_vector_store():
     return get_qdrant_service(collection_name=AGENT_COLLECTION_NAME, embedding_service=embedder)
 
 
-async def reranker_documents(query: str, documents: List[Document]):
+async def reranker_documents(query: str, documents: list[Document]):
     """Rerank retrieved documents using the reranker service."""
     return await flaskreranker(query=query, documents=documents)
 
@@ -62,5 +60,5 @@ async def retreived_node(state: AgentState):
             ]
             return {"retreived_content": serializable_docs}
         except Exception as e:
-            logger.error("retriever.failed", error=str(e))
-            raise MyException(e, sys)
+            logger.exception("retriever.failed", error=str(e))
+            raise

@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from langchain_core.messages import messages_to_dict
 
@@ -9,13 +9,13 @@ from src.services.memory.inmemory import get_active_threads_store, get_checkpoin
 
 
 def create_user_conversation(
-    thread_id: Optional[str] = None,
-    title: Optional[str] = None,
-) -> Dict[str, Any]:
+    thread_id: str | None = None,
+    title: str | None = None,
+) -> dict[str, Any]:
     """Create a new conversation session in-memory."""
     active_threads = get_active_threads_store()
     tid = thread_id.strip() if thread_id and thread_id.strip() else f"conv_{uuid.uuid4().hex[:12]}"
-    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    now_iso = datetime.datetime.now(datetime.UTC).isoformat()
     metadata = {
         "thread_id": tid,
         "conversation_id": tid,
@@ -35,7 +35,7 @@ def conversation_exists(thread_id: str) -> bool:
     return thread_id in active_threads
 
 
-async def load_conversation(thread_id: str) -> Optional[List[Dict[str, Any]]]:
+async def load_conversation(thread_id: str) -> list[dict[str, Any]] | None:
     """Retrieve and serialize conversation messages for a given thread_id.
 
     Returns None if thread does not exist, or a list of message dicts (which may be empty).
@@ -43,12 +43,12 @@ async def load_conversation(thread_id: str) -> Optional[List[Dict[str, Any]]]:
     with logger.span("conversation.load", thread_id=thread_id):
         active_threads = get_active_threads_store()
         cp = get_checkpointer()
-        config: Dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+        config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
 
         try:
             state = await cp.aget_tuple(config=config)
-        except Exception as e:
-            logger.error("conversation.load_failed", thread_id=thread_id, error=str(e))
+        except (KeyError, ValueError, TypeError, RuntimeError) as e:
+            logger.exception("conversation.load_failed", thread_id=thread_id, error=str(e))
             state = None
 
         if state is None or not state.checkpoint:
@@ -96,14 +96,14 @@ async def delete_user_conversation(thread_id: str) -> bool:
             active_threads.pop(thread_id, None)
             existed = True
 
-        config: Dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+        config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
         try:
             state = await cp.aget_tuple(config=config)
             if state is not None:
                 existed = True
             await cp.adelete_thread(thread_id=thread_id)
-        except Exception as e:
-            logger.error("conversation.delete_checkpointer_error", thread_id=thread_id, error=str(e))
+        except (KeyError, ValueError, TypeError, RuntimeError) as e:
+            logger.exception("conversation.delete_checkpointer_error", thread_id=thread_id, error=str(e))
 
         if existed:
             logger.info("conversation.deleted", thread_id=thread_id)
@@ -113,7 +113,7 @@ async def delete_user_conversation(thread_id: str) -> bool:
         return False
 
 
-async def get_all_threads() -> List[Dict[str, Any]]:
+async def get_all_threads() -> list[dict[str, Any]]:
     """Retrieve all active in-memory conversation threads."""
     with logger.span("conversation.list_all"):
         active_threads = get_active_threads_store()
@@ -156,8 +156,8 @@ async def get_all_threads() -> List[Dict[str, Any]]:
                             active_threads[tid]["title"] = title
                     if ts and (not active_threads[tid].get("updated_at") or ts > active_threads[tid]["updated_at"]):
                         active_threads[tid]["updated_at"] = ts
-        except Exception as e:
-            logger.error("conversation.list_checkpoints_error", error=str(e))
+        except (KeyError, ValueError, TypeError, RuntimeError) as e:
+            logger.exception("conversation.list_checkpoints_error", error=str(e))
 
         threads_list = list(active_threads.values())
         logger.info("conversation.threads_retrieved", count=len(threads_list))

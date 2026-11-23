@@ -1,11 +1,11 @@
-from typing import List, Literal
 from langchain_core.documents import Document
-from src.constants import IND_AS_TAXONOMY_VDB, BM25_DIR_PATH
+
+from src.constants import IND_AS_TAXONOMY_VDB
 from src.core.logger import logger
 from src.services.retrieval.hybrid import normalize_collection_name
-from src.services.vectordb.qdrant import get_qdrant_service
 from src.services.vectordb.bm25 import get_bm25_service
-from langchain_community.retrievers import BM25Retriever
+from src.services.vectordb.qdrant import get_qdrant_service
+
 
 async def StoreTaxonomies(
     taxonomies: list[Document],

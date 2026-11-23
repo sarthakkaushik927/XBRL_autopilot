@@ -1,16 +1,18 @@
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field
-from typing import Literal, Any, Optional
+
 
 class RecommendSchema(BaseModel):
     keys: list[str]
-    filter: Optional[dict] = None
+    filter: dict | None = None
     top_k: int = 3
     # docs/15 §3 ELR scoping: a canonical sheet name (CANONICAL_BS, ...); None = whole taxonomy
-    scope: Optional[str] = None
+    scope: str | None = None
     # "member" = suggest members of the sheet's table axis (SOCIE components, PPE classes)
     kind: Literal["concept", "member"] = "concept"
     # each key's headings (breadcrumb), shown to the LLM
-    contexts: Optional[list[str]] = None
+    contexts: list[str] | None = None
     # let the LLM pick among each line's best scoped candidates (line names + headings only are sent)
     use_llm: bool = False
 
@@ -26,11 +28,11 @@ class Meta(BaseModel):
 
 class Signatories(BaseModel):
     din: str
-    firstName: Optional[str] = None
-    lastName: Optional[str] = None
-    name: Optional[str] = None
+    firstName: str | None = None
+    lastName: str | None = None
+    name: str | None = None
     designation: str = "Director"
-    signingDate: Optional[str] = None
+    signingDate: str | None = None
 
 
 class Master(BaseModel):
@@ -65,7 +67,7 @@ class GenerateXML(BaseModel):
     statements: Statements
     tables: list[Table] = []
     notes: list[Note] = []
-    unique_id: Optional[str] = None
+    unique_id: str | None = None
 
 
 # ---------------------------------------------------------------- Fix with AI (Problems panel)
@@ -73,9 +75,9 @@ class FixProblem(BaseModel):
     id: str = Field(max_length=200)
     message: str = Field(max_length=1000)
     concept: str = Field(max_length=300)
-    elr: Optional[str] = Field(default=None, max_length=40)
-    year: Optional[Literal["CY", "PY"]] = None
-    statement: Optional[str] = Field(default=None, max_length=40)
+    elr: str | None = Field(default=None, max_length=40)
+    year: Literal["CY", "PY"] | None = None
+    statement: str | None = Field(default=None, max_length=40)
 
 
 class FixLine(BaseModel):
@@ -85,8 +87,8 @@ class FixLine(BaseModel):
     sheet: str = Field(max_length=40)
     label: str = Field(max_length=500)
     headings: str = Field(default="", max_length=1000)
-    cy: Optional[float] = None
-    py: Optional[float] = None
+    cy: float | None = None
+    py: float | None = None
     concept: str = Field(default="", max_length=300)
     periodRole: Literal["start", "end"] = "end"
 

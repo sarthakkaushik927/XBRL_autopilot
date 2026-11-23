@@ -7,8 +7,8 @@ No network: the scope comes from the knowledge base, the models are local.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from functools import lru_cache
-from typing import Sequence
 
 import numpy as np
 from langchain_core.documents import Document

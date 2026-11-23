@@ -58,6 +58,15 @@ package = false
 pythonpath = ["."]
 asyncio_default_fixture_loop_scope = "function"
 
+[tool.ruff]
+exclude = [
+    "notebooks",
+    "lagacy_js",
+    "ui",
+    "dist",
+    "static",
+]
+
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]
 build-backend = "uv_build"

@@ -1,8 +1,6 @@
 import asyncio
-import sys
 import uuid
-from functools import lru_cache
-from typing import Any, List, Optional, Union
+from typing import Any
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
@@ -11,7 +9,6 @@ from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from src.app_config import get_app_config
-from src.core.exception import MyException
 from src.core.logger import logger
 from src.services.embeddings.base import BaseEmbedding
 from src.services.embeddings.huggingface import HuggingFaceEmbedding
@@ -24,23 +21,23 @@ class _QdrantLangchainRetriever(BaseRetriever):
     k: int = 10
 
     def _get_relevant_documents(
-        self, query: str, *, run_manager: Optional[CallbackManagerForRetrieverRun] = None
-    ) -> List[Document]:
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun | None = None
+    ) -> list[Document]:
         return asyncio.run(self.vector_store.similarity_search(query=query, k=self.k))
 
     async def _aget_relevant_documents(
-        self, query: str, *, run_manager: Optional[Any] = None
-    ) -> List[Document]:
+        self, query: str, *, run_manager: Any | None = None
+    ) -> list[Document]:
         return await self.vector_store.similarity_search(query=query, k=self.k)
 
 
 class QdrantVectorStore(BaseVectorDB):
     def __init__(
         self,
-        collection_name: Optional[str] = None,
-        url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        embedding_service: Optional[BaseEmbedding] = None,
+        collection_name: str | None = None,
+        url: str | None = None,
+        api_key: str | None = None,
+        embedding_service: BaseEmbedding | None = None,
         **kwargs,
     ):
         super().__init__()
@@ -49,8 +46,8 @@ class QdrantVectorStore(BaseVectorDB):
         self.url = url or self.app_config.qdrant_cluster_endpoint
         self.api_key = api_key or self.app_config.qdrant_api_key
         self.embedder = embedding_service or HuggingFaceEmbedding()
-        self._async_client: Optional[AsyncQdrantClient] = None
-        self._sync_client: Optional[QdrantClient] = None
+        self._async_client: AsyncQdrantClient | None = None
+        self._sync_client: QdrantClient | None = None
 
     def get_async_client(self) -> AsyncQdrantClient:
         if self._async_client is None:
@@ -77,7 +74,7 @@ class QdrantVectorStore(BaseVectorDB):
             return int(self.app_config.embedding_dim)
         return 768
 
-    async def ensure_collection(self, collection_name: Optional[str] = None, dim: Optional[int] = None) -> None:
+    async def ensure_collection(self, collection_name: str | None = None, dim: int | None = None) -> None:
         """Create collection if it does not already exist."""
         col = collection_name or self.collection_name
         with logger.span("qdrant.ensure_collection", collection=col):
@@ -94,10 +91,10 @@ class QdrantVectorStore(BaseVectorDB):
                 else:
                     logger.debug("qdrant.collection_exists", collection=col)
             except Exception as e:
-                logger.error("qdrant.collection_ensure_failed", collection=col, error=str(e))
-                raise MyException(sys.exc_info()[1], sys)
+                logger.exception("qdrant.collection_ensure_failed", collection=col, error=str(e))
+                raise
 
-    async def recreate_collection(self, collection_name: Optional[str] = None, dim: Optional[int] = None) -> None:
+    async def recreate_collection(self, collection_name: str | None = None, dim: int | None = None) -> None:
         """Delete collection if it exists, then create fresh."""
         col = collection_name or self.collection_name
         with logger.span("qdrant.recreate_collection", collection=col):
@@ -114,10 +111,10 @@ class QdrantVectorStore(BaseVectorDB):
                 )
                 logger.info("qdrant.collection_recreated", collection=col, dim=dimension)
             except Exception as e:
-                logger.error("qdrant.recreate_collection_failed", collection=col, error=str(e))
-                raise MyException(sys.exc_info()[1], sys)
+                logger.exception("qdrant.recreate_collection_failed", collection=col, error=str(e))
+                raise
 
-    async def delete_collection(self, collection_name: Optional[str] = None) -> bool:
+    async def delete_collection(self, collection_name: str | None = None) -> bool:
         """Delete collection if it exists."""
         col = collection_name or self.collection_name
         with logger.span("qdrant.delete_collection", collection=col):
@@ -130,13 +127,13 @@ class QdrantVectorStore(BaseVectorDB):
                     return True
                 return False
             except Exception as e:
-                logger.error("qdrant.delete_collection_failed", collection=col, error=str(e))
-                raise MyException(sys.exc_info()[1], sys)
+                logger.exception("qdrant.delete_collection_failed", collection=col, error=str(e))
+                raise
 
-    def add(self, documents: List[Document], **kwargs) -> List[str]:
+    def add(self, documents: list[Document], **kwargs) -> list[str]:
         return asyncio.run(self.aadd(documents=documents, **kwargs))
 
-    async def aadd(self, documents: Union[Document, List[Document]], **kwargs) -> List[str]:
+    async def aadd(self, documents: Document | list[Document], **kwargs) -> list[str]:
         if isinstance(documents, Document):
             documents = [documents]
 
@@ -192,10 +189,10 @@ class QdrantVectorStore(BaseVectorDB):
                 logger.info("qdrant.upsert_completed", collection=self.collection_name, count=len(points))
                 return point_ids
             except Exception as e:
-                logger.error("qdrant.upsert_failed", collection=self.collection_name, count=len(documents), error=str(e))
-                raise MyException(sys.exc_info()[1], sys)
+                logger.exception("qdrant.upsert_failed", collection=self.collection_name, count=len(documents), error=str(e))
+                raise
 
-    async def similarity_search(self, query: str, k: int = 4, **kwargs) -> List[Document]:
+    async def similarity_search(self, query: str, k: int = 4, **kwargs) -> list[Document]:
         with logger.span("qdrant.similarity_search", collection=self.collection_name, k=k):
             try:
                 logger.info("qdrant.search_started", collection=self.collection_name, query_preview=query[:50], k=k)
@@ -223,16 +220,16 @@ class QdrantVectorStore(BaseVectorDB):
                 logger.info("qdrant.search_completed", collection=self.collection_name, results_count=len(documents))
                 return documents
             except Exception as e:
-                logger.error("qdrant.search_failed", collection=self.collection_name, k=k, error=str(e))
-                raise MyException(sys.exc_info()[1], sys)
+                logger.exception("qdrant.search_failed", collection=self.collection_name, k=k, error=str(e))
+                raise
 
-    def search(self, query: str, k: int = 4) -> List[Document]:
+    def search(self, query: str, k: int = 4) -> list[Document]:
         return asyncio.run(self.similarity_search(query=query, k=k))
 
-    async def asearch(self, query: str, k: int = 4) -> List[Document]:
+    async def asearch(self, query: str, k: int = 4) -> list[Document]:
         return await self.similarity_search(query=query, k=k)
 
-    def as_retriever(self, search_kwargs: Optional[dict] = None) -> BaseRetriever:
+    def as_retriever(self, search_kwargs: dict | None = None) -> BaseRetriever:
         kwargs = search_kwargs or {}
         k = kwargs.get("k", 10)
         return _QdrantLangchainRetriever(vector_store=self, k=k)
@@ -242,8 +239,8 @@ _qdrant_instances: dict[str, QdrantVectorStore] = {}
 
 
 def get_qdrant_service(
-    collection_name: Optional[str] = None,
-    embedding_service: Optional[BaseEmbedding] = None,
+    collection_name: str | None = None,
+    embedding_service: BaseEmbedding | None = None,
 ) -> QdrantVectorStore:
     cfg = get_app_config()
     target_name = collection_name or cfg.collection_name

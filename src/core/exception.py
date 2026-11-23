@@ -14,7 +14,7 @@ def error_message_detail(error: Exception | str, error_detail: Any) -> str:
     if exc_tb is not None:
         file_name = exc_tb.tb_frame.f_code.co_filename
         line_number = exc_tb.tb_lineno
-        return f"Error in [{file_name}] at line [{line_number}]: {str(error)}"
+        return f"Error in [{file_name}] at line [{line_number}]: {error!s}"
     return str(error)
 
 

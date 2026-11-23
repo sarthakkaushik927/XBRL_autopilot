@@ -2,6 +2,7 @@ import asyncio
 import os
 import shutil
 from pathlib import Path
+
 from src.core.logger import logger
 
 
@@ -17,8 +18,8 @@ def delete_folder(directory_path: str | Path) -> bool:
             else:
                 logger.debug("cleanup.directory_not_found_or_already_deleted", directory=str(path))
                 return False
-        except Exception as e:
-            logger.error("cleanup.delete_folder_failed", directory=str(path), error=str(e))
+        except OSError as e:
+            logger.exception("cleanup.delete_folder_failed", directory=str(path), error=str(e))
             return False
 
 
@@ -29,8 +30,8 @@ async def delete_folder_after(directory_path: str | Path, after: float = 600.0) 
     try:
         await asyncio.sleep(after)
         return delete_folder(path)
-    except Exception as e:
-        logger.error("cleanup.delete_folder_after_failed", directory=str(path), error=str(e))
+    except OSError as e:
+        logger.exception("cleanup.delete_folder_after_failed", directory=str(path), error=str(e))
         return False
 
 
@@ -47,6 +48,6 @@ async def delete_file_after(file_path: str | Path, after: float = 600.0) -> bool
         else:
             logger.debug("cleanup.directory_already_gone", directory=target_dir)
             return False
-    except Exception as e:
-        logger.error("cleanup.failed", directory=target_dir, error=str(e))
+    except OSError as e:
+        logger.exception("cleanup.failed", directory=target_dir, error=str(e))
         return False

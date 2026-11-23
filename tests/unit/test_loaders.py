@@ -1,10 +1,10 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import pytest
 import pymupdf
-
+import pytest
 from langchain_core.documents import Document
+
 from src.ingestion.loaders import html, office, pdf, text
 
 

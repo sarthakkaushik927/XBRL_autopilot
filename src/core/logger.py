@@ -1,6 +1,8 @@
 import sys
 from functools import lru_cache
+
 import logfire
+
 from src.app_config import get_app_config
 
 
@@ -17,12 +19,12 @@ def initialise_logger():
     if not getattr(sys, "frozen", False):
         try:
             logfire.instrument_pydantic()
-        except Exception:
-            pass
+        except (RuntimeError, TypeError, AttributeError, ValueError) as e:
+            logfire.debug("logger.instrument_pydantic_skipped", error=str(e))
     try:
         logfire.instrument_system_metrics()
-    except Exception:
-        pass
+    except (RuntimeError, TypeError, AttributeError, ValueError, OSError) as e:
+        logfire.debug("logger.instrument_metrics_skipped", error=str(e))
     logfire.info("logger.initialized", service=app_config.service_name or "xbrl-autopilot")
     return logfire
 

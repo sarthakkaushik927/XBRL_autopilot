@@ -1,16 +1,22 @@
 import asyncio
+from typing import Any, Literal
 
-from typing import Any, List, Literal, Optional
 from langchain_core.documents import Document
 
-from src.constants import IND_AS_TAXONOMY_VDB, HYBRID_SEARCH_K
+from src.constants import HYBRID_SEARCH_K, IND_AS_TAXONOMY_VDB
 from src.core.logger import logger
 from src.services.retrieval.hybrid import get_hybrid_search_service
 from src.services.retrieval.reranker import get_reranker_service
-from src.services.sheet_scope import axis_members, knowledge_base, scope_concepts, scope_documents
+from src.services.sheet_scope import (
+    axis_members,
+    knowledge_base,
+    scope_concepts,
+    scope_documents,
+)
 from src.services.tagging.llm_picker import pick_concepts
 from src.services.tagging.scoped_ranker import label_of, rank_scope
 from src.utils.main_utils import restore_metadata
+
 from .base import Pipeline
 
 Kind = Literal["concept", "member"]
@@ -43,7 +49,7 @@ async def _scoped(
 
     picks: dict[int, str] = {}
     if use_llm:
-        cand = lambda j: (docs[j].metadata["qname"], label_of(docs[j]))  # noqa: E731
+        cand = lambda j: (docs[j].metadata["qname"], label_of(docs[j]))
         shared = [cand(j) for j in range(len(docs))] if len(docs) <= LLM_SHARED_SCOPE_MAX else None
         lines = [
             {"id": i, "item": key, "context": contexts[i], **({} if shared else {"candidates": [cand(j) for j, _ in r[:LLM_CANDIDATES]]})}
@@ -73,10 +79,10 @@ async def RecommendTaxonomies(
     keys: list[str],
     collection= IND_AS_TAXONOMY_VDB,
     top_k: int = 1,
-    filter:Optional[dict]=None,
-    scope: Optional[str] = None,
+    filter:dict | None=None,
+    scope: str | None = None,
     kind: Kind = "concept",
-    contexts: Optional[list[str]] = None,
+    contexts: list[str] | None = None,
     use_llm: bool = False,
 ) -> list[list[Document]]:
     """Top taxonomy concepts per line-item key.
@@ -133,10 +139,10 @@ class RecommendationPipeline(Pipeline):
         keys: list[str],
         collection = IND_AS_TAXONOMY_VDB,
         top_k: int = 3,
-        filter:Optional[dict]=None,
-        scope: Optional[str] = None,
+        filter:dict | None=None,
+        scope: str | None = None,
         kind: Kind = "concept",
-        contexts: Optional[list[str]] = None,
+        contexts: list[str] | None = None,
         use_llm: bool = False,
     ) -> list[list[Document]]:
         return await RecommendTaxonomies(keys=keys, collection=collection, top_k=top_k, filter=filter, scope=scope, kind=kind, contexts=contexts, use_llm=use_llm)

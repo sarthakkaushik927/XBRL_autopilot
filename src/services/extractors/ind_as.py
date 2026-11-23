@@ -1,15 +1,16 @@
-import json
 import re
-from pathlib import Path
 import xml.etree.ElementTree as ET
+from pathlib import Path
+
 from python_calamine import CalamineWorkbook
+
 from src.constants import (
-    INDAS_TAXONOMY_DIR_PATH,
+    INDAS_OUTPUT_JSON_PATH,
     INDAS_RULES_EXCEL_PATH,
-    INDAS_OUTPUT_JSON_PATH
+    INDAS_TAXONOMY_DIR_PATH,
 )
-from src.utils.main_utils import save_json
 from src.core.logger import logger
+from src.utils.main_utils import save_json
 
 SCHEMA_DATE_SUFFIX = re.compile(r"-\d{4}-\d{2}-\d{2}\.xsd$")
 # The entry point instances must reference. Not in the taxonomy files: it is where the MCA hosts them. MCA XBRL
@@ -252,10 +253,9 @@ class IndASTaxonomyEngine:
                     continue
 
                 # Rule 1: Non-Negative check directly from MCA rules
-                if "greater than" in rule_lower and "zero" in rule_lower:
-                    if qn not in non_negative:
-                        non_negative.append(qn)
-                        self.concepts[qn]["isNonNegative"] = True
+                if "greater than" in rule_lower and "zero" in rule_lower and qn not in non_negative:
+                    non_negative.append(qn)
+                    self.concepts[qn]["isNonNegative"] = True
 
                 # Rule 2: Mandatory rules & ELR classification
                 if "mandatory in case of consolidated" in rule_lower:
@@ -270,10 +270,9 @@ class IndASTaxonomyEngine:
                         mandatory_by_elr.setdefault(current_elr_code, [])
                         if qn not in mandatory_by_elr[current_elr_code]:
                             mandatory_by_elr[current_elr_code].append(qn)
-                elif "mandatory if" in rule_lower:
-                    if qn not in conditional:
-                        conditional.append(qn)
-                        self.concepts[qn]["isMandatoryConditional"] = True
+                elif "mandatory if" in rule_lower and qn not in conditional:
+                    conditional.append(qn)
+                    self.concepts[qn]["isMandatoryConditional"] = True
 
         self.rules = {
             "mandatoryConcepts": mandatory,
