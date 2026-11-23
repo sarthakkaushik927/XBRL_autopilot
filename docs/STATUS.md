@@ -54,6 +54,7 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-22, gzip on the backend ([18](18-performance.md) step 5, branch `perf/backend-gzip`):** `GZipMiddleware` (≥ 1 KB) in `api/app.py`. The knowledge base download goes from 4.3 MB to 356 KB. Server-sent events (`text/event-stream`) stay uncompressed (Starlette 1.10). `tests/test_gzip.py`: 2 pass.
 - **2026-11-22, issue #20 points 5 and 6 (branch `fix/issue-20`, [19](19-indas-fix-with-ai.md#calculated-totals-issue-20-point-5), docs/17 log):**
   - **5. Calculated totals:** a new Electron-free service, `ui/electron/main/services/indas-derived-totals.ts`.
     - `deriveTotals(kb, lines, elrs)` sums a total no line reports from its tagged parts, bottom-up, by the KB calculation of the **statement's own ELRs** (from its Form trees, never the union):
