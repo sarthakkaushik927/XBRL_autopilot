@@ -24,27 +24,34 @@ jobs:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }}
+      # the commit CI tested (a workflow_run otherwise checks out main's tip, which a later merge may have moved)
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.IMAGE_TAG }}
 
       - name: Docker login
         run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
 
+      # tagged with the commit as well as latest: deploy pulls exactly this commit's image (2026-11-23: it asked for
+      # :<sha> while only :latest was pushed, "not found")
       - name: Build the Docker image
-        run: docker build -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest" .
+        run: docker build -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}" -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest" .
 
       - name: Push to Docker Hub
-        run: docker push "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
+        run: |
+          docker push "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
+          docker push "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
 
   deploy:
     needs: build
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: self-hosted
     env:
-      # the image CI built for that commit (not `latest`, which a later merge may have replaced); a manual run
-      # redeploys `latest`
-      IMAGE_TAG: ${{ github.event.workflow_run.head_sha || 'latest' }}
+      # the image the build job pushed for this commit (not `latest`, which a later merge may have replaced)
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }}
@@ -89,7 +96,7 @@ jobs:
             --env "QDRANT_CLUSTER_ENDPOINT=${QDRANT_CLUSTER_ENDPOINT}" \
             --env "SERVICE_NAME=${SERVICE_NAME}" \
             --env "PYDANTIC_LOGFIRE_API_KEY=${PYDANTIC_LOGFIRE_API_KEY}" \
-            "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
+            "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
 
   # Each installer is built on its own OS. electron-builder's NSIS target runs the installer under Wine to make the
   # uninstaller, and the Ubuntu runner has no Wine ("spawn wine ENOENT", 2026-11-23), so the .exe builds on Windows.
@@ -101,6 +108,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -142,6 +151,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
