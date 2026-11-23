@@ -38,7 +38,10 @@ jobs:
           
       - name: Run Docker Container
         run: |
+          # --restart: the backend comes back by itself after a crash or an out-of-memory kill (it stayed down
+          # after one on 2026-11-23, until the next deploy)
           sudo docker run -d \
+            --restart unless-stopped \
             --name "${DOCKER_IMAGE_NAME}-container" \
             -p "${XAP_PORT}:${XAP_PORT}" \
             --env "XAP_PORT=${XAP_PORT}" \
@@ -51,3 +54,12 @@ jobs:
             --env "SERVICE_NAME=${SERVICE_NAME}" \
             --env "PYDANTIC_LOGFIRE_API_KEY=${PYDANTIC_LOGFIRE_API_KEY}" \
             "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
+
+      - name: Wait for the backend to answer /health
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS -m 5 -o /dev/null "http://127.0.0.1:${XAP_PORT}/health" && { echo "backend up after ~$((i * 3)) s"; exit 0; }
+            sleep 3
+          done
+          echo "backend did not answer /health within 3 minutes"
+          exit 1
