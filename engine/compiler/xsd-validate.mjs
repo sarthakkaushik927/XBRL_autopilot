@@ -29,11 +29,14 @@ export function patternAlternatives() {
   const root = ensureTaxonomy();
   ALTS = [];
   for (const f of ['IN-CA/in-ca-types-2016-03-31.xsd', 'IN-GAAP/in-gaap-types-2016-03-31.xsd']) {
-    let xsd = '';
-    try { xsd = readFileSync(path.join(root, f), 'utf8'); } catch { continue; }
-    for (const r of xsd.matchAll(/<xsd:restriction\b[^>]*>([\s\S]*?)<\/xsd:restriction>/g)) {
-      const ps = [...r[1].matchAll(/<xsd:pattern\s+value="([^"]*)"/g)].map((m) => m[1]);
-      if (ps.length > 1) ALTS.push(ps);
+    try {
+      const xsd = readFileSync(path.join(root, f), 'utf8');
+      for (const r of xsd.matchAll(/<xsd:restriction\b[^>]*>([\s\S]*?)<\/xsd:restriction>/g)) {
+        const ps = [...r[1].matchAll(/<xsd:pattern\s+value="([^"]*)"/g)].map((m) => m[1]);
+        if (ps.length > 1) ALTS.push(ps);
+      }
+    } catch {
+      continue;
     }
   }
   return ALTS;

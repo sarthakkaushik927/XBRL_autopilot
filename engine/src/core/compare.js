@@ -15,7 +15,7 @@ const META_FIELDS = [
 ];
 const get = (o, path) => path.split('.').reduce((x, k) => (x == null ? x : x[k]), o);
 const dimsKey = (dims) => dims.map((d) => `${d.axis}=${d.member ?? `"${d.typed}"`}`).sort().join('|');
-const textOf = (v) => plainText(String(v ?? '')).replace(/[\s ]+/g, ' ').trim();
+const textOf = (v) => plainText(String(v ?? '')).replace(/[\s\u00A0]+/g, ' ').trim();
 
 function yearOf(filing, period) {
   const s = scopeOf(filing.meta.periods, period);

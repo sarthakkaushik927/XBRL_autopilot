@@ -23,7 +23,7 @@ const AUTHORITY = resolve(__dirname, '../../engine/authority/ci-2016.authority.j
 const SAMPLE = resolve(__dirname, '../../data/sample_financials.xlsx')
 const BS = 'http://www.icai.org/xbrl/taxonomy/role/in-gaap/BalanceSheet'
 const authority = new FileAuthorityProvider(AUTHORITY)
-const REPO = resolve(__dirname, '../..')
+const _REPO = resolve(__dirname, '../..')
 
 // The real FastAPI sidecar (uv run python -m api.app) serves the taxonomy routes: no fakes for the contract under test.
 let sidecar: BackendClient

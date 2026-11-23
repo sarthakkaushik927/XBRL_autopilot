@@ -37,7 +37,7 @@ export class PreviewService {
   suggestedFileName(): string {
     const m = this.projects.project().session.filing.meta as { name?: string; periods: { cy: { start: string; end: string } } }
     const fy = `${m.periods.cy.start.slice(0, 4)}-${m.periods.cy.end.slice(2, 4)}`
-    const name = (m.name || 'Filing').replace(/[\/:*?"<>|]+/g, ' ').trim()
+    const name = (m.name || 'Filing').replace(/[/\\:*?"<>|]+/g, ' ').trim()
     return `${name} ${fy} preview.pdf`
   }
 }

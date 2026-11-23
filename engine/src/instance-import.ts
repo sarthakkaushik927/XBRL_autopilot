@@ -68,6 +68,7 @@ export function readSchemaRef(xml: string): string | null {
 
 export interface ImportedInstance {
   filing: unknown
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   report: Record<string, any>
 }
 

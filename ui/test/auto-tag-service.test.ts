@@ -25,7 +25,7 @@ import { BackendClient, backendUrl } from '../electron/main/infra/backend-client
 
 const AUTHORITY = resolve(__dirname, '../../engine/authority/ci-2016.authority.json')
 const SAMPLE = resolve(__dirname, '../../data/sample_financials.xlsx')
-const REPO = resolve(__dirname, '../..')
+const _REPO = resolve(__dirname, '../..')
 
 let sidecar: BackendClient
 beforeAll(async () => {

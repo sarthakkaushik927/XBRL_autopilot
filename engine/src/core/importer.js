@@ -115,7 +115,7 @@ export function importInstance(A, xmlText, { DOMParserImpl = globalThis.DOMParse
   // collision-safe: several source contexts may collapse to one internal context (duplicates)
   const byInternal = new Map();
   for (const c of contexts.values()) (byInternal.get(c.internalKey) || byInternal.set(c.internalKey, []).get(c.internalKey)).push(c.id);
-  for (const [k, ids] of byInternal) if (ids.length > 1) report.warnings.push(`Duplicate contexts (Filing Manual #5) ${ids.join(', ')} share period+dimensions; merged`);
+  for (const [_k, ids] of byInternal) if (ids.length > 1) report.warnings.push(`Duplicate contexts (Filing Manual #5) ${ids.join(', ')} share period+dimensions; merged`);
 
   // ---- units
   const units = new Map();

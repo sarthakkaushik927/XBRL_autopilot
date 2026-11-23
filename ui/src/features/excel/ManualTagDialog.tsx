@@ -1,4 +1,4 @@
-import { Check, Copy, ExternalLink, HelpCircle, Info, Layers, Loader2, MousePointerClick, Search, Sparkles, Tag, Trash2, X } from 'lucide-react'
+import { Check, Copy, HelpCircle, Info, Loader2, MousePointerClick, Search, Sparkles, Tag, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { formatIndian } from '@xap/engine/basics'
 import type { ConceptHit, MappingView, Scope } from '@shared/editor'

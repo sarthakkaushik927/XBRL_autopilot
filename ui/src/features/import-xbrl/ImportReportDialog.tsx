@@ -1,7 +1,7 @@
 import { CheckCircle2, TriangleAlert } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { taxonomyLabel } from '@xap/engine/basics'
-import type { ImportReportView, InstanceConventionsView } from '@shared/project'
+import type { InstanceConventionsView } from '@shared/project'
 import { Button, Dialog, Section } from '@/components/ui/primitives'
 import { useProject } from '@/stores/project'
 

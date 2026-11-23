@@ -73,37 +73,38 @@ export function Checkbox(props: { checked: boolean; onChange(v: boolean): void; 
 
 /** Accessible modal dialog: Esc closes, focus moves into the dialog, backdrop click closes. */
 export function Dialog(props: { open: boolean; title: string; onClose(): void; children: ReactNode; footer?: ReactNode; width?: number }) {
+  const { open, title, onClose, children, footer, width } = props
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (!props.open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && props.onClose()
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
     // focus the first field of the body (not the header's close button)
     ref.current?.querySelector<HTMLElement>('[data-dialog-body] :is(input, select, textarea, button):not([disabled])')?.focus()
     return () => window.removeEventListener('keydown', onKey)
-  }, [props.open, props.onClose])
-  if (!props.open) return null
+  }, [open, onClose])
+  if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onMouseDown={props.onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onMouseDown={onClose}>
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
-        aria-label={props.title}
-        style={{ width: props.width ?? 560 }}
+        aria-label={title}
+        style={{ width: width ?? 560 }}
         className="max-h-[90vh] max-w-[95vw] overflow-hidden rounded-md border border-border bg-panel shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <header className="flex h-10 items-center justify-between border-b border-border px-4">
-          <h2 className="text-sm font-semibold">{props.title}</h2>
-          <button className="text-muted hover:text-fg" aria-label="Close" onClick={props.onClose}>
+          <h2 className="text-sm font-semibold">{title}</h2>
+          <button className="text-muted hover:text-fg" aria-label="Close" onClick={onClose}>
             <X size={16} />
           </button>
         </header>
         <div data-dialog-body className="max-h-[calc(90vh-6rem)] overflow-auto p-4">
-          {props.children}
+          {children}
         </div>
-        {props.footer && <footer className="flex justify-end gap-2 border-t border-border px-4 py-3">{props.footer}</footer>}
+        {footer && <footer className="flex justify-end gap-2 border-t border-border px-4 py-3">{footer}</footer>}
       </div>
     </div>
   )

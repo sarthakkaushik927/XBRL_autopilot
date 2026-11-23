@@ -2,7 +2,7 @@
 // Rule results: PASS | FAIL | WARN | NOT_APPLICABLE | REVIEW_ONLY_EXTERNAL_DATA | UNIMPLEMENTED | APPROVED_LIMITATION_NOT_EXECUTED.
 // No rule is ever reported PASS unless it was actually evaluated.
 import * as Dec from './decimal.js';
-import { evalPred, evalExpr } from './expr.js';
+import { evalPred } from './expr.js';
 import { Applicability } from './applicability.js';
 import { dimensionallyValid, sequentialGaps, tablesForFact } from './dimensions.js';
 import { runCalculations, CalcStatus } from './calculation.js';

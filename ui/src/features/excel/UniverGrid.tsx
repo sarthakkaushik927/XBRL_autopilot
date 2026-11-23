@@ -265,7 +265,9 @@ export function UniverGrid(props: UniverGridProps) {
     drawLinked()
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(drawStatus, [marks.approved, marks.suggested, marks.rejected, marks.blocks])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(drawLinked, [marks.linked])
 
   // ---- reveal requests from the XBRL side (Form/XML/Inspector)

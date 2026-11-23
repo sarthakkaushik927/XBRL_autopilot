@@ -1,4 +1,4 @@
-import { ChevronDown, Copy, Check, FileText, Loader2, MessageSquare, Plus, RefreshCw, Send, Sparkles, Square, Trash2, X } from 'lucide-react'
+import { ChevronDown, FileText, Loader2, MessageSquare, Plus, Send, Sparkles, Square, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { Button } from '@/components/ui/primitives'
@@ -7,7 +7,6 @@ import { IndasFixMessages, useHasFixSessions } from '@/features/indas/IndasFixMe
 import { useChat, type ChatMessage } from '@/stores/chat'
 import { useIndasFix } from '@/stores/indas-fix'
 import { useSidecar } from '@/stores/sidecar'
-import { toast } from '@/stores/toast'
 
 const SUGGESTIONS = [
   'How do I tag Share Capital under Ind AS?',

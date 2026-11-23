@@ -35,8 +35,8 @@ function TablePane({ kind }: { kind: 'socie' | 'ppe' | 'texts' }) {
   let scope: string = SOCIE_TABLE.sheet
   let field: 'concept' | 'member' = 'concept'
   let title: string
-  let current = ''
-  let suggested: ConceptSuggestion[] = []
+  let current: string
+  let suggested: ConceptSuggestion[]
   if (kind === 'socie') {
     field = sel?.field === 'member' ? 'member' : 'concept'
     title = field === 'member' ? 'Components of equity (members)' : 'Changes in equity — concepts'

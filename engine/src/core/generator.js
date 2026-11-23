@@ -83,7 +83,6 @@ export function generateInstance(A, filing, facts = filing.all()) {
   const sortedFacts = facts.slice().sort((a, b) => (order.get(a.concept) ?? 1e9) - (order.get(b.concept) ?? 1e9) || a.concept.localeCompare(b.concept) || scopeRank(P, a.period) - scopeRank(P, b.period) || ctxMap.get(keyOf(a)).id.localeCompare(ctxMap.get(keyOf(b)).id));
 
   // fact ids only where needed (footnotes)
-  const footnoted = new Map();
   let fid = 1;
   const factIds = new Map();
   for (const fn of filing.footnotes.values()) for (const k of fn.factKeys) if (!factIds.has(k) && facts.some((f) => f.key === k)) factIds.set(k, null);
@@ -141,7 +140,7 @@ export function generateInstance(A, filing, facts = filing.all()) {
   const notes = [...filing.footnotes.values()].filter((fn) => [...fn.factKeys].some((k) => factIds.get(k)) && fn.text.trim());
   if (notes.length) {
     L.push('  <link:footnoteLink xlink:type="extended" xlink:role="http://www.xbrl.org/2003/role/link">');
-    for (const [k, id] of factIds) if (id) L.push(`    <link:loc xlink:type="locator" xlink:href="#${id}" xlink:label="${id}"/>`);
+    for (const [, id] of factIds) if (id) L.push(`    <link:loc xlink:type="locator" xlink:href="#${id}" xlink:label="${id}"/>`);
     for (const fn of notes) {
       L.push(`    <link:footnote xlink:type="resource" xlink:label="${fn.id}" xlink:role="http://www.xbrl.org/2003/role/footnote" xml:lang="${esc(fn.lang || 'en')}">${esc(fn.text)}</link:footnote>`);
       for (const k of fn.factKeys) { const id = factIds.get(k); if (id) L.push(`    <link:footnoteArc xlink:type="arc" xlink:arcrole="http://www.xbrl.org/2003/arcrole/fact-footnote" xlink:from="${id}" xlink:to="${fn.id}"/>`); }

@@ -70,7 +70,7 @@ export function buildTableView(A, tableId) {
   const seenConcepts = new Set();
   const pres = t.presentationElr;
   const lineSet = new Set(t.lineItemTree.map((n) => n.concept));
-  const walk = (q, depth, preferredLabel) => {
+  const walk = (q, depth, _preferredLabel) => {
     for (const arc of A.presentationChildren(pres, q)) {
       const rk = `${arc.to}|${arc.preferredLabel || ''}`;
       if (!lineSet.has(arc.to) || seen.has(rk)) continue;

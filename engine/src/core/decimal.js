@@ -17,7 +17,8 @@ export function parse(str) {
   }
   const t = String(str).trim().replace(/,/g, '');
   if (!isDecimalString(t)) throw new Error(`Invalid decimal: "${str}"`);
-  let [mant, exp] = t.toLowerCase().split('e');
+  const [rawMant, exp] = t.toLowerCase().split('e');
+  let mant = rawMant;
   let sign = 1n;
   if (mant[0] === '-') { sign = -1n; mant = mant.slice(1); } else if (mant[0] === '+') mant = mant.slice(1);
   const [ip, fp = ''] = mant.split('.');
