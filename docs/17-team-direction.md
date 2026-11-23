@@ -88,6 +88,7 @@ The work is saved as `<Company>_FY yyyy-yy.axbrl` in the projects folder (from N
 - [ ] **Index `elr` metadata** (his ingestion) — would let the hybrid search scope too; the KB-based scope works without it.
 
 ## Log
+- **2026-11-23** — Sarthak: propose an **App CI** (`app-ci.yml`: typecheck + UI unit tests on every push and PR) next to Vashu's backend `ci.yml`. **Vashu's call:** merge it or not, and whether the engine tests come back (their authority files were removed in `b97ccc1`) or retire.
 - **2026-11-22** — Sarthak (with Ali): the concept embeddings saved to disk and the lighter AI models (ONNX / quantized) are **Vashu's**, not ours; we don't build them. So is the `ETag` on `/authority` (the app side of the knowledge base disk cache is ours) ([18](18-performance.md#what-to-optimise-next)).
 - **2026-11-22** — Issue #20, points 5 and 6 (`fix/issue-20`):
   - **5, calculated totals, done:** a total no line reports is summed from its tagged parts by the MCA calculation linkbase, never "Total" in a name. It uses only the calculation ELRs of the statement being tagged; when a statement has more than one for a total (direct vs indirect cash flow), the one with the most reported parts. Σ ±1 weights, CY and PY apart, monetary only, same period type, no opening balances, bottom-up. Shown Σ in the Form, used by the Difference check and Fix with AI's dry run, filed by Generate (once, never over a reported fact). Details: [19](19-indas-fix-with-ai.md#calculated-totals-issue-20-point-5).

@@ -54,6 +54,10 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-23, App CI proposed (branch `ci/app-tests`, for Vashu):** `.github/workflows/app-ci.yml` runs `pnpm typecheck` and the UI unit tests on every push and PR. Until now no app test ran in CI: `ci.yml` covers the backend.
+  - **Kept apart from `ci.yml`:** the backend's tests, Docker image and deploy are untouched.
+  - **Not run:** the engine's own tests. They need `knowledge_base/*_engine_authority.json`, removed in `b97ccc1`; there 8 vitest files fail to load and 52 of 68 legacy tests fail (open item, docs/17).
+  - **`mapping-helpers.test.ts`:** the 3 tests that read the removed `data/sample_financials.xlsx` now skip while it is missing, like the other KB-based tests. UI: 210 pass, 145 skipped.
 - **2026-11-23, knowledge base kept on disk, app side (branch `perf/kb-disk-cache`, [18](18-performance.md#what-to-optimise-next)):** `CachedKnowledgeBase` asks `/authority` with `If-None-Match` and uses its copy on a `304`.
   - **Until the server sends an `ETag` (Vashu's):** nothing changes.
   - **Live, behind an ETag test proxy:** session 1 `200` (saved), session 2 `304` (copy used). Same results with and without the copy: 55 statements, identical Difference checks.
