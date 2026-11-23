@@ -22,6 +22,8 @@ dependencies = [
     "langchain-huggingface>=1.2.3",
     "logfire[system-metrics]>=5.4.0",
     "sentence-transformers>=6.2.0",
+    # declared so [tool.uv.sources] can take it from the CPU index on Linux (below)
+    "torch>=2.15.0",
     "python-calamine>=0.9.1",
     "xlrd==2.0.1",
     "langchain-community>=0.4.2",
@@ -53,6 +55,17 @@ dev = "main:dev"
 
 [tool.uv]
 package = false
+
+# Linux (the Docker image on the CPU-only EC2 box) takes the CPU build of torch: PyPI's Linux wheel is the CUDA build
+# and pulls about 40 nvidia-* packages, several GB the server cannot use, which filled its disk on deploy (2026-11-23).
+# Windows and macOS keep PyPI's wheels, which are CPU-only already.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

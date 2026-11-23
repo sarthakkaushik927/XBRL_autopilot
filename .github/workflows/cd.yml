@@ -66,6 +66,16 @@ jobs:
       QDRANT_CLUSTER_ENDPOINT: ${{ vars.QDRANT_CLUSTER_ENDPOINT }}
       XAP_PORT: ${{ vars.XAP_PORT }}
     steps:
+      # Room for the new image before pulling it: every image no container uses goes (the running backend's stays),
+      # with stopped containers and the build cache. Pulling first filled the disk on 2026-11-23 ("No space left on device").
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo docker container prune -f
+          sudo docker image prune -af
+          sudo docker builder prune -af || true
+          df -h /
+
       - name: Pull Docker image
         run: |
           echo "deploying ${IMAGE_TAG}"
@@ -75,10 +85,6 @@ jobs:
         run: |
           sudo docker rm -f "${DOCKER_IMAGE_NAME}-container" || true
 
-      - name: Pruning system df
-        run: |
-          sudo docker system prune -f
-          
       - name: Run Docker Container
         run: |
           # --restart: the backend comes back by itself after a crash or an out-of-memory kill (it stayed down
@@ -109,6 +115,12 @@ jobs:
           echo "backend did not answer /health within 3 minutes; its last log lines:"
           sudo docker logs --tail 80 "${DOCKER_IMAGE_NAME}-container" || true
           exit 1
+
+      # the previous image is unused now that the new container answers: drop it so the next deploy has room
+      - name: Remove the old image
+        run: |
+          sudo docker image prune -af
+          df -h /
 
   # Each installer is built on its own OS. electron-builder's NSIS target runs the installer under Wine to make the
   # uninstaller, and the Ubuntu runner has no Wine ("spawn wine ENOENT", 2026-11-23), so the .exe builds on Windows.

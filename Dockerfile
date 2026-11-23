@@ -17,7 +17,8 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock* ./
 
-RUN uv sync --no-dev
+# --no-cache: the downloaded wheels are not kept in the layer next to the installed packages (torch twice)
+RUN uv sync --no-dev --frozen --no-cache
 
 COPY . .
 
