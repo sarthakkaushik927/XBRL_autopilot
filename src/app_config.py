@@ -27,7 +27,7 @@ class AppConfig(BaseSettings):
     qdrant_api_key: str | None = Field(None, validation_alias="QDRANT_API_KEY")
     qdrant_cluster_endpoint: str | None = Field(None, validation_alias="QDRANT_CLUSTER_ENDPOINT")
     embedding_dim: int = Field(768, validation_alias="EMBEDDING_DIM")
-    embedding_model: int = Field(None,validation_alias="EMBEDDING_MODEL")
+    embedding_model: str | None = Field(None, validation_alias="EMBEDDING_MODEL")
     collection_name: str = Field("xbrl_agent", validation_alias="COLLECTION_NAME")
 
     # Ingestion / Security (Optional password protection)
