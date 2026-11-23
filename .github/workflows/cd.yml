@@ -91,14 +91,13 @@ jobs:
             --env "PYDANTIC_LOGFIRE_API_KEY=${PYDANTIC_LOGFIRE_API_KEY}" \
             "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
 
-  build-desktop-app:
+  # Each installer is built on its own OS. electron-builder's NSIS target runs the installer under Wine to make the
+  # uninstaller, and the Ubuntu runner has no Wine ("spawn wine ENOENT", 2026-11-23), so the .exe builds on Windows.
+  build-desktop-linux:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     env:
-      AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
       XAP_API_URL: ${{ vars.XAP_API_URL }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -116,7 +115,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64 || true
-          sudo apt install make
 
       - name: Install dependencies (make install)
         run: make install
@@ -124,13 +122,74 @@ jobs:
       - name: Build Linux app (.deb & .AppImage)
         run: make build-app-linux
 
+      - name: Keep the Linux installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-linux
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
+
+  build-desktop-windows:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: windows-latest
+    env:
+      XAP_API_URL: ${{ vars.XAP_API_URL }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install make
+        run: command -v make || choco install make -y --no-progress
+
+      - name: Install dependencies (make install)
+        run: make install
+
       - name: Build Windows app (.exe)
         run: make build-app-windows
+
+      - name: Keep the Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-windows
+          path: dist/*.exe
+          if-no-files-found: error
+
+  release-desktop-app:
+    needs: [build-desktop-linux, build-desktop-windows]
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Collect the installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          path: dist
+          merge-multiple: true
 
       - name: Verify build artifacts
         run: |
           echo "Generated artifacts in dist/:"
           ls -lh dist/
+          ls dist/*.exe dist/*.AppImage dist/*.deb
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
