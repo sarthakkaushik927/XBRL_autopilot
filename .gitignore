@@ -58,3 +58,7 @@ data/validation_tool/*/sun.net.*
 
 initiate.sh
 linked.sh
+
+
+.ruff_cache/
+.pytest_cache/
