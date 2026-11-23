@@ -1,29 +1,24 @@
 """Hybrid Retrieval Service: combines Qdrant Vector Search and BM25 with LangChain EnsembleRetriever."""
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from langchain_classic.retrievers import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 
 from src.constants import (
-    INDAS_OUTPUT_JSON_PATH,
-    IND_AS_TAXONOMY_VDB,
-    HYBRID_SEARCH_K,
-    VECTOR_DB_WEIGHT,
     BM25_WEIGHT,
-    BM25_DIR_PATH
+    HYBRID_SEARCH_K,
+    IND_AS_TAXONOMY_VDB,
+    INDAS_OUTPUT_JSON_PATH,
+    VECTOR_DB_WEIGHT,
 )
-import asyncio
-from src.utils.main_utils import load_json, load_object
 from src.core.logger import logger
 from src.services.embeddings.huggingface import HuggingFaceEmbedding
-from src.services.vectordb.qdrant import QdrantVectorStore, get_qdrant_service
 from src.services.vectordb.bm25 import get_bm25_service
+from src.services.vectordb.qdrant import QdrantVectorStore, get_qdrant_service
 
 TaxonomyCollection = Literal["ind_as_taxonomy", "ci_taxonomy", "cost_taxonomy", "costing_taxonomy"]
 
@@ -50,7 +45,7 @@ class HybridCandidate:
 class HybridSearchService:
     """Hybrid Search combining Qdrant Vector Store and LangChain BM25 using EnsembleRetriever."""
 
-    def __init__(self, embedding_model=None, vector_db: Optional[Any] = None):
+    def __init__(self, embedding_model=None, vector_db: Any | None = None):
         self._embedding = embedding_model
         self._vector_db = vector_db
         self._bm25_retrievers: dict[str, BM25Retriever] = {}
@@ -90,7 +85,7 @@ class HybridSearchService:
         query: str,
         collection: TaxonomyCollection = IND_AS_TAXONOMY_VDB,
         k: int = HYBRID_SEARCH_K,
-        filter: Optional[dict]=None
+        filter: dict | None=None
     ) -> list[Document]:
         """Run EnsembleRetriever over Qdrant Vector DB + BM25 and return reportable Documents."""
         clean_query = query.strip()
@@ -102,8 +97,8 @@ class HybridSearchService:
             try:
                 ensemble = self._get_ensemble_retriever(canon, k=k)
                 docs = await ensemble.ainvoke(clean_query,filter=filter)
-            except Exception as e:
-                logger.warning("hybrid.ensemble_fallback_to_bm25", error=str(e), collection=canon)
+            except (RuntimeError, ConnectionError, TimeoutError, ValueError, KeyError, TypeError, OSError) as e:
+                logger.exception("hybrid.ensemble_fallback_to_bm25", error=str(e), collection=canon)
                 bm25 = self._get_bm25_retriever(canon)
                 docs = await bm25.ainvoke(clean_query)
 
@@ -116,7 +111,7 @@ class HybridSearchService:
             return reportable[:k]
 
 
-_default_hybrid: Optional[HybridSearchService] = None
+_default_hybrid: HybridSearchService | None = None
 
 
 def get_hybrid_search_service() -> HybridSearchService:

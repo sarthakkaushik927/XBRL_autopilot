@@ -46,6 +46,7 @@ export function FormView() {
         body.current?.querySelector<HTMLElement>(`tr[data-concept="${CSS.escape(selection.concept!)}"]`)
       row?.scrollIntoView({ block: 'nearest' })
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, selection.concept, focusSeq])
 
   // Go to note: once the note is open, its table (or the element's row) comes to the top
@@ -57,6 +58,7 @@ export function FormView() {
       const target = table ?? body.current?.querySelector<HTMLElement>(`tr[data-concept="${CSS.escape(noteTarget.concept)}"]`)
       target?.scrollIntoView({ block: 'start' })
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, noteTarget])
 
   // T: the table's grid opens and comes to the top

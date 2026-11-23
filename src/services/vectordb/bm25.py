@@ -2,7 +2,6 @@ import asyncio
 import concurrent.futures
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
@@ -33,7 +32,7 @@ class BM25(BaseVectorDB):
     def __init__(self, pickle_path: str | Path = BM25_DIR_PATH):
         self.pickle_path = Path(pickle_path)
         self.documents: list[Document] = []
-        self.retriever: Optional[BM25Retriever] = None
+        self.retriever: BM25Retriever | None = None
 
     def _build_retriever(self, k: int = 4) -> None:
         if self.documents:
@@ -119,7 +118,6 @@ class BM25(BaseVectorDB):
 
 
 def get_bm25_service(collection_name: str = IND_AS_TAXONOMY_VDB) -> BM25:
-    global _bm25_instances
     if collection_name not in _bm25_instances:
         base_dir = Path(BM25_DIR_PATH)
         path = base_dir / f"{collection_name}.pkl"

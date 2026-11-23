@@ -1,14 +1,16 @@
 import asyncio
 import json
-from typing import Any, AsyncGenerator, Dict, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 
 from src.agents.graph import get_graph
 from src.core.logger import logger
 from src.guardrails.rails import guard
 from src.services.llm_provider.groq import AVAILABLE_MODELS, DEFAULT_MODEL
 from src.services.memory.inmemory import get_checkpointer
+
 from .base import Pipeline
 
 
@@ -27,7 +29,7 @@ class ChatPipeline(Pipeline):
     async def stream_chat(
         message: str,
         thread_id: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> AsyncGenerator[str, None]:
         metadata = metadata or {}
         try:
@@ -203,8 +205,8 @@ class ChatPipeline(Pipeline):
                         pass
 
             logger.info("chat_pipeline.stream_chat_completed", thread_id=thread_id)
-        except Exception as e:
-            logger.error("chat_pipeline.stream_chat_error", thread_id=thread_id, error=str(e))
+        except (RuntimeError, TimeoutError, ValueError, ConnectionError, KeyError, TypeError, OSError) as e:
+            logger.exception("chat_pipeline.stream_chat_error", thread_id=thread_id, error=str(e))
             err_payload = json.dumps({"type": "error", "message": str(e)})
             yield f"data:{err_payload}\n\n"
 
@@ -212,8 +214,8 @@ class ChatPipeline(Pipeline):
         self,
         message: str,
         thread_id: str,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Synchronously/direct execution for non-streaming calls."""
         metadata = metadata or {}
         model = metadata.get("model", DEFAULT_MODEL)
@@ -247,6 +249,8 @@ class ChatPipeline(Pipeline):
                 "data": {"retreived_content": retrieved_contexts},
             }
 
-    async def initiate(self, message: str, thread_id: str, metadata: dict = {}) -> AsyncGenerator[str, None]:
+    async def initiate(self, message: str, thread_id: str, metadata: dict | None = None) -> AsyncGenerator[str, None]:
+        if metadata is None:
+            metadata = {}
         async for x in self.stream_chat(message, thread_id, metadata):
             yield x

@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any
 
 from langchain_community.document_compressors.flashrank_rerank import FlashrankRerank
 from langchain_core.documents import Document
 
-from src.core.exception import MyException
 from src.core.logger import logger
 from src.utils.main_utils import restore_metadata
 from src.utils.text_utils import norm_label
@@ -34,9 +32,9 @@ class RerankerService:
     def rerank(
         self,
         query: str,
-        candidates: List[Document],
-        top_k: Optional[int] = None,
-    ) -> List[RankedDocument]:
+        candidates: list[Document],
+        top_k: int | None = None,
+    ) -> list[RankedDocument]:
         """Reranks candidate documents against query using FlashRank."""
         if not candidates or not query:
             return []
@@ -47,11 +45,11 @@ class RerankerService:
         with logger.span("reranker.execution", query=query, candidates_count=len(candidates), top_k=k):
             try:
                 compressed_docs = self._ranker.compress_documents(candidates, query)
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError, TypeError, IndexError) as e:
                 logger.warning("reranker.fallback", error=str(e))
                 compressed_docs = candidates
 
-            results: List[RankedDocument] = []
+            results: list[RankedDocument] = []
             q_norm = norm_label(query)
             for doc in compressed_docs:
                 raw_meta = getattr(doc, "metadata", {}) or {}
@@ -59,7 +57,7 @@ class RerankerService:
                 if isinstance(meta.get("labels"), str):
                     try:
                         meta["labels"] = json.loads(meta["labels"])
-                    except Exception:
+                    except (json.JSONDecodeError, TypeError):
                         pass
 
                 qname = meta.get("qname") or (
@@ -93,7 +91,7 @@ class RerankerService:
             return results[:k]
 
 
-_default_reranker: Optional[RerankerService] = None
+_default_reranker: RerankerService | None = None
 
 
 def get_reranker_service() -> RerankerService:
@@ -103,7 +101,7 @@ def get_reranker_service() -> RerankerService:
     return _default_reranker
 
 
-_shared_compressor: Optional[FlashrankRerank] = None
+_shared_compressor: FlashrankRerank | None = None
 
 
 def _get_compressor() -> FlashrankRerank:
@@ -113,7 +111,7 @@ def _get_compressor() -> FlashrankRerank:
     return _shared_compressor
 
 
-async def flaskreranker(query: str, documents: List[Document]) -> dict[str, Any]:
+async def flaskreranker(query: str, documents: list[Document]) -> dict[str, Any]:
     """Rerank retrieved documents based on relevance to the query (used by agent retriever)."""
     with logger.span("reranker.flaskreranker", query=query, doc_count=len(documents)):
         try:
@@ -133,5 +131,5 @@ async def flaskreranker(query: str, documents: List[Document]) -> dict[str, Any]
             logger.info("reranker.reranking_complete", count=len(reranked_documents))
             return {"reranked_content": reranked_documents}
         except Exception as e:
-            logger.error("reranker.failed", error=str(e))
-            raise MyException(e, sys)
+            logger.exception("reranker.failed", error=str(e))
+            raise

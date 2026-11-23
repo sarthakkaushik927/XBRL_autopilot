@@ -1,7 +1,6 @@
 """Text helpers for XBRL: label cleaning, normalization, tokenization, numbers in text, and header dates."""
 from __future__ import annotations
 
-import datetime as dt
 import re
 
 _SPELLING = {
@@ -27,10 +26,10 @@ STOPWORDS = frozenset({
 })
 _LEADING_ENUM = re.compile(
     r"^\s*(?:\(?[ivxlcdm]+\)|\(?[a-z]\)|\(?\d{1,2}\)|[ivxlcdm]+\.|[a-z]\.|\d{1,2}\.|[-–•*])\s+",
-    re.I,
+    re.IGNORECASE,
 )
-_NOTE_PREFIX = re.compile(r"^\s*note\s*(?:no\.?)?\s*\d+[a-z]?\s*[:.\-–]?\s*", re.I)
-_BRACKETS = re.compile(r"\[[^\]]*\]|\((?:refer|see|note)[^)]*\)", re.I)
+_NOTE_PREFIX = re.compile(r"^\s*note\s*(?:no\.?)?\s*\d+[a-z]?\s*[:.\-–]?\s*", re.IGNORECASE)
+_BRACKETS = re.compile(r"\[[^\]]*\]|\((?:refer|see|note)[^)]*\)", re.IGNORECASE)
 _NON_WORD = re.compile(r"[^a-z0-9]+")
 
 
@@ -89,7 +88,7 @@ _DATES_IN_TEXT = re.compile("|".join([
     rf"\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:of\s+)?{_MONTH},?\s+\d{{2,4}}\b",
     r"\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b",
     r"\b(?:fy\s*)?\d{4}\s*[-–/]\s*\d{2,4}\b",
-]), re.I)
+]), re.IGNORECASE)
 _NUMBER_IN_TEXT = re.compile(r"\d{1,3}(?:,\d{2,3})+(?:\.\d+)?|\d+(?:\.\d+)?")
 
 

@@ -10,16 +10,16 @@ const GROUPS: ElrInfo['group'][] = ['Statements', 'Notes', 'Disclosures']
 /** ELR tree of the open filing (C&I or Ind AS, through the FilingWorkspace adapter). */
 export function FilingExplorer() {
   const ws = useWorkspace()
-  const elrs = ws?.elrs ?? []
   const activeElr = ws?.activeElr ?? null
   const openElr = (uri: string) => ws?.openElr(uri)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set(['Notes', 'Disclosures']))
   const [filter, setFilter] = useState('')
   const grouped = useMemo(() => {
+    const list = ws?.elrs ?? []
     const q = filter.trim().toLowerCase()
     const match = (e: ElrInfo) => !q || e.code.includes(q) || e.title.toLowerCase().includes(q)
-    return GROUPS.map((g) => ({ group: g, items: elrs.filter((e) => e.group === g && match(e)) }))
-  }, [elrs, filter])
+    return GROUPS.map((g) => ({ group: g, items: list.filter((e) => e.group === g && match(e)) }))
+  }, [ws?.elrs, filter])
 
   if (!ws) {
     return (

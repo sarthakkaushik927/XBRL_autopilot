@@ -7,6 +7,7 @@ fills one file and uploads it; `/indas/transform` then reads it as-is instead of
 """
 from __future__ import annotations
 
+import zipfile
 from collections import OrderedDict
 from copy import copy
 from io import BytesIO
@@ -14,6 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 
 from src.constants import CANONICAL_SHEETS_DIR
 
@@ -21,7 +23,7 @@ from .indas import BS_COLS, CF_COLS, FINANCIAL_NOTES_COLS, PL_COLS, PPE_COLS, SO
 
 TEMPLATE_FILE_NAME = "XBRL_Autopilot_Standard_Template.xlsx"
 
-CANONICAL_SCHEMA: "OrderedDict[str, list[str]]" = OrderedDict([
+CANONICAL_SCHEMA: OrderedDict[str, list[str]] = OrderedDict([
     ("CANONICAL_BS", BS_COLS),
     ("CANONICAL_PL", PL_COLS),
     ("CANONICAL_CF", CF_COLS),
@@ -72,7 +74,7 @@ def is_standard_template(path: str | Path) -> bool:
     """True when the workbook has all six canonical sheets with exactly the canonical header rows."""
     try:
         wb = load_workbook(path, read_only=True, data_only=True)
-    except Exception:
+    except (InvalidFileException, zipfile.BadZipFile, OSError, KeyError):
         return False
     try:
         for name, cols in CANONICAL_SCHEMA.items():
@@ -87,9 +89,9 @@ def is_standard_template(path: str | Path) -> bool:
         wb.close()
 
 
-def read_standard_template(path: str | Path) -> "OrderedDict[str, pd.DataFrame]":
+def read_standard_template(path: str | Path) -> OrderedDict[str, pd.DataFrame]:
     """The six canonical sheets of a filled template, blank rows dropped, columns in canonical order."""
-    out: "OrderedDict[str, pd.DataFrame]" = OrderedDict()
+    out: OrderedDict[str, pd.DataFrame] = OrderedDict()
     for name, cols in CANONICAL_SCHEMA.items():
         df = pd.read_excel(path, sheet_name=name, dtype=object, engine="openpyxl")
         df = df.reindex(columns=cols).dropna(how="all")

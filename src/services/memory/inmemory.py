@@ -1,8 +1,9 @@
-from typing import Any, Dict
+from typing import Any
+
 from langgraph.checkpoint.memory import InMemorySaver
 
 _in_memory_checkpointer: InMemorySaver | None = None
-_active_threads: Dict[str, Dict[str, Any]] = {}
+_active_threads: dict[str, dict[str, Any]] = {}
 
 
 def get_checkpointer() -> InMemorySaver:
@@ -13,6 +14,6 @@ def get_checkpointer() -> InMemorySaver:
     return _in_memory_checkpointer
 
 
-def get_active_threads_store() -> Dict[str, Dict[str, Any]]:
+def get_active_threads_store() -> dict[str, dict[str, Any]]:
     """Return the in-memory active conversation threads dictionary."""
     return _active_threads

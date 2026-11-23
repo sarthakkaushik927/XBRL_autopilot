@@ -1,8 +1,7 @@
 import os
-import shutil
 import uuid
-from typing import List
-from fastapi import File, HTTPException, Request, UploadFile
+
+from fastapi import File, Request, UploadFile
 
 from src.constants import BASE_DIR
 from src.core.logger import logger
@@ -16,9 +15,9 @@ os.makedirs(PUBLIC_TEMP_DIR, exist_ok=True)
 
 async def multer_middleware(
     request: Request,
-    file: UploadFile = File(default=None),
+    file: UploadFile = File(default=None),  # noqa: B008
 ):
-    saved_paths: List[str] = []
+    saved_paths: list[str] = []
     with logger.span("middleware.upload_processing"):
         try:
             if not file:
@@ -39,20 +38,14 @@ async def multer_middleware(
 
             yield saved_paths
 
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error("middleware.upload_failed", error=str(e))
-            raise HTTPException(status_code=500, detail=str(e))
-
         finally:
             for file_path in saved_paths:
                 try:
                     if os.path.exists(file_path):
                         os.remove(file_path)
                         logger.info("middleware.upload_cleaned", file_path=file_path)
-                except Exception as clean_err:
-                    logger.error("middleware.upload_cleanup_failed", file_path=file_path, error=str(clean_err))
+                except OSError as clean_err:
+                    logger.exception("middleware.upload_cleanup_failed", file_path=file_path, error=str(clean_err))
 
             if saved_paths:
                 dest_dir = os.path.dirname(saved_paths[0])

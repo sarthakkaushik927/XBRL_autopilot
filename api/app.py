@@ -17,22 +17,16 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS"):
 
 import hmac
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
-from api.v1.routes import (
-    chat_router,
-    conversation_router,
-    fix,
-    workbooks,
-    indas_router
-)
+from api.v1.routes import chat_router, conversation_router, fix, indas_router, workbooks
 from src.app_config import get_app_config
 from src.constants import (
-    
-    IND_AS_TAXONOMY_VDB,
     AGENT_COLLECTION_NAME,
+    IND_AS_TAXONOMY_VDB,
 )
 from src.core.logger import initialise_logger, logger
 
@@ -54,8 +48,17 @@ app = FastAPI(title="XBRL Autopilot sidecar", version=SIDECAR_VERSION, lifespan=
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 try:
     logger.instrument_fastapi(app)
-except Exception:
-    pass
+except (RuntimeError, TypeError, AttributeError, ValueError) as e:
+    logger.debug("app.instrument_fastapi_skipped", error=str(e))
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("app.unhandled_exception", path=str(request.url.path), exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={"data": None, "message": "Internal server error", "success": False, "errors": str(exc)},
+    )
 
 
 @app.middleware("http")

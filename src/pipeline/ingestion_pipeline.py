@@ -1,22 +1,21 @@
 import os
-import sys
 
 from langchain_core.documents import Document
 
 from src.constants import (
+    AGENT_COLLECTION_NAME,
     AGENT_KNOWLEDGE_DATA_DIR,
     BATCH_SIZE,
-    INDAS_OUTPUT_JSON_PATH,
     IND_AS_TAXONOMY_VDB,
-    AGENT_COLLECTION_NAME,
+    INDAS_OUTPUT_JSON_PATH,
 )
-from src.core.exception import MyException
 from src.core.logger import logger
 from src.ingestion.chunking.splitter import split
 from src.ingestion.loaders import html, office, pdf, text
 from src.ingestion.operations.store_taxonomies import StoreTaxonomies
 from src.services.vectordb.qdrant import get_qdrant_service
 from src.utils.main_utils import load_json, to_chroma_metadata
+
 from .base import Pipeline
 
 
@@ -65,8 +64,8 @@ class IngestionPipeline(Pipeline):
                 )
                 return True
             except Exception as e:
-                logger.error("ingestion.file_processing_failed", file_path=file_path, error=str(e))
-                raise MyException(e, sys)
+                logger.exception("ingestion.file_processing_failed", file_path=file_path, error=str(e))
+                raise
 
     async def _process_folder(self, folder_path: str = str(AGENT_KNOWLEDGE_DATA_DIR)) -> list[bool]:
         """Traverse folder and process all documentation files into the xbrl_agent collection."""
@@ -90,8 +89,8 @@ class IngestionPipeline(Pipeline):
                 logger.info("ingestion.folder_completed", folder_path=folder_path, processed_files=len(results))
                 return results
             except Exception as e:
-                logger.error("ingestion.folder_processing_failed", folder_path=folder_path, error=str(e))
-                raise MyException(e, sys)
+                logger.exception("ingestion.folder_processing_failed", folder_path=folder_path, error=str(e))
+                raise
 
     async def _load_taxonomies(self, path: str) -> list[Document]:
         """Load extracted concepts from JSON and format into Documents with metadata."""

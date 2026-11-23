@@ -4,12 +4,11 @@ import pathlib
 import pickle
 from io import BytesIO
 
+import pytest
 from openpyxl import load_workbook
 
-from src.pipeline.indas_transformation import IndasTransformationPipeline
-import pytest
-
 from src.constants import CANONICAL_SHEETS_DIR
+from src.pipeline.indas_transformation import IndasTransformationPipeline
 from src.transformation.template import (
     CANONICAL_SCHEMA,
     canonical_sheets_workbook,

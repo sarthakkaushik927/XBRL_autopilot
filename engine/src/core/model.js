@@ -221,7 +221,7 @@ export class Filing {
     return {
       format: 'mca-ci-xbrl-project', version: 1, authorityHash: this.A.meta.authorityHash,
       meta: this.meta,
-      facts: this.all().map(({ key, ...f }) => f),
+      facts: this.all().map(({ key: _key, ...f }) => f),
       footnotes: [...this.footnotes.values()].map((f) => ({ ...f, factKeys: [...f.factKeys] })),
       importReport: this.importReport,
       setAside: this.setAside,

@@ -43,7 +43,7 @@ export class SettingsService extends EventEmitter<SettingsEvents> {
 
   get(): AppSettings {
     const raw = this.repo.get(KEY)
-    let stored: Partial<AppSettings> = {}
+    let stored: Partial<AppSettings>
     try {
       stored = raw ? (JSON.parse(raw) as Partial<AppSettings>) : {}
     } catch {

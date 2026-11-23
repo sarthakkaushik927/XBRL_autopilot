@@ -1,7 +1,6 @@
-from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.models.state import AgentState
@@ -44,7 +43,7 @@ def create_agent_graph(checkpointer: Any = None) -> CompiledStateGraph:
     return builder.compile(checkpointer=cp)
 
 
-_cached_graph: Optional[CompiledStateGraph] = None
+_cached_graph: CompiledStateGraph | None = None
 
 
 def get_graph(checkpointer: Any = None) -> CompiledStateGraph:

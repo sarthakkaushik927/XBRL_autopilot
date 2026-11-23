@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 Scope = Literal["CY", "PY", "PYO", "OTHER"]
@@ -17,7 +18,7 @@ class PlannerStructure(BaseModel):
         ),
     )
 
-    queries: Optional[str] = Field(
+    queries: str | None = Field(
         default=None,
         description=(
             "A standalone, retrieval-optimized search query that captures "
@@ -40,7 +41,7 @@ class GuardrailStructure(BaseModel):
         default="none",
         description="The category of violation detected, or 'none' if query is safe.",
     )
-    refusal_reason: Optional[str] = Field(
+    refusal_reason: str | None = Field(
         default=None,
         description="A polite refusal message explaining why the query cannot be processed if blocked.",
     )

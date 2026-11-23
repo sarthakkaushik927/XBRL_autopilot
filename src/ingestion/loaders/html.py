@@ -1,10 +1,10 @@
+from collections.abc import Iterator
+
+from bs4 import BeautifulSoup
 from langchain_core.document_loaders.base import BaseLoader
 from langchain_core.documents import Document
-from typing import Iterator, List
-from src.core.exception import MyException
+
 from src.core.logger import logger
-import sys
-from bs4 import BeautifulSoup
 
 
 class HTMLLoader(BaseLoader):
@@ -32,30 +32,20 @@ class HTMLLoader(BaseLoader):
             logger.info("HTML lazy load complete", file_path=self.file_path)
 
         except Exception as e:
-            logger.error("Failed to lazy load HTML", file_path=self.file_path, error=str(e))
-            raise MyException(e, sys)
+            logger.exception("Failed to lazy load HTML", file_path=self.file_path, error=str(e))
+            raise
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         with logger.span("Loading HTML into memory: {file_path}", file_path=self.file_path):
-            try:
-                docs = list(self.lazy_load())
-                logger.info("HTML load complete", file_path=self.file_path, doc_count=len(docs))
-                return docs
-
-            except Exception as e:
-                logger.error("Failed to load HTML", file_path=self.file_path, error=str(e))
-                raise MyException(e, sys)
+            docs = list(self.lazy_load())
+            logger.info("HTML load complete", file_path=self.file_path, doc_count=len(docs))
+            return docs
 
 
 async def html_loader(file_path: str):
     with logger.span("Async HTML loader: {file_path}", file_path=file_path):
-        try:
-            logger.info("Initiating HTML load", file_path=file_path)
-            loader = HTMLLoader(file_path=file_path)
-            docs = await loader.aload()
-            logger.info("Async HTML load finished", file_path=file_path, doc_count=len(docs))
-            return docs
-
-        except Exception as e:
-            logger.error("Async HTML loader failed", file_path=file_path, error=str(e))
-            raise MyException(e, sys)
+        logger.info("Initiating HTML load", file_path=file_path)
+        loader = HTMLLoader(file_path=file_path)
+        docs = await loader.aload()
+        logger.info("Async HTML load finished", file_path=file_path, doc_count=len(docs))
+        return docs

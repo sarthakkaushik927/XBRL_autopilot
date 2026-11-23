@@ -1,11 +1,12 @@
-from typing import Tuple, Optional
+
 from langchain_groq import ChatGroq
+
 from src.app_config import get_app_config
 from src.core.logger import logger
-from src.guardrails.colang_rule import COLANG_CONTENT, YAML_CONTENT, RAIL_INDICATORS
+from src.guardrails.colang_rule import COLANG_CONTENT, RAIL_INDICATORS, YAML_CONTENT
 
 try:
-    from nemoguardrails import RailsConfig, LLMRails
+    from nemoguardrails import LLMRails, RailsConfig
 except ImportError:
     RailsConfig = None
     LLMRails = None
@@ -43,7 +44,7 @@ def get_guardrails():
     return _rails
 
 
-def guard(message: str) -> Tuple[bool, Optional[str]]:
+def guard(message: str) -> tuple[bool, str | None]:
     """Run a user message through the NeMo rails gate."""
     if _rails is None:
         logger.debug("guardrails.not_active_skipping")

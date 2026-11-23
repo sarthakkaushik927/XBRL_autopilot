@@ -1,11 +1,11 @@
-import sys
-from langchain_core.messages import AIMessage, HumanMessage
+
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langsmith import traceable
 
-from src.core.exception import MyException
 from src.core.logger import logger
 from src.services.llm_provider.groq import get_llm
+
 from ..models.state import AgentState
 from ..prompts import RESPONDER_GENERAL_PROMPT, RESPONDER_RETREIVED_PROMPT
 
@@ -50,5 +50,5 @@ async def responder_node(state: AgentState, config: RunnableConfig | None = None
             return {"messages": [HumanMessage(content=user_message), res], "ai_response": res.content if hasattr(res, "content") else str(res)}
 
         except Exception as e:
-            logger.error("responder.failed", error=str(e))
-            raise MyException(e, sys)
+            logger.exception("responder.failed", error=str(e))
+            raise

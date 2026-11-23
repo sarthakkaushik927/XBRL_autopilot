@@ -47,7 +47,7 @@ export function decodeEntities(s) {
 }
 function attrs(src) {
   const out = {};
-  const re = /([^\s"'>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
+  const re = /([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
   let m;
   while ((m = re.exec(src))) out[m[1].toLowerCase()] = decodeEntities(m[2] ?? m[3] ?? m[4] ?? '');
   return out;
@@ -92,12 +92,12 @@ function marksOf(node, m) {
   if (node.tag === 'u' || node.tag === 'ins' || cls.includes('highlightedText3') || /text-decoration[^;]*underline/.test(st)) add('u');
   return [...'biu'].filter((c) => out.includes(c)).join('');
 }
-const MARKER = /^[\s ]*(?:\d+[.)]|[••●▪\-–o§])[\s ]+/;
+const MARKER = /^[\s\u00A0]*(?:\d+[.)]|[••●▪\-–o§])[\s\u00A0]+/;
 
 function toModel(node, baseMarks = '') {
   const blocks = [];
   let inl = null;
-  const flush = () => { if (inl && inl.some((x) => x.t === 'br' || x.s.trim() !== '' || / /.test(x.s))) blocks.push({ b: 'p', inl }); else if (inl && inl.length && blocks.length === 0) blocks.push({ b: 'p', inl }); inl = null; };
+  const flush = () => { if (inl && inl.some((x) => x.t === 'br' || x.s.trim() !== '' || /\u00A0/.test(x.s))) blocks.push({ b: 'p', inl }); else if (inl && inl.length && blocks.length === 0) blocks.push({ b: 'p', inl }); inl = null; };
   const inline = (n, m) => {
     if (n.text != null) { (inl ||= []).push({ t: 'text', s: n.text.replace(/[\r\n\t]+/g, ' '), m }); return; }
     if (DROP.has(n.tag)) return;
@@ -245,7 +245,7 @@ function placeMergedCells(sections) {
 }
 
 // ------------------------------------------------------------------ serialisers
-const escText = (s, nbsp) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/ /g, nbsp);
+const escText = (s, nbsp) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\u00A0/g, nbsp);
 function inlineHtml(inl, mode) {
   let out = '';
   for (const x of inl || []) {
@@ -257,7 +257,7 @@ function inlineHtml(inl, mode) {
     out += s;
   }
   // merge adjacent identical mark wrappers produced by run splitting
-  return mode === 'mca' ? out.replace(/<\/span><span class="(highlightedText\d)">/g, (m, c) => m) : out.replace(/<\/(b|i|u)><\1>/g, '');
+  return mode === 'mca' ? out.replace(/<\/span><span class="(highlightedText\d)">/g, (m) => m) : out.replace(/<\/(b|i|u)><\1>/g, '');
 }
 function tableHtml(t, mode) {
   if (!t || !t.sections.length) return '';
@@ -323,7 +323,7 @@ export function plainText(html) {
     const nl = BLOCKS.has(n.tag) && n.tag !== 'td' && n.tag !== 'th' ? '\n' : '';
     return nl + (n.children || []).map(walk).join('') + nl;
   };
-  return walk(parseHtml(html)).replace(/ /g, ' ').replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+  return walk(parseHtml(html)).replace(/\u00A0/g, ' ').replace(/[ \t]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
 }
 /** formatting summary (for regression tests): counts of b/i/u runs, list items, indents, headings */
 export function formatting(html) {
@@ -358,7 +358,7 @@ export function formatting(html) {
 //   - { style: 'keep' }: emphasis and headings are kept (only empty paragraphs, columns and rows are removed)
 // Text is never removed — only empty paragraphs, empty cells' columns/rows and emphasis. Returns { html, stats }.
 const HEADING_MAX = 200;
-const lineText = (inl) => (inl || []).map((x) => (x.t === 'text' ? x.s : ' ')).join('').replace(/[\s ]+/g, ' ').trim();
+const lineText = (inl) => (inl || []).map((x) => (x.t === 'text' ? x.s : ' ')).join('').replace(/[\s\u00A0]+/g, ' ').trim();
 const emphasised = (inl) => (inl || []).filter((x) => x.t === 'text' && x.m && !WS_ONLY.test(x.s)).length;
 const plainRuns = (inl) => (inl || []).map((x) => (x.t === 'text' && x.m ? { ...x, m: '' } : x));
 const blankPara = (bl) => isPara(bl) && WS_ONLY.test(paraText(bl));

@@ -83,7 +83,7 @@ describe.skipIf(!existsSync(HPL) || !existsSync(AUTHORITY))('HPL (C&I) hand-tagg
   let sources: SourceService
   let mapping: MappingService
   let editor: EditorQueryService
-  let zeroFilled: string[] = []
+  const zeroFilled: string[] = []
   const at = (sheet: string, ref: string): CellRef => ({ workbook: 'workbook-1.xlsx', sheet, ref })
   const ref = (col: string, rows: string) => rows.split(':').map((r) => col + r).join(':')
   const value = (local: string, scope: Scope) => {

@@ -15,7 +15,7 @@ export function fixtureDigest(fileName: string, bytes: Uint8Array | string): str
   const h = createHash('sha256')
   if (/\.xml$/i.test(fileName) || typeof bytes === 'string') {
     const text = typeof bytes === 'string' ? bytes : Buffer.from(bytes).toString('utf8')
-    h.update(text.replace(/^﻿/, '').replace(/\r\n?/g, '\n'), 'utf8')
+    h.update(text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'), 'utf8')
   } else {
     h.update(bytes)
   }

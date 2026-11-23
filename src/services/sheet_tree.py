@@ -60,13 +60,13 @@ def presentation_tree(kb: dict[str, Any], elr: str) -> list[dict[str, Any]]:
 
 
 def member_tree(kb: dict[str, Any], sheet: str) -> list[dict[str, Any]]:
-    elr, axis = SHEET_AXES[sheet]
+    elr, _axis = SHEET_AXES[sheet]
     arcs = kb.get("definition", {}).get(elr, [])
     parent: dict[str, str] = {}
     for a in arcs:
         if a["arcrole"] == "domain-member":
             parent.setdefault(a["to"], a["from"])
-    depth = lambda m: 0 if m not in parent else 1 + depth(parent[m])  # noqa: E731
+    depth = lambda m: 0 if m not in parent else 1 + depth(parent[m])
     return [{**_node(kb, m, depth(m)), "abstract": False} for m in axis_members(kb, sheet)]
 
 

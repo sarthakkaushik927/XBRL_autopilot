@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import sys
 
 from src.constants import (
     ALL_QDRANT_COLLECTIONS,
@@ -68,7 +67,7 @@ class RebuildKnowledgeBasePipeline(Pipeline):
                 logger.info("rebuild.completed_successfully")
 
             except Exception as e:
-                logger.error("rebuild.failed", error=str(e))
+                logger.exception("rebuild.failed", error=str(e))
                 raise
 
 

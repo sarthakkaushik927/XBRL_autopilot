@@ -9,6 +9,6 @@ from .reranker import (
 __all__ = [
     "RankedDocument",
     "RerankerService",
-    "get_reranker_service",
     "flaskreranker",
+    "get_reranker_service",
 ]

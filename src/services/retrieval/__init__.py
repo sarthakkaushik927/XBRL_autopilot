@@ -10,9 +10,9 @@ from .reranker import (
 __all__ = [
     "HybridCandidate",
     "HybridSearchService",
-    "get_hybrid_search_service",
     "RankedDocument",
     "RerankerService",
-    "get_reranker_service",
     "flaskreranker",
+    "get_hybrid_search_service",
+    "get_reranker_service",
 ]

@@ -1,9 +1,8 @@
-import sys
-from typing import Iterator, List
+from collections.abc import Iterator
+
 from langchain_core.document_loaders.base import BaseLoader
 from langchain_core.documents import Document
 
-from src.core.exception import MyException
 from src.core.logger import logger
 
 try:
@@ -44,33 +43,23 @@ class PdfLoader(BaseLoader):
             logger.info("pdf_loader.completed", file_path=self.file_path, pages_loaded=page_count)
 
         except Exception as e:
-            logger.error("pdf_loader.failed", file_path=self.file_path, error=str(e))
-            raise MyException(e, sys)
+            logger.exception("pdf_loader.failed", file_path=self.file_path, error=str(e))
+            raise
         finally:
             if docs:
                 docs.close()
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         with logger.span("pdf_loader.load", file_path=self.file_path):
-            try:
-                docs = list(self.lazy_load())
-                logger.info("pdf_loader.load_complete", file_path=self.file_path, doc_count=len(docs))
-                return docs
-
-            except Exception as e:
-                logger.error("pdf_loader.failed", file_path=self.file_path, error=str(e))
-                raise MyException(e, sys)
+            docs = list(self.lazy_load())
+            logger.info("pdf_loader.load_complete", file_path=self.file_path, doc_count=len(docs))
+            return docs
 
 
 async def pdf_loader(file_path: str):
     with logger.span("pdf_loader.async_load", file_path=file_path):
-        try:
-            logger.info("pdf_loader.initiating", file_path=file_path)
-            loader = PdfLoader(file_path=file_path)
-            docs = await loader.aload()
-            logger.info("pdf_loader.finished", file_path=file_path, doc_count=len(docs))
-            return docs
-
-        except Exception as e:
-            logger.error("pdf_loader.failed", file_path=file_path, error=str(e))
-            raise MyException(e, sys)
+        logger.info("pdf_loader.initiating", file_path=file_path)
+        loader = PdfLoader(file_path=file_path)
+        docs = await loader.aload()
+        logger.info("pdf_loader.finished", file_path=file_path, doc_count=len(docs))
+        return docs

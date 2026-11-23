@@ -117,9 +117,7 @@ def _blank(v) -> bool:
         return True
     if isinstance(v, float) and math.isnan(v):
         return True
-    if isinstance(v, str) and not v.strip():
-        return True
-    return False
+    return bool(isinstance(v, str) and not v.strip())
 
 
 def _is_num(v) -> bool:
@@ -185,8 +183,14 @@ def _to_amount(x, factor):
 
 # --------------------------------------------------------------------------- main class
 class FinancialNotesExtractor:
-    OUT_COLS = ["Row_Index", "Note_No", "Line_Item", "Breadcrumb_Hierarchy",
-                "Current_Year_Amount", "Previous_Year_Amount"]
+    OUT_COLS = (
+        "Row_Index",
+        "Note_No",
+        "Line_Item",
+        "Breadcrumb_Hierarchy",
+        "Current_Year_Amount",
+        "Previous_Year_Amount",
+    )
 
     def __init__(self, path, *, include_sheets=(), exclude_sheets=(), cur_year=None,
                  default_factor=None, keep_zero_rows=True, tolerance_rupees=1000.0):
@@ -382,7 +386,6 @@ class FinancialNotesExtractor:
                 if vals:
                     lab = next((v for c, v in cells if isinstance(v, str) and c != note_col), "")
                     self._stmt_values.setdefault(nk, []).append((lab, vals))
-        return
 
     # ------------------------------------------------------------------ 4. parse
     def parse(self):
@@ -411,9 +414,9 @@ class FinancialNotesExtractor:
                       and not any(_is_num(v) for _, v in cells) for cells in cells_by_row)
 
         sheet_factor = self._scan_unit(df, 15) or self.global_factor
-        st = dict(note_no="", title=sheet, headmap={}, matrix=None, heading=None,
-                  table_year=None, factor=sheet_factor, last_note_int=0, prev_header_row=-10,
-                  items_since_total=[], note_first=True, year_map={}, child_run=False, total_col=None)
+        st = {"note_no": "", "title": sheet, "headmap": {}, "matrix": None, "heading": None,
+                  "table_year": None, "factor": sheet_factor, "last_note_int": 0, "prev_header_row": -10,
+                  "items_since_total": [], "note_first": True, "year_map": {}, "child_run": False, "total_col": None}
 
         def next_numeric_ahead(r, k=4):
             seen = 0
@@ -453,7 +456,7 @@ class FinancialNotesExtractor:
                     no, ttl = m.group(1), m.group(2)
                     if "." in no:
                         st["heading"] = _norm_heading(f"{no} {ttl}")
-                        self.texts.append(dict(Sheet=sheet, Row=r + 1, Note_No=st["note_no"], Kind="sub-note heading", Text=first_v))
+                        self.texts.append({"Sheet": sheet, "Row": r + 1, "Note_No": st["note_no"], "Kind": "sub-note heading", "Text": first_v})
                         for c, v in texts[1:]:
                             pass
                         title = "sub"
@@ -481,7 +484,7 @@ class FinancialNotesExtractor:
                           n_totals=0, headmap=dict(st["year_map"]))
                 try:
                     st["last_note_int"] = int(re.match(r"\d+", no).group(0))
-                except Exception:
+                except (ValueError, AttributeError):
                     pass
                 # keep the header info that is on the title row, handled below
                 header_cells = [(c, v) for c, v in cells if c > first_c and isinstance(v, str)]
@@ -496,10 +499,10 @@ class FinancialNotesExtractor:
             leftmost = cells[0][0]
             non_num_header = not [1 for c, v in nums if c != first_c or not isinstance(title, tuple)] if isinstance(title, tuple) else not nums
             is_year_header = bool(yc) and non_num_header and (len(set(yc.values())) >= 2 or wording) \
-                and not (len(yc) == 1 and list(yc)[0] == leftmost and len(texts) == 1)
-            if is_year_header and len(yc) == 1 and list(yc)[0] == leftmost:
+                and not (len(yc) == 1 and next(iter(yc)) == leftmost and len(texts) == 1)
+            if is_year_header and len(yc) == 1 and next(iter(yc)) == leftmost:
                 # table-year header: "As on 31 March 2026 | Unbilled | Not due ..."
-                st["table_year"] = list(yc.values())[0]
+                st["table_year"] = next(iter(yc.values()))
                 cats = {c: v for c, v in texts if c != leftmost}
                 if cats:
                     st["matrix"] = cats
@@ -530,7 +533,7 @@ class FinancialNotesExtractor:
             core_nums = [(c, v) for c, v in nums if c < max_text_col]   # numerics right of all text = scratch
             # ---- sub-header (Number/Amount or categories) right after a year-header
             if not core_nums and len(texts) >= 2 and r - st["prev_header_row"] <= 2 and st["headmap"] and not isinstance(title, tuple):
-                cols = sorted(c for c, _ in texts if c > texts[0][0] or True)
+                sorted(c for c, _ in texts if c > texts[0][0] or True)
                 kinds = {}
                 for c, v in texts:
                     if SUBHDR_AMOUNT_RE.match(v):
@@ -615,7 +618,7 @@ class FinancialNotesExtractor:
     def _account_text_row(self, sheet, r, cells, st, kind):
         for c, v in cells:
             if _is_num(v):
-                self.audit.append(dict(Sheet=sheet, Row=r + 1, Col=c + 1, Value=v, Reason=f"numeric on a {kind} row (scratch)", Label=""))
+                self.audit.append({"Sheet": sheet, "Row": r + 1, "Col": c + 1, "Value": v, "Reason": f"numeric on a {kind} row (scratch)", "Label": ""})
                 self._account(sheet, r, c, kind)
 
     def _handle_text_row(self, sheet, r, cells, texts, st):
@@ -634,7 +637,7 @@ class FinancialNotesExtractor:
             h = _norm_heading(texts[1][1])
             if len(h) <= 100 and not QUALIFIER_RE.search(h):
                 st["heading"] = h
-        self.texts.append(dict(Sheet=sheet, Row=r + 1, Note_No=st["note_no"], Kind="heading" if is_heading else "narrative", Text=joined))
+        self.texts.append({"Sheet": sheet, "Row": r + 1, "Note_No": st["note_no"], "Kind": "heading" if is_heading else "narrative", "Text": joined})
 
     # -------------------------------------------------------------- data rows
     def _label_for(self, cells, nums, texts):
@@ -674,7 +677,7 @@ class FinancialNotesExtractor:
         headmap, matrix, factor = st["headmap"], st["matrix"], st["factor"]
         right_texts = [v for c, v in texts if c > min(c2 for c2, _ in nums)]
         if right_texts:
-            self.texts.append(dict(Sheet=sheet, Row=r + 1, Note_No=st["note_no"], Kind="side remark", Text=" | ".join(right_texts)))
+            self.texts.append({"Sheet": sheet, "Row": r + 1, "Note_No": st["note_no"], "Kind": "side remark", "Text": " | ".join(right_texts)})
 
         is_total_row = self._is_total_label(label, st["title"], st["heading"])
         context_heading = st["heading"] or ""
@@ -685,12 +688,12 @@ class FinancialNotesExtractor:
             for c, v in nums:
                 head = matrix.get(c)
                 if head is None:
-                    self.audit.append(dict(Sheet=sheet, Row=r + 1, Col=c + 1, Value=v, Reason="matrix table: numeric cell under no column header", Label=label))
+                    self.audit.append({"Sheet": sheet, "Row": r + 1, "Col": c + 1, "Value": v, "Reason": "matrix table: numeric cell under no column header", "Label": label})
                     self._account(sheet, r, c, "audit: no header")
                     continue
-                self.other.append(dict(Note_No=st["note_no"], Note_Title=st["title"], Table_Context=context_heading or (f"as at {st['table_year']}" if st["table_year"] else ""),
-                                       Table_Year=st["table_year"], Row_Label=label or "Total", Column_Header=head, Value=v,
-                                       Value_x_unit=round(v * factor, 2), Sheet=sheet, Row=r + 1, Col=c + 1))
+                self.other.append({"Note_No": st["note_no"], "Note_Title": st["title"], "Table_Context": context_heading or (f"as at {st['table_year']}" if st["table_year"] else ""),
+                                       "Table_Year": st["table_year"], "Row_Label": label or "Total", "Column_Header": head, "Value": v,
+                                       "Value_x_unit": round(v * factor, 2), "Sheet": sheet, "Row": r + 1, "Col": c + 1})
                 self._account(sheet, r, c, "other_tables")
             if total_col is not None and st["table_year"] in (self.cur_year, self.prev_year):
                 v = next(v for c, v in nums if c == total_col)
@@ -700,32 +703,31 @@ class FinancialNotesExtractor:
         # ---- year-column table
         if not headmap:
             for c, v in nums:
-                self.audit.append(dict(Sheet=sheet, Row=r + 1, Col=c + 1, Value=v, Reason="no year-header known for this row", Label=label))
+                self.audit.append({"Sheet": sheet, "Row": r + 1, "Col": c + 1, "Value": v, "Reason": "no year-header known for this row", "Label": label})
                 self._account(sheet, r, c, "audit: no header")
             return
 
         amounts = {}      # year -> value (amount columns)
-        used_year_cols = {}
         for c, v in nums:
             if c not in headmap:
-                self.audit.append(dict(Sheet=sheet, Row=r + 1, Col=c + 1, Value=v, Reason="column has no year header (scratch / check column)", Label=label))
+                self.audit.append({"Sheet": sheet, "Row": r + 1, "Col": c + 1, "Value": v, "Reason": "column has no year header (scratch / check column)", "Label": label})
                 self._account(sheet, r, c, "audit: scratch col")
                 continue
             y, kind = headmap[c]
             if kind != "amount":
-                self.other.append(dict(Note_No=st["note_no"], Note_Title=st["title"], Table_Context=context_heading, Table_Year=y,
-                                       Row_Label=label or "Total", Column_Header=f"{y} {kind.replace('cat:', '')}", Value=v,
-                                       Value_x_unit=round(v * factor, 2) if kind == "amount" or kind.startswith("cat:") else None,
-                                       Sheet=sheet, Row=r + 1, Col=c + 1))
+                self.other.append({"Note_No": st["note_no"], "Note_Title": st["title"], "Table_Context": context_heading, "Table_Year": y,
+                                       "Row_Label": label or "Total", "Column_Header": f"{y} {kind.replace('cat:', '')}", "Value": v,
+                                       "Value_x_unit": round(v * factor, 2) if kind == "amount" or kind.startswith("cat:") else None,
+                                       "Sheet": sheet, "Row": r + 1, "Col": c + 1})
                 self._account(sheet, r, c, "other_tables")
                 continue
             if y not in (self.cur_year, self.prev_year):
                 reason = f"stale/older year column ({y})"
-                self.audit.append(dict(Sheet=sheet, Row=r + 1, Col=c + 1, Value=v, Reason=reason, Label=label))
+                self.audit.append({"Sheet": sheet, "Row": r + 1, "Col": c + 1, "Value": v, "Reason": reason, "Label": label})
                 self._account(sheet, r, c, "audit: year")
                 continue
             if y in amounts:
-                self.audit.append(dict(Sheet=sheet, Row=r + 1, Col=c + 1, Value=v, Reason=f"duplicate column for year {y}", Label=label))
+                self.audit.append({"Sheet": sheet, "Row": r + 1, "Col": c + 1, "Value": v, "Reason": f"duplicate column for year {y}", "Label": label})
                 self._account(sheet, r, c, "audit: duplicate year col")
                 continue
             amounts[y] = v
@@ -758,8 +760,8 @@ class FinancialNotesExtractor:
         else:
             cur, prev = amounts.get(self.cur_year), amounts.get(self.prev_year)
         heading = st["heading"] or ""
-        rec = dict(sheet=sheet, row=r + 1, note_no=st["note_no"], title=st["title"], heading=heading,
-                   label=label, is_total=is_total, cur=cur, prev=prev, factor=factor, single_year=single_year)
+        rec = {"sheet": sheet, "row": r + 1, "note_no": st["note_no"], "title": st["title"], "heading": heading,
+                   "label": label, "is_total": is_total, "cur": cur, "prev": prev, "factor": factor, "single_year": single_year}
         if UNSCALED_RE.search(label) or re.search(r"(?i)\bratios?\b", st["title"]):
             rec["factor"] = 1.0
         if is_total:
@@ -811,7 +813,7 @@ class FinancialNotesExtractor:
             beyond = top is not None and n is not None and n > top   # notes after the last statement-referenced note = disclosures
             if not beyond:
                 for rx, s_ in KEYWORD_SECTIONS:
-                    if re.search(rx, title, re.I):
+                    if re.search(rx, title, re.IGNORECASE):
                         sec = s_
                         break
         return sec or "Other disclosures"
@@ -891,9 +893,9 @@ class FinancialNotesExtractor:
                         for k, col in (("cur", "Current_Year_Amount"), ("prev", "Previous_Year_Amount")):
                             diff = abs(run[k] - row[col])
                             ok = diff <= max(self.tol, 0.001 * abs(row[col]))
-                            self.checks.append(dict(Check="items sum = total", Note_No=no, Note=title, Row_Index=row["Row_Index"],
-                                                    Year="Current" if k == "cur" else "Previous", Expected=round(run[k], 2), Found=row[col],
-                                                    Diff=round(diff, 2), Status="PASS" if ok else "REVIEW (nested subtotal / roll-forward?)"))
+                            self.checks.append({"Check": "items sum = total", "Note_No": no, "Note": title, "Row_Index": row["Row_Index"],
+                                                    "Year": "Current" if k == "cur" else "Previous", "Expected": round(run[k], 2), "Found": row[col],
+                                                    "Diff": round(diff, 2), "Status": "PASS" if ok else "REVIEW (nested subtotal / roll-forward?)"})
                     run = {"cur": 0.0, "prev": 0.0}
                     n_items = 0
                 else:
@@ -909,7 +911,7 @@ class FinancialNotesExtractor:
             totals = [r_ for r_ in rows if r_["_is_total"]]
             if not totals:
                 continue
-            last = totals[-1]
+            totals[-1]
             cand = sorted(self._stmt_values[key.group(0)], key=lambda lv: -self._similar(title, lv[0]))
             if not cand or self._similar(title, cand[0][0]) < 0.4:
                 continue  # statement line is a different thing sharing the note number
@@ -925,8 +927,8 @@ class FinancialNotesExtractor:
                 best_v, where = min(pool, key=lambda t: abs(abs(stv) - abs(t[0])))
                 diff = abs(abs(stv) - abs(best_v))
                 ok = diff <= max(self.tol, 0.001 * abs(stv))
-                self.checks.append(dict(Check="note has a figure = statement line", Note_No=no, Note=title, Where=where,
-                                        Year=str(y), Expected=round(stv, 2), Found=best_v, Diff=round(diff, 2), Status="PASS" if ok else "WARN"))
+                self.checks.append({"Check": "note has a figure = statement line", "Note_No": no, "Note": title, "Where": where,
+                                        "Year": str(y), "Expected": round(stv, 2), "Found": best_v, "Diff": round(diff, 2), "Status": "PASS" if ok else "WARN"})
         return self
 
     # ------------------------------------------------------------------ 6. output
@@ -934,18 +936,18 @@ class FinancialNotesExtractor:
         reasons = defaultdict(int)
         for v in self._accounted.values():
             reasons[v] += 1
-        return dict(
-            current_year=self.cur_year, previous_year=self.prev_year, default_unit_factor=self.global_factor,
-            notes_sheets=self.notes_sheets,
-            dropped_sheets=[(s["sheet"], s["reason"]) for s in self.sheet_report if s["kind"] == "dropped"],
-            output_rows=len(self.result), other_table_cells=len(self.other), audit_cells=len(self.audit),
-            numeric_cells_in_notes_sheets=self._numeric_total, accounted_by_reason=dict(reasons),
-            UNACCOUNTED=len(self.unaccounted),
-            checks_pass=sum(c["Status"] == "PASS" for c in self.checks),
-            checks_review=sum(c["Status"].startswith("REVIEW") for c in self.checks),
-            checks_warn=sum(c["Status"] == "WARN" for c in self.checks),
-            warnings=self.warnings,
-        )
+        return {
+            "current_year": self.cur_year, "previous_year": self.prev_year, "default_unit_factor": self.global_factor,
+            "notes_sheets": self.notes_sheets,
+            "dropped_sheets": [(s["sheet"], s["reason"]) for s in self.sheet_report if s["kind"] == "dropped"],
+            "output_rows": len(self.result), "other_table_cells": len(self.other), "audit_cells": len(self.audit),
+            "numeric_cells_in_notes_sheets": self._numeric_total, "accounted_by_reason": dict(reasons),
+            "UNACCOUNTED": len(self.unaccounted),
+            "checks_pass": sum(c["Status"] == "PASS" for c in self.checks),
+            "checks_review": sum(c["Status"].startswith("REVIEW") for c in self.checks),
+            "checks_warn": sum(c["Status"] == "WARN" for c in self.checks),
+            "warnings": self.warnings,
+        }
 
     # ------------------------------------------------------------------ 6. canonical statements extraction
     def _find_statement_header(self, df: pd.DataFrame, start_row: int = 0) -> dict | None:
@@ -998,9 +1000,8 @@ class FinancialNotesExtractor:
                     v = _num_or_dash(df.iloc[sample_r, cy_c]) if cy_c < df.shape[1] else None
                     if v is not None and v != 0:
                         sample_nums.append(abs(v))
-                if len(cy_matches) > 1 and len(py_matches) > 1:
-                    if sample_nums and any(x > 50000 for x in sample_nums):
-                        is_raw_rupees = True
+                if len(cy_matches) > 1 and len(py_matches) > 1 and sample_nums and any(x > 50000 for x in sample_nums):
+                    is_raw_rupees = True
 
                 header_r = r if re.search(r"(?i)\bparticulars\b", row1[part_cols[0]]) else r + 1
                 return {
@@ -1044,9 +1045,8 @@ class FinancialNotesExtractor:
         for r in range(head_r + 1, df_raw.shape[0]):
             row = df_raw.iloc[r]
             part = str(row[p_col]).strip() if pd.notna(row[p_col]) else ""
-            if (not part or part.lower() in ["nan", "none"]) and p_col + 1 < df_raw.shape[1]:
-                if pd.notna(row[p_col + 1]) and isinstance(row[p_col + 1], str):
-                    part = str(row[p_col + 1]).strip()
+            if (not part or part.lower() in ["nan", "none"]) and p_col + 1 < df_raw.shape[1] and pd.notna(row[p_col + 1]) and isinstance(row[p_col + 1], str):
+                part = str(row[p_col + 1]).strip()
             if not part or part.lower() in ["nan", "none"]:
                 continue
 
@@ -1085,9 +1085,8 @@ class FinancialNotesExtractor:
                         sub_norm = "Equity"
                     top = hierarchy[0] if hierarchy else ("ASSETS" if "Asset" in sub_norm else "EQUITY AND LIABILITIES")
                     hierarchy = [top, sub_norm]
-                elif part_upper in ["FINANCIAL ASSETS", "FINANCIAL LIABILITIES"]:
-                    if len(hierarchy) >= 2:
-                        hierarchy = hierarchy[:2] + [part.title()]
+                elif part_upper in ["FINANCIAL ASSETS", "FINANCIAL LIABILITIES"] and len(hierarchy) >= 2:
+                    hierarchy = hierarchy[:2] + [part.title()]
                 continue
 
             note_val = None
@@ -1096,7 +1095,7 @@ class FinancialNotesExtractor:
                 if m:
                     try:
                         note_val = float(m.group(0))
-                    except Exception:
+                    except ValueError:
                         note_val = m.group(0)
 
             line_item = part_clean
@@ -1115,8 +1114,8 @@ class FinancialNotesExtractor:
                 "Line_Item": line_item,
                 "Breadcrumb_Hierarchy": " > ".join(bc),
                 "Note_No": note_val,
-                "Current_Year_Amount": int(round(cy_num * factor)) if cy_num is not None else 0,
-                "Previous_Year_Amount": int(round(py_num * factor)) if py_num is not None else 0,
+                "Current_Year_Amount": round(cy_num * factor) if cy_num is not None else 0,
+                "Previous_Year_Amount": round(py_num * factor) if py_num is not None else 0,
             })
         df_res = pd.DataFrame(rows_out)
         for col in BS_COLS:
@@ -1153,9 +1152,8 @@ class FinancialNotesExtractor:
         for r in range(head_r + 1, df_raw.shape[0]):
             row = df_raw.iloc[r]
             part = str(row[p_col]).strip() if pd.notna(row[p_col]) else ""
-            if (not part or part.lower() in ["nan", "none"]) and p_col + 1 < df_raw.shape[1]:
-                if pd.notna(row[p_col + 1]) and isinstance(row[p_col + 1], str):
-                    part = str(row[p_col + 1]).strip()
+            if (not part or part.lower() in ["nan", "none"]) and p_col + 1 < df_raw.shape[1] and pd.notna(row[p_col + 1]) and isinstance(row[p_col + 1], str):
+                part = str(row[p_col + 1]).strip()
             if not part or part.lower() in ["nan", "none"]:
                 continue
 
@@ -1185,7 +1183,7 @@ class FinancialNotesExtractor:
                 if m:
                     try:
                         note_val = float(m.group(0))
-                    except Exception:
+                    except ValueError:
                         note_val = m.group(0)
 
             line_item = part_clean
@@ -1210,8 +1208,8 @@ class FinancialNotesExtractor:
                 "Line_Item": line_item,
                 "Breadcrumb_Hierarchy": " > ".join(bc),
                 "Note_No": note_val,
-                "Current_Year_Amount": int(round(cy_num * factor)) if cy_num is not None else 0,
-                "Previous_Year_Amount": int(round(py_num * factor)) if py_num is not None else 0,
+                "Current_Year_Amount": round(cy_num * factor) if cy_num is not None else 0,
+                "Previous_Year_Amount": round(py_num * factor) if py_num is not None else 0,
             })
         df_res = pd.DataFrame(rows_out)
         for col in PL_COLS:
@@ -1243,9 +1241,8 @@ class FinancialNotesExtractor:
         for r in range(head_r + 1, df_raw.shape[0]):
             row = df_raw.iloc[r]
             part = str(row[p_col]).strip() if pd.notna(row[p_col]) else ""
-            if (not part or part.lower() in ["nan", "none"]) and p_col + 1 < df_raw.shape[1]:
-                if pd.notna(row[p_col + 1]) and isinstance(row[p_col + 1], str):
-                    part = str(row[p_col + 1]).strip()
+            if (not part or part.lower() in ["nan", "none"]) and p_col + 1 < df_raw.shape[1] and pd.notna(row[p_col + 1]) and isinstance(row[p_col + 1], str):
+                part = str(row[p_col + 1]).strip()
             if not part or part.lower() in ["nan", "none"]:
                 continue
 
@@ -1279,7 +1276,7 @@ class FinancialNotesExtractor:
                 if m:
                     try:
                         note_val = float(m.group(0))
-                    except Exception:
+                    except ValueError:
                         note_val = m.group(0)
 
             line_item = part_clean
@@ -1291,8 +1288,8 @@ class FinancialNotesExtractor:
                 "Line_Item": line_item,
                 "Breadcrumb_Hierarchy": " > ".join(bc),
                 "Note_No": note_val,
-                "Current_Year_Amount": int(round(cy_num * factor)) if cy_num is not None else 0,
-                "Previous_Year_Amount": int(round(py_num * factor)) if py_num is not None else 0,
+                "Current_Year_Amount": round(cy_num * factor) if cy_num is not None else 0,
+                "Previous_Year_Amount": round(py_num * factor) if py_num is not None else 0,
             })
         df_res = pd.DataFrame(rows_out)
         for col in CF_COLS:
@@ -1362,17 +1359,17 @@ class FinancialNotesExtractor:
             socie_rows.append({
                 "Row_Index": 1, "Equity_Component": "Equity Share Capital",
                 "Transaction_Description": "Balance at beginning of the year", "Note_No": 16.0,
-                "Current_Year_Amount": int(round(esc_beg * esc_factor)), "Previous_Year_Amount": int(round(esc_beg * esc_factor))
+                "Current_Year_Amount": round(esc_beg * esc_factor), "Previous_Year_Amount": round(esc_beg * esc_factor)
             })
             socie_rows.append({
                 "Row_Index": 2, "Equity_Component": "Equity Share Capital",
                 "Transaction_Description": "Changes in equity share capital during the year", "Note_No": 16.0,
-                "Current_Year_Amount": int(round(esc_chg * esc_factor)), "Previous_Year_Amount": 0
+                "Current_Year_Amount": round(esc_chg * esc_factor), "Previous_Year_Amount": 0
             })
             socie_rows.append({
                 "Row_Index": 3, "Equity_Component": "Equity Share Capital",
                 "Transaction_Description": "Balance at end of the year", "Note_No": 16.0,
-                "Current_Year_Amount": int(round(esc_end * esc_factor)), "Previous_Year_Amount": int(round(esc_beg * esc_factor))
+                "Current_Year_Amount": round(esc_end * esc_factor), "Previous_Year_Amount": round(esc_beg * esc_factor)
             })
 
             oe_cy_end = next((x["val"] for x in oe_items if x["year"] == self.cur_year and x["desc"] == "Balance at end of the year"), None)
@@ -1393,26 +1390,26 @@ class FinancialNotesExtractor:
             socie_rows.append({
                 "Row_Index": 4, "Equity_Component": "Retained Earnings",
                 "Transaction_Description": "Balance at beginning of the year", "Note_No": 17.0,
-                "Current_Year_Amount": int(round((oe_py_end or 0) * oe_factor)),
-                "Previous_Year_Amount": int(round((oe_py_beg or oe_py_end or 0) * oe_factor))
+                "Current_Year_Amount": round((oe_py_end or 0) * oe_factor),
+                "Previous_Year_Amount": round((oe_py_beg or oe_py_end or 0) * oe_factor)
             })
             socie_rows.append({
                 "Row_Index": 5, "Equity_Component": "Retained Earnings",
                 "Transaction_Description": "Profit for the year", "Note_No": 17.0,
-                "Current_Year_Amount": int(round(oe_cy_profit * oe_factor)),
-                "Previous_Year_Amount": int(round(oe_py_profit * oe_factor))
+                "Current_Year_Amount": round(oe_cy_profit * oe_factor),
+                "Previous_Year_Amount": round(oe_py_profit * oe_factor)
             })
             socie_rows.append({
                 "Row_Index": 6, "Equity_Component": "Retained Earnings",
                 "Transaction_Description": "Balance at end of the year", "Note_No": 17.0,
-                "Current_Year_Amount": int(round((oe_cy_end or 0) * oe_factor)),
-                "Previous_Year_Amount": int(round((oe_py_end or 0) * oe_factor))
+                "Current_Year_Amount": round((oe_cy_end or 0) * oe_factor),
+                "Previous_Year_Amount": round((oe_py_end or 0) * oe_factor)
             })
             socie_rows.append({
                 "Row_Index": 7, "Equity_Component": "Total Other Equity",
                 "Transaction_Description": "Balance at end of the year", "Note_No": 17.0,
-                "Current_Year_Amount": int(round((oe_cy_end or 0) * oe_factor)),
-                "Previous_Year_Amount": int(round((oe_py_end or 0) * oe_factor))
+                "Current_Year_Amount": round((oe_cy_end or 0) * oe_factor),
+                "Previous_Year_Amount": round((oe_py_end or 0) * oe_factor)
             })
         else:
             # Dynamic extraction from notes sheets (Share Capital Note 3 & Reserve / Surplus Note 4)
@@ -1481,38 +1478,38 @@ class FinancialNotesExtractor:
                     socie_rows.append({
                         "Row_Index": 1, "Equity_Component": "Equity Share Capital",
                         "Transaction_Description": "Balance at beginning of the year", "Note_No": 3.0,
-                        "Current_Year_Amount": int(round(esc_cap[1] * factor)), "Previous_Year_Amount": int(round(esc_cap[1] * factor))
+                        "Current_Year_Amount": round(esc_cap[1] * factor), "Previous_Year_Amount": round(esc_cap[1] * factor)
                     })
                     socie_rows.append({
                         "Row_Index": 2, "Equity_Component": "Equity Share Capital",
                         "Transaction_Description": "Changes in equity share capital during the year", "Note_No": 3.0,
-                        "Current_Year_Amount": int(round(esc_chg * factor)), "Previous_Year_Amount": 0
+                        "Current_Year_Amount": round(esc_chg * factor), "Previous_Year_Amount": 0
                     })
                     socie_rows.append({
                         "Row_Index": 3, "Equity_Component": "Equity Share Capital",
                         "Transaction_Description": "Balance at end of the year", "Note_No": 3.0,
-                        "Current_Year_Amount": int(round(esc_cap[0] * factor)), "Previous_Year_Amount": int(round(esc_cap[1] * factor))
+                        "Current_Year_Amount": round(esc_cap[0] * factor), "Previous_Year_Amount": round(esc_cap[1] * factor)
                     })
                     socie_rows.append({
                         "Row_Index": 4, "Equity_Component": "Retained Earnings",
                         "Transaction_Description": "Balance at beginning of the year", "Note_No": 4.0,
-                        "Current_Year_Amount": int(round(res_beg[0] * factor)), "Previous_Year_Amount": int(round(res_beg[1] * factor))
+                        "Current_Year_Amount": round(res_beg[0] * factor), "Previous_Year_Amount": round(res_beg[1] * factor)
                     })
                     socie_rows.append({
                         "Row_Index": 5, "Equity_Component": "Retained Earnings",
                         "Transaction_Description": "Profit for the year", "Note_No": 4.0,
-                        "Current_Year_Amount": int(round((res_add[0] if res_add else 0) * factor)),
-                        "Previous_Year_Amount": int(round((res_add[1] if res_add else 0) * factor))
+                        "Current_Year_Amount": round((res_add[0] if res_add else 0) * factor),
+                        "Previous_Year_Amount": round((res_add[1] if res_add else 0) * factor)
                     })
                     socie_rows.append({
                         "Row_Index": 6, "Equity_Component": "Retained Earnings",
                         "Transaction_Description": "Balance at end of the year", "Note_No": 4.0,
-                        "Current_Year_Amount": int(round(res_end[0] * factor)), "Previous_Year_Amount": int(round(res_end[1] * factor))
+                        "Current_Year_Amount": round(res_end[0] * factor), "Previous_Year_Amount": round(res_end[1] * factor)
                     })
                     socie_rows.append({
                         "Row_Index": 7, "Equity_Component": "Total Other Equity",
                         "Transaction_Description": "Balance at end of the year", "Note_No": 4.0,
-                        "Current_Year_Amount": int(round(res_end[0] * factor)), "Previous_Year_Amount": int(round(res_end[1] * factor))
+                        "Current_Year_Amount": round(res_end[0] * factor), "Previous_Year_Amount": round(res_end[1] * factor)
                     })
                     found_dynamic = True
                     break
@@ -1522,47 +1519,47 @@ class FinancialNotesExtractor:
                 socie_rows.append({
                     "Row_Index": 1, "Equity_Component": "Equity Share Capital",
                     "Transaction_Description": "Balance at beginning of the year", "Note_No": 3.0,
-                    "Current_Year_Amount": int(round(3.9022 * factor)), "Previous_Year_Amount": int(round(3.9022 * factor))
+                    "Current_Year_Amount": round(3.9022 * factor), "Previous_Year_Amount": round(3.9022 * factor)
                 })
                 socie_rows.append({
                     "Row_Index": 2, "Equity_Component": "Equity Share Capital",
                     "Transaction_Description": "Changes in equity share capital during the year", "Note_No": 3.0,
-                    "Current_Year_Amount": int(round(0.2761 * factor)), "Previous_Year_Amount": 0
+                    "Current_Year_Amount": round(0.2761 * factor), "Previous_Year_Amount": 0
                 })
                 socie_rows.append({
                     "Row_Index": 3, "Equity_Component": "Equity Share Capital",
                     "Transaction_Description": "Balance at end of the year", "Note_No": 3.0,
-                    "Current_Year_Amount": int(round(4.1783 * factor)), "Previous_Year_Amount": int(round(3.9022 * factor))
+                    "Current_Year_Amount": round(4.1783 * factor), "Previous_Year_Amount": round(3.9022 * factor)
                 })
                 socie_rows.append({
                     "Row_Index": 4, "Equity_Component": "Retained Earnings",
                     "Transaction_Description": "Balance at beginning of the year", "Note_No": 4.0,
-                    "Current_Year_Amount": int(round(1758.8225 * factor)), "Previous_Year_Amount": int(round(750.1368 * factor))
+                    "Current_Year_Amount": round(1758.8225 * factor), "Previous_Year_Amount": round(750.1368 * factor)
                 })
                 socie_rows.append({
                     "Row_Index": 5, "Equity_Component": "Retained Earnings",
                     "Transaction_Description": "Profit for the year", "Note_No": 4.0,
-                    "Current_Year_Amount": int(round(1066.2849 * factor)), "Previous_Year_Amount": int(round(1008.6757 * factor))
+                    "Current_Year_Amount": round(1066.2849 * factor), "Previous_Year_Amount": round(1008.6757 * factor)
                 })
                 socie_rows.append({
                     "Row_Index": 6, "Equity_Component": "Retained Earnings",
                     "Transaction_Description": "Balance at end of the year", "Note_No": 4.0,
-                    "Current_Year_Amount": int(round(2825.0975 * factor)), "Previous_Year_Amount": int(round(1758.8225 * factor))
+                    "Current_Year_Amount": round(2825.0975 * factor), "Previous_Year_Amount": round(1758.8225 * factor)
                 })
                 socie_rows.append({
                     "Row_Index": 7, "Equity_Component": "Securities Premium",
                     "Transaction_Description": "Balance at beginning of the year", "Note_No": 4.0,
-                    "Current_Year_Amount": int(round(1202.0011 * factor)), "Previous_Year_Amount": int(round(1202.0011 * factor))
+                    "Current_Year_Amount": round(1202.0011 * factor), "Previous_Year_Amount": round(1202.0011 * factor)
                 })
                 socie_rows.append({
                     "Row_Index": 8, "Equity_Component": "Securities Premium",
                     "Transaction_Description": "Balance at end of the year", "Note_No": 4.0,
-                    "Current_Year_Amount": int(round(2441.9386 * factor)), "Previous_Year_Amount": int(round(1202.0011 * factor))
+                    "Current_Year_Amount": round(2441.9386 * factor), "Previous_Year_Amount": round(1202.0011 * factor)
                 })
                 socie_rows.append({
                     "Row_Index": 9, "Equity_Component": "Total Other Equity",
                     "Transaction_Description": "Balance at end of the year", "Note_No": 4.0,
-                    "Current_Year_Amount": int(round(5443.4663 * factor)), "Previous_Year_Amount": int(round(3068.4833 * factor))
+                    "Current_Year_Amount": round(5443.4663 * factor), "Previous_Year_Amount": round(3068.4833 * factor)
                 })
 
         df_res = pd.DataFrame(socie_rows)
@@ -1636,7 +1633,7 @@ class FinancialNotesExtractor:
                 rec = {"Asset_Class": name}
                 for m, c in col_map.items():
                     v = df_ppe.iloc[r, c] if c < df_ppe.shape[1] else 0
-                    rec[m] = int(round(float(v) * factor)) if pd.notna(v) and _is_num(v) else 0
+                    rec[m] = round(float(v) * factor) if pd.notna(v) and _is_num(v) else 0
                 ppe_rows.append(rec)
             df_res = pd.DataFrame(ppe_rows)
             for col in PPE_COLS:
@@ -1700,7 +1697,7 @@ class FinancialNotesExtractor:
                 val = df_ppe.iloc[r, c]
                 if pd.isna(val) or not _is_num(val):
                     val = 0.0
-                rec[m] = int(round(val * factor))
+                rec[m] = round(val * factor)
             ppe_rows.append(rec)
         df_res = pd.DataFrame(ppe_rows)
         for col in PPE_COLS:

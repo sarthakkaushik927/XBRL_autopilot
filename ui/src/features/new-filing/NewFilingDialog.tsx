@@ -113,7 +113,11 @@ export function NewFilingDialog() {
 
   const input = toInput(f)
   const cinError = f.cin && !isValidCin(f.cin) ? 'A CIN has 21 characters, e.g. U72200KA2010PTC123456' : null
-  const periodErrors = useMemo(() => validateFilingPeriods(input.cy, input.py), [input.cy.start, input.cy.end, input.py?.start, input.py?.end])
+  const periodErrors = useMemo(
+    () => validateFilingPeriods(input.cy, input.py),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [input.cy.start, input.cy.end, input.py?.start, input.py?.end]
+  )
   const nameError = submitted && !f.companyName.trim() ? 'Enter the company name' : null
   const canSubmit = Boolean(f.companyName.trim() && isValidCin(f.cin) && periodErrors.length === 0)
 
