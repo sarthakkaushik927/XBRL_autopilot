@@ -54,6 +54,7 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-23, duplicates within ₹1 are the same fact (branch `fix/duplicate-rounding-tolerance`, issue #33):** `DUPLICATE_FACT_CONFLICT` now allows MCA's 1 INR tolerance, like the calculation checks. Changed in both the backend validator (`xml_generation_pipeline.py`) and its copy in the app (`indas-filing-rules.ts`). The case: a statement line in rupees and its note total in paise. On HPL, 15 of the 69 problems after a full Auto-tag were this. Tests: `test_validator_takes_amounts_within_one_rupee_as_the_same_fact` and the filing-rules test.
 - **2026-11-23, upstream `main` merged + Faster Auto-tag on by default (branch `feat/editor-toolbar`):**
   - **Faster Auto-tag** (`AppSettings.parallelAutoTag`) now defaults to **on** (Sarthak): 4 `/recommend` batches at once after the sheet's first. Old settings without the key read as on; turning it off is stored.
   - **Embedding id fixed:** upstream's new default `sentence-transformers/BAAI/bge-small-en-v1.5` doesn't exist on Hugging Face (`FileNotFoundError`), so the local ranker (`scoped_ranker._embedder`) crashed. Now `BAAI/bge-small-en-v1.5` (384 dims). `.env` still sets `EMBEDDING_MODEL=all-mpnet-base-v2` for the Qdrant path (768-dim collections).

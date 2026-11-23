@@ -131,11 +131,19 @@ def test_changes_in_equity_are_dimensional_facts(concepts):
 
 def test_validator_flags_an_opening_balance_that_differs_from_the_prior_closing():
     payload = _payload()
-    payload["statements"]["cashFlow"][0]["cy"] = 11  # CY opening 11, but PY closing says 10
+    payload["statements"]["cashFlow"][0]["cy"] = 12  # CY opening 12, but PY closing says 10
     _, errors = IndASValidator(INDAS_OUTPUT_JSON_PATH).validate(payload)
     assert any(e["type"] == "DUPLICATE_FACT_CONFLICT" for e in errors)
     _, ok_errors = IndASValidator(INDAS_OUTPUT_JSON_PATH).validate(_payload())
     assert not any(e["type"] == "DUPLICATE_FACT_CONFLICT" for e in ok_errors)
+
+
+def test_validator_takes_amounts_within_one_rupee_as_the_same_fact():
+    """A statement in rupees and its note total in paise (HPL: 100,452,286 vs 100,452,285.75)."""
+    payload = _payload()
+    payload["statements"]["cashFlow"][0]["cy"] = 10.75  # PY closing 10: within MCA's 1 INR tolerance
+    _, errors = IndASValidator(INDAS_OUTPUT_JSON_PATH).validate(payload)
+    assert not any(e["type"] == "DUPLICATE_FACT_CONFLICT" for e in errors)
 
 
 def test_text_block_scope_is_the_notes_narrative_concepts(kb):
