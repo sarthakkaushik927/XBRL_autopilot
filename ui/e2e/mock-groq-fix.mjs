@@ -1,19 +1,22 @@
 // A scripted stand-in for Groq's chat completions (OpenAI-compatible) for Ind AS Fix with AI: the backend is started
 // with GROQ_API_BASE=http://127.0.0.1:<port> (langchain_groq), so no request leaves the machine. The backend asks for
 // structured output by function calling; the mock answers with one `FixAnswer` tool call built by `answer(prompt)`.
-// Every request body is kept, so the test can check what was sent.
+// Every request body is kept, so the test can check what was sent. `setDelay(ms)` makes the answers slow (Stop tests).
 import { createServer } from 'node:http'
 
 export function startMockGroqFix(port, answer) {
   const requests = []
+  let delay = 0
   const server = createServer((req, res) => {
     let body = ''
     req.on('data', (c) => (body += c))
     req.on('end', () => {
-      const send = (status, data) => {
-        res.writeHead(status, { 'content-type': 'application/json' })
-        res.end(JSON.stringify(data))
-      }
+      const send = (status, data) =>
+        setTimeout(() => {
+          if (res.destroyed) return
+          res.writeHead(status, { 'content-type': 'application/json' })
+          res.end(JSON.stringify(data))
+        }, delay)
       if (req.method !== 'POST' || !req.url.endsWith('/chat/completions')) return send(404, { error: { message: 'not found' } })
       let parsed
       try {
@@ -40,7 +43,7 @@ export function startMockGroqFix(port, answer) {
       })
     })
   })
-  return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve({ requests, close: () => server.close() })))
+  return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve({ requests, close: () => server.close(), setDelay: (ms) => (delay = ms) })))
 }
 
 /** The id of the line with this exact line item in a Fix with AI prompt ("<id> | <line item> | <headings> | …"). */

@@ -92,6 +92,7 @@ export function App() {
   useEffect(() => initAi(), [initAi])
   useEffect(() => window.xap?.menu.onCommand(runCommand), [])
   useEditorSync()
+  useIndasAutosave()
 
   return (
     <div className="flex h-full flex-col bg-bg text-fg">
@@ -114,6 +115,18 @@ export function App() {
       <Toasts />
     </div>
   )
+}
+
+/**
+ * Auto-save of an open Ind AS project (issue #20, point 2): every `autosaveSeconds` (Settings, 5 minutes by default)
+ * unsaved work is written to the project file. A C&I filing's recovery copies are main's AutosaveScheduler.
+ */
+function useIndasAutosave(): void {
+  const seconds = useSettings((s) => s.state?.autosaveSeconds ?? 300)
+  useEffect(() => {
+    const timer = setInterval(() => void useIndas.getState().autosave(), seconds * 1000)
+    return () => clearInterval(timer)
+  }, [seconds])
 }
 
 /** Keeps the editor read-models in step with the open filing (revision bumps on every change in main). */

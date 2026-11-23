@@ -28,7 +28,7 @@ export function StatusBar() {
           <span>{filing.header.fyLabel}</span>
           <span>{filing.header.nature}</span>
           <span data-testid="filing-taxonomy">{filing.taxonomy}</span>
-          <span className={filing.saveState === 'Saved' ? '' : 'text-warn'} data-testid="save-state">
+          <span className={/saved \d|^saved$/i.test(filing.saveState) ? '' : 'text-warn'} data-testid="save-state">
             {filing.saveState}
           </span>
           {problems && (

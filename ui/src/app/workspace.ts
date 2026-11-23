@@ -30,7 +30,8 @@ export interface FilingWorkspace {
   kind: 'filing' | 'indas'
   header: WorkspaceHeader
   taxonomy: string
-  saveState: 'Saved' | 'Unsaved changes' | 'Not saved yet' | 'Read-only'
+  /** 'Saved', or 'Saved 10:42' / 'Auto-saved 10:42' when the time is known */
+  saveState: 'Saved' | `Saved ${string}` | `Auto-saved ${string}` | 'Unsaved changes' | 'Not saved yet' | 'Read-only'
   elrs: ElrInfo[]
   activeElr: string | null
   openElr(uri: string): void
@@ -44,6 +45,9 @@ export function useWorkspace(): FilingWorkspace | null {
   const filing = useFilingWorkspace()
   return indas ?? filing
 }
+
+/** "10:42" in the user's time zone */
+const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 function useFilingWorkspace(): FilingWorkspace | null {
   const { summary, elrs, setStatementPlaces } = useProject()
@@ -79,7 +83,7 @@ function useFilingWorkspace(): FilingWorkspace | null {
 
 function useIndasWorkspace(): FilingWorkspace | null {
   // only what the shared panes show: a selection or progress change must not re-render the whole window
-  const s = useIndas(useShallow((x) => ({ open: x.open, details: x.details, dirty: x.dirty, activeElr: x.activeElr, setActiveElr: x.setActiveElr })))
+  const s = useIndas(useShallow((x) => ({ open: x.open, details: x.details, dirty: x.dirty, savedAt: x.savedAt, activeElr: x.activeElr, setActiveElr: x.setActiveElr })))
   const setRightTab = useUi((u) => u.setRightTab)
   const elrs = useIndasElrs()
   const problems = useIndasProblems()
@@ -99,7 +103,7 @@ function useIndasWorkspace(): FilingWorkspace | null {
         setPlaces: (n) => void useIndas.getState().updateDetails({ ...d, statementPlaces: n }),
       },
       taxonomy: taxonomyLabel((d.taxonomy ?? 'ind-as-2017') as TaxonomyId),
-      saveState: s.dirty ? 'Unsaved changes' : 'Saved',
+      saveState: s.dirty ? 'Unsaved changes' : s.savedAt ? `${s.savedAt.auto ? 'Auto-saved' : 'Saved'} ${clock(s.savedAt.at)}` : 'Saved',
       elrs,
       activeElr: s.activeElr,
       openElr: (uri) => {

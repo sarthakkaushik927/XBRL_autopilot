@@ -107,7 +107,7 @@ function LineForm({ entry, kind }: { entry: IndasElr; kind: StatementKey }) {
   const tree = treeOf(s.trees, entry)
   const check = s.checks[kind]
   const { rows, socie, ppe } = s
-  const lines = useMemo(() => (tree ? formLines(tree, check?.facts ?? {}, taggedOf(kind, { rows, socie, ppe })) : []), [tree, check, kind, rows, socie, ppe])
+  const lines = useMemo(() => (tree ? formLines(tree, check?.facts ?? {}, taggedOf(kind, { rows, socie, ppe }), check?.derived) : []), [tree, check, kind, rows, socie, ppe])
   const foldable = useMemo(() => ({ elrUri: entry.uri, rows: lines.map((l) => l.node), tables: [] }), [entry.uri, lines])
   const fold = useFormTree(tree ? foldable : null)
   const body = useRef<HTMLDivElement>(null)
@@ -169,6 +169,20 @@ function LineForm({ entry, kind }: { entry: IndasElr; kind: StatementKey }) {
 
 const NONE: string[] = []
 
+/** A total no line reports, summed from its tagged parts by the taxonomy's calculation (issue #20, point 5). */
+function DerivedChip({ parts, elr }: { parts: string[]; elr: string }) {
+  const n = parts.length
+  return (
+    <span
+      className="rounded bg-accent/15 px-1 text-[10px] font-semibold text-accent"
+      title={`Σ calculated from ${n} tagged part${n === 1 ? '' : 's'} (MCA taxonomy calculation, ELR ${elr}):\n${parts.map((p) => `• ${p}`).join('\n')}\nNo line reports this total: it follows its parts and is filed in the XML.`}
+      data-testid="derived-chip"
+    >
+      Σ
+    </span>
+  )
+}
+
 /** One Form row. Memoised and store-free: a click re-renders only the rows whose selection state changed. */
 const LineRow = memo(function LineRow(props: {
   line: FormLine
@@ -212,6 +226,7 @@ const LineRow = memo(function LineRow(props: {
   const cells = first && transform ? rowCells(transform, first) : null
   const chip = (year: 'cy' | 'py') => {
     const cell = cells?.[year]
+    if (l.derived && l.value?.[year] != null) return <DerivedChip parts={l.derived.parts} elr={l.derived.elr} />
     if (!cell || !first) return first?.startsWith('zero:') ? <span className="rounded bg-panel-2 px-1 text-[10px] text-muted" title="Reported as 0 (Empty mandatory → 0)">0</span> : null
     const more = l.rows.length > 1 ? ` +${l.rows.length - 1}` : ''
     return (

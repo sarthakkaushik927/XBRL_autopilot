@@ -23,10 +23,16 @@ export async function sidecarCall<T>(
   sidecar: SidecarClient,
   method: HttpMethod,
   path: string,
-  { body, readyTimeoutMs = 120_000, timeoutMs, what = 'AI engine' }: { body?: unknown; readyTimeoutMs?: number; timeoutMs?: number; what?: string } = {},
+  {
+    body,
+    readyTimeoutMs = 120_000,
+    timeoutMs,
+    what = 'AI engine',
+    signal,
+  }: { body?: unknown; readyTimeoutMs?: number; timeoutMs?: number; what?: string; signal?: AbortSignal } = {},
 ): Promise<T> {
   await sidecar.whenReady(readyTimeoutMs)
-  const res = await sidecar.request<Envelope<T>>(method, path, body, timeoutMs)
+  const res = await sidecar.request<Envelope<T>>(method, path, body, timeoutMs, signal)
   if (res.status !== 200 || !res.data?.success) throw new SidecarCallError(res.data?.message || `${what} error (${res.status})`, res.status)
   return res.data.data
 }

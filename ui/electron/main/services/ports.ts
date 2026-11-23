@@ -59,7 +59,8 @@ export interface TaxonomyCatalog {
 /** The part of the sidecar manager that HTTP adapters need. */
 export interface SidecarClient {
   whenReady(timeoutMs: number): Promise<void>
-  request<T>(method: HttpMethod, path: string, body?: unknown, timeoutMs?: number): Promise<SidecarResponse<T>>
+  /** `signal`: the caller can stop the request (e.g. Stop on Fix with AI) */
+  request<T>(method: HttpMethod, path: string, body?: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<SidecarResponse<T>>
 }
 
 /** File transfer with the sidecar: multipart upload (JSON answer) and binary download. */

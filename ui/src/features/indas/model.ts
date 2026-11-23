@@ -17,7 +17,9 @@ import {
   type MasterField,
   type NoteText,
   type PeriodRole,
+  type SheetTree,
   type Signatory,
+  type StatementElrs,
   type StatementKey,
   type TransformResult,
 } from '@shared/indas'
@@ -275,7 +277,16 @@ export function readinessProblems(input: Pick<FilingDraft, 'rows' | 'details' | 
   return p
 }
 
-export function buildGenerateInput(s: FilingDraft & { companyNameField?: string }): GenerateXmlInput {
+/**
+ * Each statement's ELR codes, from its loaded Form trees (`trees` by "scope:kind"): main derives the totals its lines
+ * imply from these calculations only (issue #20, point 5). A statement whose trees aren't loaded yet has none.
+ */
+export function statementElrs(trees: Record<string, SheetTree[]>): StatementElrs {
+  return Object.fromEntries(LINE_SHEETS.flatMap((s) => (trees[`${s.sheet}:concept`] ? [[s.key, trees[`${s.sheet}:concept`].map((t) => t.elr)]] : [])))
+}
+
+/** The /generateXML input; with `trees`, main also files the totals the lines imply (derived from each statement's ELRs). */
+export function buildGenerateInput(s: FilingDraft & { companyNameField?: string; trees?: Record<string, SheetTree[]> }): GenerateXmlInput {
   const lines = (key: StatementKey) =>
     s.rows.filter((r) => r.statement === key && r.concept).map((r) => ({ concept: r.concept, cy: r.cy, py: r.py, periodRole: r.periodRole }))
   const statements = Object.fromEntries(LINE_SHEETS.map((st) => [st.key, lines(st.key)])) as GenerateXmlInput['statements']
@@ -297,6 +308,7 @@ export function buildGenerateInput(s: FilingDraft & { companyNameField?: string 
     meta: metaOf(s.details),
     master: { company: s.company, auditor: s.auditor, signatories: s.signatories },
     statements,
+    ...(s.trees ? { elrs: statementElrs(s.trees) } : {}),
     tables: [
       { table: SOCIE_TABLE.table, axis: SOCIE_TABLE.axis, rows: socieRows },
       { table: PPE_TABLE.table, axis: PPE_TABLE.axis, rows: ppeRows },
