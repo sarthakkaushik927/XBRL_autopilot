@@ -17,8 +17,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autosaveSeconds: 300,
   autosave: true,
   aiConsent: false,
-  // Faster Auto-tag (docs/18): off until it has been tried on the hosted backend with AI on
-  parallelAutoTag: false,
+  // Faster Auto-tag (docs/18): on by default since 2026-11-23
+  parallelAutoTag: true,
 }
 
 const KEY = 'app.settings.v1'

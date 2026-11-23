@@ -54,6 +54,23 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-23, upstream `main` merged + Faster Auto-tag on by default (branch `feat/editor-toolbar`):**
+  - **Faster Auto-tag** (`AppSettings.parallelAutoTag`) now defaults to **on** (Sarthak): 4 `/recommend` batches at once after the sheet's first. Old settings without the key read as on; turning it off is stored.
+  - **Embedding id fixed:** upstream's new default `sentence-transformers/BAAI/bge-small-en-v1.5` doesn't exist on Hugging Face (`FileNotFoundError`), so the local ranker (`scoped_ranker._embedder`) crashed. Now `BAAI/bge-small-en-v1.5` (384 dims). `.env` still sets `EMBEDDING_MODEL=all-mpnet-base-v2` for the Qdrant path (768-dim collections).
+  - **E2E `indas-pipeline.mjs`, HPL workbook, AI on, sequential:** ALL PASSED. Auto-tag 73 s, but only **21/356 lines** got suggestions: Groq (`gpt-oss-120b`) answered some AI-pick batches with `400 tool call validation failed: attempted to call tool 'picks' which was not in request.tools`, and `/recommend` turned that into a `500` for the whole batch instead of falling back to the local ranking.
+  - **Fixed (same day):**
+    - `llm_picker` asks for JSON (`method="json_mode"`, the shape in the system prompt), not a tool call;
+    - it catches `groq.APIError`, so any Groq failure leaves the local ranking;
+    - `with_rate_limit_fallback` also moves to the next model on a `400` (the model's own output failed validation);
+    - `indas-pipeline.mjs` now needs suggestions on ≥ 90% of the lines.
+    - **Tests:** `tests/test_llm_picker.py` (3) and a `400` fallback test. Live Groq smoke on synthetic lines: 3/4 right picks, no error.
+    - **E2E rerun (fixes + Faster Auto-tag on):** ALL PASSED, **356/356 lines** with suggestions (was 21), 82 AI picks, 122 s; reopen restores 369/369 tags; 69 MCA problems listed (the filing is now fully tagged, so more rules apply).
+  - **Retry fail-safe on every backend call** (`ui/electron/main/util/retry.ts`, used by `BackendClient.send`, so the renderer's proxied calls, uploads, downloads and the KB fetch all get it):
+    - **Retried:** a refused / reset connection, 429, 502, 503, 504.
+    - **Not retried:** timeouts, 500, 4xx.
+    - **Bounded, no loops:** at most 2 retries (3 attempts), waits 0.5 s then 1.5 s ± 25%, `Retry-After` honoured, every wait capped at 10 s.
+    - **Cancellation:** `signal` aborts the running attempt and any wait. `RequestControl.stopRetrying` ends only the retries: Auto-tag's Cancel lets the running batches finish as before, and a batch waiting to retry stops (reported as a cancel, not a failure).
+    - **Tests:** `retry.test.ts` (10) and 6 in `backend-client.test.ts`. UI: 299 pass, 138 skipped; `pnpm typecheck` green. Generate XML: 5 MCA problems (P&L root missing, BS out of balance, 2 calculation mismatches, 1 PPE roll-forward), all listed in Problems.
 - **2026-11-23, App CI proposed (branch `ci/app-tests`, for Vashu):** `.github/workflows/app-ci.yml` runs `pnpm typecheck` and the UI unit tests on every push and PR. Until now no app test ran in CI: `ci.yml` covers the backend.
   - **Kept apart from `ci.yml`:** the backend's tests, Docker image and deploy are untouched.
   - **Not run:** the engine's own tests. They need `knowledge_base/*_engine_authority.json`, removed in `b97ccc1`; there 8 vitest files fail to load and 52 of 68 legacy tests fail (open item, docs/17).

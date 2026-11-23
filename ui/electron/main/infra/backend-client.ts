@@ -8,12 +8,23 @@
  */
 import { EventEmitter } from 'node:events'
 import type { HttpMethod, SidecarLogLine, SidecarResponse, SidecarStatus } from '@shared/ipc'
+import type { RequestControl } from '../services/ports'
 import { isAllowedSidecarPath, parseHealth } from '../sidecar-utils'
+import { retryAfterMs, withRetry } from '../util/retry'
 
 /** Where `make dev-server` serves the backend: the address used when no URL is configured. */
 export const DEFAULT_BACKEND_URL = 'http://127.0.0.1:7860'
 const MAX_LOG_LINES = 2000
 const DEFAULT_TIMEOUT_MS = 120_000
+
+/**
+ * The fail-safe on every backend call: a refused / reset connection (the backend restarting, a hosted instance
+ * cycling) and 429 / 502 / 503 / 504 (busy, proxy, deploy) are tried again, up to `retries` more times.
+ * Not retried: a timeout (the backend may still be working on it, an AI call would be paid twice), 4xx, 500 (a bug
+ * doesn't go away on a retry), and anything once the caller cancelled.
+ */
+export const DEFAULT_RETRY = { retries: 2, baseMs: 500, maxMs: 10_000 }
+const RETRYABLE_STATUS = new Set([429, 502, 503, 504])
 
 /**
  * The backend's base URL: the first set of `XAP_API_URL` in the process environment, the dev `.env`, and the value
@@ -38,6 +49,8 @@ export interface BackendOptions {
   fetch?: typeof fetch
   /** health check interval while connected / while not (ms) */
   pollMs?: { up: number; down: number }
+  /** the retry fail-safe (DEFAULT_RETRY); `retries: 0` turns it off */
+  retry?: { retries: number; baseMs: number; maxMs: number }
 }
 
 export class BackendClient extends EventEmitter {
@@ -107,46 +120,80 @@ export class BackendClient extends EventEmitter {
     })
   }
 
-  /** A JSON request to an allowed path; the answer is parsed as JSON when it is JSON. */
-  async request<T>(method: HttpMethod, path: string, body?: unknown, timeoutMs = DEFAULT_TIMEOUT_MS, signal?: AbortSignal): Promise<SidecarResponse<T>> {
+  /**
+   * A JSON request to an allowed path; the answer is parsed as JSON when it is JSON.
+   * `signal` cancels it: the running attempt is aborted and no retry starts. `control.stopRetrying` only ends the retries.
+   */
+  async request<T>(
+    method: HttpMethod,
+    path: string,
+    body?: unknown,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal?: AbortSignal,
+    control?: RequestControl,
+  ): Promise<SidecarResponse<T>> {
     const res = await this.send(
       path,
       { method, body: body !== undefined ? JSON.stringify(body) : undefined, headers: body !== undefined ? { 'Content-Type': 'application/json' } : {} },
       timeoutMs,
       signal,
+      control,
     )
     return { status: res.status, data: parseBody<T>(await res.text()) }
   }
 
   /** A GET sent with If-None-Match when `etag` is given: 304 = the copy with that ETag is still current (no body). */
-  async getIfChanged<T>(path: string, etag: string | null, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<{ status: number; etag: string | null; data: T | null }> {
-    const res = await this.send(path, { method: 'GET', headers: etag ? { 'If-None-Match': etag } : {} }, timeoutMs)
+  async getIfChanged<T>(path: string, etag: string | null, timeoutMs = DEFAULT_TIMEOUT_MS, signal?: AbortSignal): Promise<{ status: number; etag: string | null; data: T | null }> {
+    const res = await this.send(path, { method: 'GET', headers: etag ? { 'If-None-Match': etag } : {} }, timeoutMs, signal)
     if (res.status === 304) return { status: 304, etag, data: null }
     return { status: res.status, etag: res.headers.get('ETag'), data: parseBody<T>(await res.text()) }
   }
 
   /** Multipart upload of one file (e.g. /indas/transform); the answer is parsed like `request`. */
-  async upload<T>(path: string, file: { field: string; fileName: string; bytes: Uint8Array }, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<SidecarResponse<T>> {
+  async upload<T>(path: string, file: { field: string; fileName: string; bytes: Uint8Array }, timeoutMs = DEFAULT_TIMEOUT_MS, signal?: AbortSignal): Promise<SidecarResponse<T>> {
     const form = new FormData()
     form.append(file.field, new Blob([Uint8Array.from(file.bytes)]), file.fileName) // copy: Blob needs an ArrayBuffer-backed view
-    const res = await this.send(path, { method: 'POST', body: form }, timeoutMs)
+    const res = await this.send(path, { method: 'POST', body: form }, timeoutMs, signal)
     return { status: res.status, data: parseBody<T>(await res.text()) }
   }
 
   /** Binary GET (e.g. the standard template). */
-  async download(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<{ status: number; bytes: Uint8Array }> {
-    const res = await this.send(path, { method: 'GET' }, timeoutMs)
+  async download(path: string, timeoutMs = DEFAULT_TIMEOUT_MS, signal?: AbortSignal): Promise<{ status: number; bytes: Uint8Array }> {
+    const res = await this.send(path, { method: 'GET' }, timeoutMs, signal)
     return { status: res.status, bytes: new Uint8Array(await res.arrayBuffer()) }
   }
 
-  private async send(path: string, init: { method: string; body?: BodyInit; headers?: Record<string, string> }, timeoutMs: number, stop?: AbortSignal): Promise<Response> {
+  /** One request with the retry fail-safe (DEFAULT_RETRY); each attempt gets its own timeout. */
+  private async send(
+    path: string,
+    init: { method: string; body?: BodyInit; headers?: Record<string, string> },
+    timeoutMs: number,
+    stop?: AbortSignal,
+    control?: RequestControl,
+  ): Promise<Response> {
     if (!isAllowedSidecarPath(path)) throw new Error(`Backend path not allowed: ${path}`)
+    const policy = this.opts.retry ?? DEFAULT_RETRY
+    const cancel = [stop, control?.stopRetrying].filter((s): s is AbortSignal => !!s)
     try {
-      return await this.fetch(`${this.opts.baseUrl}${path}`, {
-        ...init,
-        headers: { ...this.auth(), ...(init.headers ?? {}) },
-        signal: stop ? AbortSignal.any([AbortSignal.timeout(timeoutMs), stop]) : AbortSignal.timeout(timeoutMs),
-      })
+      return await withRetry(
+        () =>
+          this.fetch(`${this.opts.baseUrl}${path}`, {
+            ...init,
+            headers: { ...this.auth(), ...(init.headers ?? {}) },
+            signal: stop ? AbortSignal.any([AbortSignal.timeout(timeoutMs), stop]) : AbortSignal.timeout(timeoutMs),
+          }),
+        {
+          ...policy,
+          signal: cancel.length > 1 ? AbortSignal.any(cancel) : cancel[0],
+          decide: (o) => {
+            if ('error' in o) return { retry: isConnectionError(o.error) }
+            if (!RETRYABLE_STATUS.has(o.value.status)) return { retry: false }
+            void o.value.body?.cancel().catch(() => undefined) // the retried answer's body is not read
+            return { retry: true, waitMs: retryAfterMs(o.value.headers.get('Retry-After')) ?? undefined }
+          },
+          onRetry: ({ attempt, delayMs, reason }) => this.log('system', `Retrying ${init.method} ${path} (${attempt}/${policy.retries}) in ${delayMs} ms: ${reason}`),
+        },
+      )
     } catch (err) {
       // a refused connection means the backend went away: say so and look again soon
       if (isConnectionError(err)) {

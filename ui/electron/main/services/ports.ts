@@ -56,16 +56,21 @@ export interface TaxonomyCatalog {
   searchConcepts(taxonomy: TaxonomyId, query: string, limit: number): Promise<CatalogConcept[]>
 }
 
-/** The part of the sidecar manager that HTTP adapters need. */
+/** Per request: `stopRetrying` ends the backend client's retries but lets the running attempt finish (Auto-tag's Cancel). */
+export interface RequestControl {
+  stopRetrying?: AbortSignal
+}
+
+/** The part of the sidecar manager that HTTP adapters need. Every call is retried on a transient failure (backend-client). */
 export interface SidecarClient {
   whenReady(timeoutMs: number): Promise<void>
-  /** `signal`: the caller can stop the request (e.g. Stop on Fix with AI) */
-  request<T>(method: HttpMethod, path: string, body?: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<SidecarResponse<T>>
+  /** `signal`: the caller can stop the request and its retries (e.g. Stop on Fix with AI) */
+  request<T>(method: HttpMethod, path: string, body?: unknown, timeoutMs?: number, signal?: AbortSignal, control?: RequestControl): Promise<SidecarResponse<T>>
 }
 
 /** A GET the server may answer 304 "not changed" when `etag` (from an earlier answer) still matches (If-None-Match). */
 export interface ConditionalGetClient {
-  getIfChanged<T>(path: string, etag: string | null, timeoutMs?: number): Promise<{ status: number; etag: string | null; data: T | null }>
+  getIfChanged<T>(path: string, etag: string | null, timeoutMs?: number, signal?: AbortSignal): Promise<{ status: number; etag: string | null; data: T | null }>
 }
 
 /** One server answer kept on disk with its ETag and the server (`source`) it came from. */
@@ -83,8 +88,8 @@ export interface CachedAnswerStore<T> {
 
 /** File transfer with the sidecar: multipart upload (JSON answer) and binary download. */
 export interface SidecarFileClient {
-  upload<T>(path: string, file: { field: string; fileName: string; bytes: Uint8Array }, timeoutMs?: number): Promise<SidecarResponse<T>>
-  download(path: string, timeoutMs?: number): Promise<{ status: number; bytes: Uint8Array }>
+  upload<T>(path: string, file: { field: string; fileName: string; bytes: Uint8Array }, timeoutMs?: number, signal?: AbortSignal): Promise<SidecarResponse<T>>
+  download(path: string, timeoutMs?: number, signal?: AbortSignal): Promise<{ status: number; bytes: Uint8Array }>
 }
 
 /** Supplies the engine authority of a taxonomy (loaded once per taxonomy, cached by the implementation). */

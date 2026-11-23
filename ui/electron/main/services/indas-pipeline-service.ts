@@ -23,6 +23,7 @@ import type {
 } from '@shared/indas'
 import { FIX_STOPPED, LINE_SHEETS, RECOMMEND_CANCELLED } from '@shared/indas'
 import { sidecarCall } from '../infra/sidecar-call'
+import { isAbortError } from '../util/retry'
 import { runLimited } from '../util/run-limited'
 import { deriveFiling, deriveTotals } from './indas-derived-totals'
 import { checkDifferences } from './indas-difference-check'
@@ -121,6 +122,8 @@ export class IndasPipelineService {
         },
         timeoutMs: SLOW_MS,
         what: 'Tag suggestions',
+        // Cancel: a batch the backend is ranking finishes, but one waiting to retry stops
+        stopRetrying: signal,
       })
       // each batch fills its own keys' places, so the answer stays in key order whichever batch is back first
       batchKeys.forEach((_, j) => (out[from + j] = (data[j] ?? []).map(toSuggestion).filter((s): s is ConceptSuggestion => s !== null)))
@@ -128,7 +131,11 @@ export class IndasPipelineService {
       onProgress?.(done, keys.length)
     }
     const batches = Math.ceil(keys.length / RECOMMEND_BATCH)
-    const all = await runLimited(batches, parallel ? RECOMMEND_PARALLEL : 1, batch, { signal, firstAlone: parallel })
+    const all = await runLimited(batches, parallel ? RECOMMEND_PARALLEL : 1, batch, { signal, firstAlone: parallel }).catch((e: unknown) => {
+      // a retry stopped by Cancel is a cancel, not a failure
+      if (signal?.aborted && isAbortError(e)) return false
+      throw e
+    })
     // Cancel (the busy overlay): no batch starts after it; the ones the backend is ranking finish first
     if (!all) throw new RecommendCancelled()
     return out

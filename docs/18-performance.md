@@ -29,7 +29,7 @@ Slow work also shows a progress card with Cancel, so a long Auto-tag doesn't fee
 
 ## Faster Auto-tag: parallel batches (2026-11-22, `perf/autotag-parallel`)
 
-Auto-tag sends a sheet's lines to the backend in batches of 20. **Settings → Auto-tag → "Faster Auto-tag (3–4 batches at once)"** sends up to 4 at a time (`RECOMMEND_PARALLEL`). **Off by default** until it has been tried on the hosted backend with AI on.
+Auto-tag sends a sheet's lines to the backend in batches of 20. **Settings → Auto-tag → "Faster Auto-tag (3–4 batches at once)"** sends up to 4 at a time (`RECOMMEND_PARALLEL`). **On by default since 2026-11-23** (Sarthak); settings saved before then read as on unless the user turned it off.
 - **Off:** one batch at a time, exactly as before.
 - **On:** the sheet's first batch goes alone, then 4 at a time.
   - **Why the first goes alone:** on its first call for a sheet, the backend embeds the sheet's concepts and keeps them in memory. If 4 first calls arrived together, each would embed them (1,843 concepts for the notes).

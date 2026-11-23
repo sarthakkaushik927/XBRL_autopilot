@@ -35,9 +35,19 @@ export async function sidecarCall<T>(
     timeoutMs,
     what = 'AI engine',
     signal,
-  }: { body?: unknown; readyTimeoutMs?: number; timeoutMs?: number; what?: string; signal?: AbortSignal } = {},
+    stopRetrying,
+  }: {
+    body?: unknown
+    readyTimeoutMs?: number
+    timeoutMs?: number
+    what?: string
+    /** cancels the request and its retries */
+    signal?: AbortSignal
+    /** ends the retries only; the running attempt finishes */
+    stopRetrying?: AbortSignal
+  } = {},
 ): Promise<T> {
   await sidecar.whenReady(readyTimeoutMs)
-  const res = await sidecar.request<Envelope<T>>(method, path, body, timeoutMs, signal)
+  const res = await sidecar.request<Envelope<T>>(method, path, body, timeoutMs, signal, stopRetrying ? { stopRetrying } : undefined)
   return unwrapEnvelope(res.status, res.data, what)
 }

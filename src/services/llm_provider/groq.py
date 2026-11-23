@@ -62,12 +62,14 @@ def with_rate_limit_fallback(llms: list[BaseChatModel]) -> Runnable:
 
     A model Groq no longer serves (404, retired from the list) is skipped the same way: on 2026-11-22 a 429 on the
     chosen model fell through to a retired fallback whose 404 ended the chain, and the AI pick was lost.
+    A 400 is skipped too: Groq answers 400 when the model's own output fails validation (tool_use_failed,
+    json_validate_failed), which another model usually gets right.
 
     `.with_structured_output(...)` / `.bind_tools(...)` on the result apply to every model in the chain.
     """
     if len(llms) == 1:
         return llms[0]
-    return llms[0].with_fallbacks(llms[1:], exceptions_to_handle=(groq.RateLimitError, groq.NotFoundError))
+    return llms[0].with_fallbacks(llms[1:], exceptions_to_handle=(groq.RateLimitError, groq.NotFoundError, groq.BadRequestError))
 
 
 def _chat_groq(model: str) -> ChatGroq:

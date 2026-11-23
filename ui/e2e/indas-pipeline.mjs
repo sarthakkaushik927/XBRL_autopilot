@@ -63,7 +63,9 @@ check(true, 'Auto-tag shows the blocking progress overlay', await ev(`document.q
 await waitFor(`${S}.busy === null`, 'auto-tag', 1800000)
 const got = await ev(`${S}.rows.filter(r => r.suggestions.length).length + '/' + ${S}.rows.length`)
 const ai = await ev(`${S}.rows.filter(r => r.suggestions[0]?.pickedBy === 'ai').length`)
-check(Number(got.split('/')[0]) > 0, 'suggestions from each sheet’s scope', `${got} lines, ${ai} AI picks, ${Math.round((Date.now() - t0) / 1000)} s`)
+// ≥ 90% of the lines: a failing AI pick must leave the local ranking, not empty batches (21/356 passed `> 0`, 2026-11-23)
+const [withSugg, lineCount] = got.split('/').map(Number)
+check(withSugg >= 0.9 * lineCount, 'suggestions for ≥ 90% of the lines, from each sheet’s scope', `${got} lines, ${ai} AI picks, ${Math.round((Date.now() - t0) / 1000)} s`)
 check(await ev(`${S}.rows.filter(r => r.suggestions.length).every(r => r.concept)`), 'Auto-tag applied the tags (no Accept step)')
 check(!(await ev(`!!document.querySelector('[data-testid="indas-accept-top"]')`)), 'no Accept suggestions button')
 for (const uri of await ev(`[...document.querySelectorAll('[data-testid="explorer-elr"]')].map(e => e.dataset.elr).filter(u => /CANONICAL_(BS|PL|CF|SOCIE|PPE_SCHEDULE)#/.test(u))`)) {

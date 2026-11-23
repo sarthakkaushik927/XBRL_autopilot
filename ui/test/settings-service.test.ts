@@ -72,15 +72,15 @@ describe('SettingsService', () => {
     expect(s.get().autosave).toBe(false)
   })
 
-  it('Faster Auto-tag is off by default and for settings saved before it existed; it is stored', async () => {
+  it('Faster Auto-tag is on by default and for settings saved before it existed; turning it off is stored', async () => {
     const db = new AppDatabase(':memory:')
-    expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(false)
+    expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(true)
     db.set('app.settings.v1', JSON.stringify({ autosaveSeconds: 600, aiConsent: true }))
+    expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(true)
+    expect(await new SettingsService(db, new MemorySecretStore()).update({ parallelAutoTag: false })).toMatchObject({ parallelAutoTag: false, aiConsent: true })
     expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(false)
-    expect(await new SettingsService(db, new MemorySecretStore()).update({ parallelAutoTag: true })).toMatchObject({ parallelAutoTag: true, aiConsent: true })
-    expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(true)
     await new SettingsService(db, new MemorySecretStore()).update({ parallelAutoTag: 'yes' as unknown as boolean })
-    expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(true)
+    expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(false)
   })
 
   it('signals a sidecar restart when the model changes, not for other settings', async () => {

@@ -15,6 +15,7 @@ function make(handler: (url: string, init: RequestInit) => Response | Promise<Re
     baseUrl: 'http://backend.test',
     token,
     pollMs: { up: 60_000, down: 60_000 },
+    retry: { retries: 2, baseMs: 0, maxMs: 0 },
     fetch: (async (url: string, init: RequestInit) => {
       calls.push({ url, init })
       return handler(url, init)
@@ -103,6 +104,92 @@ describe('BackendClient', () => {
     await expect(client.request('GET', '/api/v1/indas/authority')).rejects.toThrow(/not reachable/)
     expect(client.getStatus().state).toBe('error')
     expect(client.getLogs().map((l) => l.text)).toContain('Backend connection lost')
+  })
+
+  describe('retry fail-safe', () => {
+    const PATH = '/api/v1/indas/recommend/'
+    /** answers /health, and PATH from `answers` in turn (the last one repeats) */
+    function scripted(answers: (() => Response)[]) {
+      let i = 0
+      return make((url) => (url.endsWith('/health') ? json(health) : answers[Math.min(i++, answers.length - 1)]()))
+    }
+    const hits = (calls: { url: string }[]) => calls.filter((c) => c.url.endsWith(PATH)).length
+
+    it('retries a refused connection, then a 503, and answers', async () => {
+      const { client, calls } = scripted([
+        () => {
+          throw refused()
+        },
+        () => json({ busy: 1 }, 503),
+        () => json({ ok: 1 }),
+      ])
+      expect(await client.request('POST', PATH, {})).toEqual({ status: 200, data: { ok: 1 } })
+      expect(hits(calls)).toBe(3)
+      expect(client.getLogs().filter((l) => l.text.startsWith('Retrying POST')).length).toBe(2)
+    })
+
+    it('retries 429 / 502 / 504 too and returns the last answer when they keep coming', async () => {
+      const { client, calls } = scripted([() => json({}, 429), () => json({}, 502), () => json({ gw: 1 }, 504)])
+      expect(await client.request('POST', PATH, {})).toEqual({ status: 504, data: { gw: 1 } })
+      expect(hits(calls)).toBe(3)
+    })
+
+    it('does not retry a 500, a 4xx or a timeout', async () => {
+      for (const answer of [() => json({}, 500), () => json({}, 422)]) {
+        const { client, calls } = scripted([answer])
+        await client.request('POST', PATH, {})
+        expect(hits(calls)).toBe(1)
+      }
+      const { client, calls } = scripted([
+        () => {
+          throw Object.assign(new Error('timed out'), { name: 'TimeoutError' })
+        },
+      ])
+      await expect(client.request('POST', PATH, {})).rejects.toThrow('timed out')
+      expect(hits(calls)).toBe(1)
+    })
+
+    it('a cancelled request is not retried', async () => {
+      const stop = new AbortController()
+      const { client, calls } = scripted([
+        () => {
+          stop.abort()
+          throw Object.assign(new Error('aborted'), { name: 'AbortError' })
+        },
+      ])
+      await expect(client.request('POST', PATH, {}, 1000, stop.signal)).rejects.toMatchObject({ name: 'AbortError' })
+      expect(hits(calls)).toBe(1)
+    })
+
+    it('stopRetrying lets the running attempt answer but starts no retry', async () => {
+      const stop = new AbortController()
+      const { client, calls } = scripted([
+        () => {
+          stop.abort() // Cancel while the backend is working on it
+          return json({}, 503)
+        },
+      ])
+      await expect(client.request('POST', PATH, {}, 1000, undefined, { stopRetrying: stop.signal })).rejects.toMatchObject({ name: 'AbortError' })
+      expect(hits(calls)).toBe(1)
+      const stop2 = new AbortController()
+      const ok = scripted([
+        () => {
+          stop2.abort()
+          return json({ done: 1 })
+        },
+      ])
+      expect(await ok.client.request('POST', PATH, {}, 1000, undefined, { stopRetrying: stop2.signal })).toEqual({ status: 200, data: { done: 1 } })
+    })
+
+    it('retries uploads and downloads as well', async () => {
+      const { client, calls } = make((url) => {
+        if (url.endsWith('/health')) return json(health)
+        return calls.filter((c) => c.url === url).length === 1 ? json({}, 503) : json({ data: 1 })
+      })
+      expect((await client.upload('/api/v1/indas/transform', { field: 'file', fileName: 'a.xlsx', bytes: new Uint8Array([1]) })).status).toBe(200)
+      expect((await client.download('/api/v1/indas/template')).status).toBe(200)
+      expect(calls.filter((c) => !c.url.endsWith('/health')).length).toBe(4)
+    })
   })
 
   it('getIfChanged sends the ETag and reports 304 without a body, else the new ETag and the answer', async () => {

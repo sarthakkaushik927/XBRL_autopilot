@@ -27,6 +27,14 @@ class RetiredModel(FakeListChatModel):
         raise groq.NotFoundError("model not found", response=httpx.Response(404, request=req), body=None)
 
 
+class BadAnswerModel(FakeListChatModel):
+    """Groq's 400 when the model's own output fails validation (gpt-oss calling a tool that isn't there)."""
+
+    def _call(self, *args, **kwargs):
+        req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+        raise groq.BadRequestError("tool call validation failed", response=httpx.Response(400, request=req), body=None)
+
+
 class BrokenModel(FakeListChatModel):
     def _call(self, *args, **kwargs):
         raise ValueError("not a rate limit")
@@ -52,6 +60,11 @@ def test_walks_the_whole_chain():
 def test_a_retired_model_is_skipped_like_a_rate_limited_one():
     llm = with_rate_limit_fallback([RateLimitedModel(responses=["x"]), RetiredModel(responses=["x"]), FakeListChatModel(responses=["third"])])
     assert llm.invoke("hi").content == "third"
+
+
+def test_a_bad_answer_400_retries_on_the_next_model():
+    llm = with_rate_limit_fallback([BadAnswerModel(responses=["x"]), FakeListChatModel(responses=["second"])])
+    assert llm.invoke("hi").content == "second"
 
 
 def test_other_errors_are_not_hidden():

@@ -7,6 +7,7 @@ The result is a proposal the CA accepts or not.
 """
 from __future__ import annotations
 
+import groq
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
@@ -32,7 +33,11 @@ PROMPT = ChatPromptTemplate.from_messages([
         "{sheet}, choose the single taxonomy concept that the line reports, only from the allowed concepts given. "
         "Read the line with its headings and use Schedule III / Ind AS meaning, not just matching words (for "
         "example long-term means non-current, short-term means current, and a 'Total' line is the total concept "
-        "itself). Return null when no allowed concept fits."),
+        "itself). Return null when no allowed concept fits.\n\n"
+        # JSON mode, not a tool call: gpt-oss on Groq names the tool after the field ("picks" for "Picks") and
+        # Groq rejects the call with a 400 (2026-11-23, 17 of 18 HPL batches lost)
+        'Answer with JSON only, in this shape: {{"picks": [{{"id": <line id>, "qname": "<allowed qname>" or null}}]}}, '
+        "one entry per line."),
     ),
     ("human", "{body}"),
 ])
@@ -66,9 +71,10 @@ async def pick_concepts(sheet: str, lines: list[dict], shared: list[Candidate] |
     if not lines:
         return {}
     try:
-        chain = PROMPT | get_llm().with_structured_output(Picks)
+        chain = PROMPT | get_llm().with_structured_output(Picks, method="json_mode")
         res: Picks = await chain.ainvoke({"sheet": sheet, "body": render(lines, shared)})
-    except (RuntimeError, TimeoutError, ConnectionError, ValueError, OSError) as e:  # no key, network, every model rate limited: the local order stands
+    # no key, network, every model rate limited, a Groq error (400 bad answer…), unparsable JSON: the local order stands
+    except (groq.APIError, RuntimeError, TimeoutError, ConnectionError, ValueError, OSError) as e:
         logger.exception("llm_picker.failed", sheet=sheet, error=str(e))
         return {}
     picked = valid_picks(res, lines, shared)
