@@ -107,6 +107,13 @@ export interface SidecarResponse<T = unknown> {
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
 
+/** A top-level menu as the custom title bar shows it: "Filing", with Alt+I opening it (mnemonic "i"). */
+export interface MenuName {
+  label: string
+  /** the access key, lower case; null when the label has none */
+  mnemonic: string | null
+}
+
 export type MenuCommand =
   | 'file:new'
   | 'file:open'
@@ -122,6 +129,7 @@ export type MenuCommand =
   | 'filing:generate-xml'
   | 'view:toggle-sidebar'
   | 'view:toggle-bottom'
+  | 'view:toggle-focus'
   | 'view:quick-switch'
   | 'tools:open-mca-validator'
   | 'tools:settings'
@@ -135,6 +143,8 @@ export const IPC = {
   sidecarRequest: 'sidecar:request',
   sidecarReconnect: 'sidecar:reconnect',
   menuCommand: 'menu:command',
+  menuLabels: 'menu:labels',
+  menuPopup: 'menu:popup',
   projectCurrent: 'project:current',
   projectCreate: 'project:create',
   projectOpen: 'project:open',
@@ -264,7 +274,13 @@ export interface XapApi {
     onStatus(cb: (s: SidecarStatus) => void): () => void
     onLog(cb: (l: SidecarLogLine) => void): () => void
   }
-  menu: { onCommand(cb: (c: MenuCommand) => void): () => void }
+  menu: {
+    onCommand(cb: (c: MenuCommand) => void): () => void
+    /** the top-level menu names for the custom title bar ("File", "Edit", …) and their Alt+letter */
+    labels(): Promise<MenuName[]>
+    /** opens top-level menu `index` at (x, y), CSS px in the window */
+    popup(index: number, x: number, y: number): Promise<void>
+  }
   project: {
     current(): Promise<ProjectSummary | null>
     create(input: NewFilingInput): Promise<Result<ProjectSummary | null>>

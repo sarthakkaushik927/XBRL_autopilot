@@ -26,6 +26,8 @@ const api: XapApi = {
   },
   menu: {
     onCommand: (cb) => subscribe<MenuCommand>(IPC.menuCommand, cb),
+    labels: () => invoke(IPC.menuLabels),
+    popup: (index, x, y) => invoke(IPC.menuPopup, index, x, y),
   },
   project: {
     current: () => invoke(IPC.projectCurrent),

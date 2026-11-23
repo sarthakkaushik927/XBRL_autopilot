@@ -41,6 +41,7 @@ export function buildMenu(getWindow: () => BrowserWindow | null, isDev: boolean)
       submenu: [
         { label: 'Toggle Side Panel', accelerator: 'CmdOrCtrl+B', click: send('view:toggle-sidebar') },
         { label: 'Toggle Bottom Panel', accelerator: 'CmdOrCtrl+J', click: send('view:toggle-bottom') },
+        { label: 'Focus (Hide Both Panels)', accelerator: 'CmdOrCtrl+Alt+F', click: send('view:toggle-focus') },
         { label: 'Go to Statement…', accelerator: 'CmdOrCtrl+P', click: send('view:quick-switch') },
         { type: 'separator' },
         { role: 'zoomIn' },

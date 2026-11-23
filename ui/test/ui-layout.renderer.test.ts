@@ -49,4 +49,18 @@ describe('layout toggles', () => {
     useUi.getState().setActivity('taxonomy')
     expect(useUi.getState().sidebarOpen).toBe(false)
   })
+
+  it('Focus hides both panels and brings back exactly what was open', () => {
+    useUi.setState({ sidebarOpen: false, bottomOpen: true })
+    useUi.getState().toggleFocus()
+    expect(useUi.getState()).toMatchObject({ sidebarOpen: false, bottomOpen: false })
+    useUi.getState().toggleFocus()
+    expect(useUi.getState()).toMatchObject({ sidebarOpen: false, bottomOpen: true })
+  })
+
+  it('leaving Focus with nothing remembered shows both panels', () => {
+    useUi.setState({ sidebarOpen: false, bottomOpen: false })
+    useUi.getState().toggleFocus()
+    expect(useUi.getState()).toMatchObject({ sidebarOpen: true, bottomOpen: true })
+  })
 })

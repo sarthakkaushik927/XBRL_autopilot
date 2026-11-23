@@ -62,6 +62,16 @@ describe('SettingsService', () => {
     expect(new SettingsService(db, new MemorySecretStore()).get().autosaveSeconds).toBe(3600)
   })
 
+  it('auto-save is on by default and can be switched off; junk is ignored', async () => {
+    const db = new AppDatabase(':memory:')
+    const s = new SettingsService(db, new MemorySecretStore())
+    expect(s.get().autosave).toBe(true)
+    await s.update({ autosave: false })
+    expect(new SettingsService(db, new MemorySecretStore()).get().autosave).toBe(false)
+    await s.update({ autosave: 'yes' as unknown as boolean })
+    expect(s.get().autosave).toBe(false)
+  })
+
   it('signals a sidecar restart when the model changes, not for other settings', async () => {
     const s = new SettingsService(new AppDatabase(':memory:'), new MemorySecretStore())
     const onAi = vi.fn()

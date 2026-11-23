@@ -69,6 +69,14 @@ body {
   user-select: none;
 }
 
+/* Custom title bar (TitleBar.tsx): the bar drags the window; its buttons stay clickable. */
+.xap-drag {
+  -webkit-app-region: drag;
+}
+.xap-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
 }

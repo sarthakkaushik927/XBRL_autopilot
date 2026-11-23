@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   groqModel: 'openai/gpt-oss-120b',
   mcaToolPath: '',
   autosaveSeconds: 300,
+  autosave: true,
   aiConsent: false,
 }
 
@@ -103,6 +104,7 @@ function sanitize(p: Partial<AppSettings>): Partial<AppSettings> {
   if (typeof p.autosaveSeconds === 'number' && Number.isFinite(p.autosaveSeconds)) {
     out.autosaveSeconds = Math.min(AUTOSAVE_MAX_SECONDS, Math.max(AUTOSAVE_MIN_SECONDS, Math.round(p.autosaveSeconds)))
   }
+  if (typeof p.autosave === 'boolean') out.autosave = p.autosave
   if (typeof p.aiConsent === 'boolean') out.aiConsent = p.aiConsent
   return out
 }

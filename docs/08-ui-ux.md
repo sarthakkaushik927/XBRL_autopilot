@@ -21,7 +21,12 @@ The layout is IDE-like, built for accountants: dense, keyboard-friendly and calm
 └─────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 - **AB** is the activity bar; its first button is New project.
-- **Layout toggles** (VS Code style, right end of the status bar): ▯ shows / hides the side panel (Ctrl+B), ▭ the bottom panel (Ctrl+J). The bottom panel also has its own ⌄ hide button. Showing a bottom tab (Problems after Generate, the status-bar error count) opens the panel again. Which panels are shown is remembered across restarts (`localStorage`, `xap.layout`).
+- **Title bar** (VS Code style, `TitleBar.tsx` + main `title-bar.ts`): the OS title bar is hidden (`titleBarStyle: 'hidden'`); Windows still draws minimise / maximise / close (`titleBarOverlay`, recoloured with the theme). One 32 px row holds the app mark, the menu names (File … Help, read from the application menu; a click pops that real submenu up, so every shortcut keeps working), the open filing (`● Company · FY` with ● while unsaved) and the editor toolbar. The bar drags the window; double-click maximises. macOS keeps its traffic lights and global menu.
+  - **Alt keys** (`menu-keys.ts`, as on Windows / VS Code): Alt+F / E / V / I / T / H opens that menu (the access keys come from the `&` in the menu labels); holding Alt underlines them; a lone Alt tap puts the focus on File: ← / → move, Enter / ↓ / the letter opens, Esc or another Alt tap leaves. AltGr (Ctrl+Alt) and Alt+Shift are left alone.
+- **Editor toolbar** (right end of the title bar): `EditorToolbar.tsx`, thin, runs the same commands as the menu (`app/commands.ts`).
+  - **☁ Auto** (Ind AS): auto-save on / off (`settings.autosave`, also a checkbox in Settings → Saving). The cloud shows the state: ✓ saved, orange = unsaved work waiting for the next tick, pulsing ↑ while an auto-save is written, a green tick with a ping when it lands, struck through ☁̸ when off (only Save writes the file then). Turning it on saves pending work at once. A C&I filing's crash-recovery copies are not affected.
+  - **💾 Save** (Ctrl+S), with an orange dot while there are unsaved changes.
+  - **Layout toggles** (VS Code style): ▯ shows / hides the side panel (Ctrl+B), ▭ the bottom panel (Ctrl+J), ⤢ **Focus** hides both and brings back what was open (Ctrl+Alt+F, View menu). The bottom panel also has its own ⌄ hide button. Showing a bottom tab (Problems after Generate, the status-bar error count) opens the panel again. Which panels are shown is remembered across restarts (`localStorage`, `xap.layout`).
 - All splits are resizable (`react-resizable-panels`). Sizes are remembered in `ui-state.json`.
 
 ## Activity bar → side panels
@@ -137,6 +142,8 @@ On the right, the XBRL Form shows the reverse: the source cell ref shows as a ch
 | Enter / Delete (on suggestion) | Approve / reject mapping |
 | Ctrl+J | Toggle bottom panel |
 | Ctrl+B | Toggle side panel |
+| Ctrl+Alt+F | Focus: hide / restore both panels |
+| Alt+F, Alt+E, … / Alt | Open a menu / enter the menu bar |
 
 ## Visual style
 - Tailwind 4 with CSS-variable tokens; light and dark themes, following the system by default.

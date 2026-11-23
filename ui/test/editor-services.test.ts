@@ -38,7 +38,8 @@ afterAll(async () => {
   sidecar?.stop()
 })
 
-describe.skipIf(!existsSync(AUTHORITY))('editor services on the sample workbook', () => {
+// data/sample_financials.xlsx left the repo in ee0fafa: these run again when it is put back
+describe.skipIf(!existsSync(AUTHORITY) || !existsSync(SAMPLE))('editor services on the sample workbook', () => {
   let dir: string
   let projects: ProjectService
   let sources: SourceService

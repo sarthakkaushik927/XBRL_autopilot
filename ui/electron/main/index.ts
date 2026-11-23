@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { userInfo } from 'node:os'
 import { join, resolve } from 'node:path'
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, nativeTheme, shell } from 'electron'
 import { IPC } from '@shared/ipc'
 import { AppDatabase } from './infra/app-database'
 import { DirAutosaveStore } from './infra/dir-autosave-store'
@@ -37,6 +37,7 @@ import { SidecarTaxonomyCatalog } from './infra/sidecar-taxonomy-catalog'
 import { SafeStorageSecretStore } from './infra/safe-storage-secret-store'
 import { registerIpc } from './ipc/register'
 import { buildMenu } from './menu'
+import { menuNames, overlayColors, popupMenu, titleBarOptions } from './title-bar'
 import { ProjectController } from './project/project-controller'
 import { AutosaveScheduler } from './services/autosave-scheduler'
 import { AutoTagService } from './services/auto-tag-service'
@@ -221,6 +222,8 @@ function createWindow(): void {
     show: false,
     title: windowTitle(projects.summary()),
     backgroundColor: '#0b0d10',
+    // VS Code-style title bar: the menu names and the editor toolbar are drawn by the renderer (TitleBar.tsx)
+    ...titleBarOptions(process.platform, nativeTheme.shouldUseDarkColors),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -232,6 +235,12 @@ function createWindow(): void {
   })
 
   mainWindow.once('ready-to-show', () => mainWindow?.show())
+  // the window buttons follow the theme, like the rest of the bar
+  const recolor = () => {
+    if (process.platform !== 'darwin') mainWindow?.setTitleBarOverlay(overlayColors(nativeTheme.shouldUseDarkColors))
+  }
+  nativeTheme.on('updated', recolor)
+  mainWindow.on('closed', () => nativeTheme.off('updated', recolor))
   mainWindow.on('closed', () => (mainWindow = null))
   mainWindow.on('blur', () => void autosave.tick())
   // Keep our title: the page <title> must not override it.
@@ -317,6 +326,8 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(buildMenu(getWindow, isDev))
     registerIpc({
       appInfo: () => ({ name: 'XBRL Autopilot', version: app.getVersion(), platform: process.platform, isDev }),
+      menuLabels: () => menuNames(Menu.getApplicationMenu()),
+      popupMenu: (index, x, y) => popupMenu(Menu.getApplicationMenu(), getWindow(), index, x, y),
       sidecar,
       projects,
       projectController,
