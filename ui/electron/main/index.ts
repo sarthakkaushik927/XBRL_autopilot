@@ -61,12 +61,14 @@ import { SavedProjectsService } from './services/saved-projects-service'
 import { RecentFilingsService } from './services/recent-filings-service'
 import { DirProjectLister } from './infra/dir-project-lister'
 import { IndasPipelineService } from './services/indas-pipeline-service'
+import { CachedKnowledgeBase } from './services/cached-knowledge-base'
 import { IndasController } from './indas/indas-controller'
 import { IndasProjectService } from './services/indas-project-service'
 import { readIndas, writeIndas } from './project/indas-file'
 import { readManifest } from './project/axbrl'
 import { SettingsService } from './services/settings-service'
 import { BackendClient, backendUrl } from './infra/backend-client'
+import { JsonFileCache } from './infra/json-file-cache'
 import { findProjectArg, parseDotEnv, windowTitle } from './util/launch'
 import { hardenConsole } from './util/safe-console'
 
@@ -77,8 +79,10 @@ const isDev = !app.isPackaged
 // In dev, app.getAppPath() is <repo>/ui; the Python sidecar, engine and .env live at the repo root.
 const repoRoot = resolve(app.getAppPath(), '..')
 app.setName('XBRL Autopilot')
-// XAP_USER_DATA (dev only) isolates automated test runs from the developer's real app data.
-app.setPath('userData', (isDev && process.env.XAP_USER_DATA) || join(app.getPath('appData'), 'XBRL Autopilot'))
+// XAP_USER_DATA (dev, or an XAP_TEST_BUILD=1 bundle) isolates automated test runs from the developer's real app data.
+declare const __XAP_TEST_BUILD__: boolean
+const testBuild = typeof __XAP_TEST_BUILD__ === 'boolean' && __XAP_TEST_BUILD__
+app.setPath('userData', ((isDev || testBuild) && process.env.XAP_USER_DATA) || join(app.getPath('appData'), 'XBRL Autopilot'))
 
 let mainWindow: BrowserWindow | null = null
 const getWindow = () => mainWindow
@@ -158,6 +162,9 @@ const indas = new IndasController(
     sidecar,
     { write: (_p, name, text) => new FileOutputWriter(projectsFolder.dir()).write(null, name, text) },
     () => settings.get().aiConsent,
+    () => settings.get().parallelAutoTag,
+    // docs/18: kept on disk, used again only when the server answers 304 to its ETag
+    new CachedKnowledgeBase(sidecar, new JsonFileCache(join(userData, 'cache', 'indas-authority.json')), sidecar.baseUrl),
   ),
   getWindow,
   () => projectsFolder.dir(),

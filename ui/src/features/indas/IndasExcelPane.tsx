@@ -100,10 +100,24 @@ function ToolbarButton(props: { onClick(): void; disabled?: boolean; title: stri
   )
 }
 
-/** The canonical workbook with the tag overlay: green = tagged, amber = suggestion waiting, blue = the selected line. */
+/**
+ * The canonical workbook with the tag overlay: green = tagged, amber = suggestion waiting, blue = the selected line.
+ * Cells can be edited: the line's amount follows (its tag stays) and the XBRL Form shows the new value.
+ */
 function CanonicalGrid() {
-  const { workbook, transform, rows, socie, ppe, selection, reveal, selectCell, showSheet } = useIndas(
-    useShallow((s) => ({ workbook: s.workbook, transform: s.transform, rows: s.rows, socie: s.socie, ppe: s.ppe, selection: s.selection, reveal: s.reveal, selectCell: s.selectCell, showSheet: s.showSheet })),
+  const { workbook, transform, rows, socie, ppe, selection, reveal, selectCell, showSheet, editCells } = useIndas(
+    useShallow((s) => ({
+      workbook: s.workbook,
+      transform: s.transform,
+      rows: s.rows,
+      socie: s.socie,
+      ppe: s.ppe,
+      selection: s.selection,
+      reveal: s.reveal,
+      selectCell: s.selectCell,
+      showSheet: s.showSheet,
+      editCells: s.editCells,
+    })),
   )
   // the status colours don't change with the selection: a click redraws only the selected line's layer
   const status = useMemo(() => (transform ? statusMarks(transform, rows, socie, ppe) : null), [transform, rows, socie, ppe])
@@ -114,7 +128,7 @@ function CanonicalGrid() {
   const marks = useMemo<GridMarks>(() => ({ approved: status?.approved ?? [], suggested: status?.suggested ?? [], linked }), [status, linked])
   const selected = linked[0] ?? null
   if (!workbook) return null
-  return <UniverGrid model={workbook} marks={marks} reveal={reveal} selected={selected} onSelect={(cell) => selectCell(cell)} onSheetChange={showSheet} />
+  return <UniverGrid model={workbook} marks={marks} reveal={reveal} selected={selected} onSelect={(cell) => selectCell(cell)} onSheetChange={showSheet} onEdit={editCells} />
 }
 
 /** The selected line: its amounts, its suggestion (✓ accept / ✗ next) and, for an instant concept, opening or closing. */

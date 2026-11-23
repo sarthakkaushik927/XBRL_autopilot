@@ -5,6 +5,7 @@
 export interface KbConcept {
   name?: string
   type?: string
+  periodType?: string
   abstract?: boolean
   labels?: { label?: string }
 }
@@ -18,7 +19,7 @@ export interface KbCalculation {
 export interface IndasKnowledgeBase {
   concepts?: Record<string, KbConcept>
   calculation?: Record<string, KbCalculation[]>
-  businessRules?: { mandatoryByELR?: Record<string, string[]> }
+  businessRules?: { mandatoryByELR?: Record<string, string[]>; nonNegativeConcepts?: string[] }
 }
 
 /** A concept's standard label, else its name, else the qname. */

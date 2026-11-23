@@ -20,6 +20,17 @@ export function SettingsPanel() {
         </p>
       </Section>
 
+      <Section title="Auto-tag">
+        <Checkbox
+          checked={state.parallelAutoTag}
+          onChange={(parallelAutoTag) => void update({ parallelAutoTag })}
+          label="Faster Auto-tag (3–4 batches at once)"
+        />
+        <p className="text-[11px] leading-relaxed text-muted">
+          With AI on, a few AI picks can differ (more Groq rate limits → model switch). Cancel stops after the running batches.
+        </p>
+      </Section>
+
       <Section title="MCA Validation Tool">
         <Field label="Tool location" hint="MCA_XBRL_Valiation_Tool_V5.1.exe — download it from mca.gov.in">
           <Input value={state.mcaToolPath} readOnly placeholder="Not set" className="font-mono text-[11px]" />
@@ -30,14 +41,15 @@ export function SettingsPanel() {
       </Section>
 
       <Section title="Saving">
-        <Field label="Autosave interval (seconds)" hint="Unsaved work is copied for crash recovery; your project file is only written when you save.">
+        <Field label="Auto-save every (minutes)" hint="An Ind AS project is saved to its file; a C&I filing's unsaved work is copied for crash recovery. 1 to 60 minutes.">
           <Input
             key={state.autosaveSeconds}
             type="number"
-            min={10}
-            max={600}
-            defaultValue={state.autosaveSeconds}
-            onBlur={(e) => void update({ autosaveSeconds: Number(e.target.value) })}
+            min={1}
+            max={60}
+            defaultValue={Math.round(state.autosaveSeconds / 60)}
+            onBlur={(e) => void update({ autosaveSeconds: Number(e.target.value) * 60 })}
+            data-testid="autosave-minutes"
           />
         </Field>
       </Section>

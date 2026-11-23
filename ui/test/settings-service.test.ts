@@ -21,7 +21,7 @@ describe('SettingsService', () => {
     const s = new SettingsService(db, new MemorySecretStore())
     expect(s.get()).toEqual(DEFAULT_SETTINGS)
     await s.update({ mcaToolPath: '  C:\\MCA\\tool.exe ', autosaveSeconds: 3 })
-    expect(new SettingsService(db, new MemorySecretStore()).get()).toMatchObject({ mcaToolPath: 'C:\\MCA\\tool.exe', autosaveSeconds: 10 })
+    expect(new SettingsService(db, new MemorySecretStore()).get()).toMatchObject({ mcaToolPath: 'C:\\MCA\\tool.exe', autosaveSeconds: 60 })
   })
 
   it('stores the Groq key only in the secret store and never exposes it in state', async () => {
@@ -51,6 +51,26 @@ describe('SettingsService', () => {
     await s.setGroqKey(KEY)
     expect(await s.groqKey()).toBe(KEY)
     expect((await s.state()).groqKeyFromEnv).toBe(false)
+  })
+
+  it('auto-saves every 5 minutes by default; an old 30 s value means the default', async () => {
+    const db = new AppDatabase(':memory:')
+    expect(new SettingsService(db, new MemorySecretStore()).get().autosaveSeconds).toBe(300)
+    db.set('app.settings.v1', JSON.stringify({ autosaveSeconds: 30, aiConsent: true }))
+    expect(new SettingsService(db, new MemorySecretStore()).get()).toMatchObject({ autosaveSeconds: 300, aiConsent: true })
+    await new SettingsService(db, new MemorySecretStore()).update({ autosaveSeconds: 99999 })
+    expect(new SettingsService(db, new MemorySecretStore()).get().autosaveSeconds).toBe(3600)
+  })
+
+  it('Faster Auto-tag is off by default and for settings saved before it existed; it is stored', async () => {
+    const db = new AppDatabase(':memory:')
+    expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(false)
+    db.set('app.settings.v1', JSON.stringify({ autosaveSeconds: 600, aiConsent: true }))
+    expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(false)
+    expect(await new SettingsService(db, new MemorySecretStore()).update({ parallelAutoTag: true })).toMatchObject({ parallelAutoTag: true, aiConsent: true })
+    expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(true)
+    await new SettingsService(db, new MemorySecretStore()).update({ parallelAutoTag: 'yes' as unknown as boolean })
+    expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(true)
   })
 
   it('signals a sidecar restart when the model changes, not for other settings', async () => {

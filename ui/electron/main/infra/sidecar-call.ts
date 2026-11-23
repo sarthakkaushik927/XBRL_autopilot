@@ -2,7 +2,7 @@
 import type { HttpMethod } from '@shared/ipc'
 import type { SidecarClient } from '../services/ports'
 
-interface Envelope<T> {
+export interface Envelope<T> {
   data: T
   success: boolean
   message: string
@@ -19,14 +19,25 @@ export class SidecarCallError extends Error {
   }
 }
 
+/** The `data` of a route's answer, or a SidecarCallError with the route's message. */
+export function unwrapEnvelope<T>(status: number, body: Envelope<T> | null | undefined, what = 'AI engine'): T {
+  if (status !== 200 || !body?.success) throw new SidecarCallError(body?.message || `${what} error (${status})`, status)
+  return body.data
+}
+
 export async function sidecarCall<T>(
   sidecar: SidecarClient,
   method: HttpMethod,
   path: string,
-  { body, readyTimeoutMs = 120_000, timeoutMs, what = 'AI engine' }: { body?: unknown; readyTimeoutMs?: number; timeoutMs?: number; what?: string } = {},
+  {
+    body,
+    readyTimeoutMs = 120_000,
+    timeoutMs,
+    what = 'AI engine',
+    signal,
+  }: { body?: unknown; readyTimeoutMs?: number; timeoutMs?: number; what?: string; signal?: AbortSignal } = {},
 ): Promise<T> {
   await sidecar.whenReady(readyTimeoutMs)
-  const res = await sidecar.request<Envelope<T>>(method, path, body, timeoutMs)
-  if (res.status !== 200 || !res.data?.success) throw new SidecarCallError(res.data?.message || `${what} error (${res.status})`, res.status)
-  return res.data.data
+  const res = await sidecar.request<Envelope<T>>(method, path, body, timeoutMs, signal)
+  return unwrapEnvelope(res.status, res.data, what)
 }

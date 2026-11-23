@@ -1,5 +1,5 @@
 /**
- * Read-only Excel view (Univer) with a tag overlay and two-way linkage. Presentational: what is highlighted, which
+ * Excel view (Univer) with a tag overlay and two-way linkage; read-only unless the caller takes the edits (`onEdit`). Presentational: what is highlighted, which
  * cell to reveal and what a click does come in as props, so a C&I filing (mapping) and an Ind AS filing (canonical
  * sheets) use the same grid (ADR-0017). Overlay colours are highlight layers, never cell styles: the workbook is
  * never modified.
@@ -72,7 +72,20 @@ export interface UniverGridProps {
   onActivate?(cell: CellRef): void
   /** the user (or a reveal) switched the shown sheet */
   onSheetChange?(sheet: string): void
+  /** cells the user edited (typed or pasted), with their new values; without it the grid is read-only */
+  onEdit?(edits: CellEdit[]): void
 }
+
+/** One edited cell: its 0-based row and column on its sheet and the value it now holds. */
+export interface CellEdit {
+  sheet: string
+  row: number
+  column: number
+  value: string | number | boolean | null
+}
+
+/** A paste larger than this is not reported cell by cell (the canonical sheets are a few hundred rows). */
+const MAX_EDIT_CELLS = 5000
 
 export function UniverGrid(props: UniverGridProps) {
   const { model, marks, reveal, selected } = props
@@ -112,7 +125,8 @@ export function UniverGrid(props: UniverGridProps) {
       })
       instance = univer
       const wb = univerAPI.createWorkbook(toUniverWorkbook(model))
-      wb.setEditable(false) // edits flowing back into the filing arrive in a later phase
+      // editable only when the edits flow back into the filing (an Ind AS filing's canonical sheets)
+      wb.setEditable(!!latest.current.onEdit)
       apiRef.current = univerAPI
       registerTestHook('univer', univerAPI)
 
@@ -180,6 +194,21 @@ export function UniverGrid(props: UniverGridProps) {
         univerAPI.addEvent(univerAPI.Event.CellPointerUp, onPointerUp),
         univerAPI.addEvent(univerAPI.Event.SelectionMoveEnd, onSelection),
         univerAPI.addEvent(univerAPI.Event.SelectionChanged, onSelection),
+        // an edit makes Univer redraw the sheet, which drops the highlight layers: draw them again (issue #20, point 1)
+        univerAPI.addEvent(univerAPI.Event.SheetValueChanged, (p) => {
+          const edits: CellEdit[] = []
+          for (const r of p.effectedRanges ?? []) {
+            const rows = r.getLastRow() - r.getRow() + 1
+            const cols = r.getLastColumn() - r.getColumn() + 1
+            if (rows * cols + edits.length > MAX_EDIT_CELLS) continue
+            const values = r.getValues()
+            for (let i = 0; i < rows; i++) {
+              for (let j = 0; j < cols; j++) edits.push({ sheet: r.getSheetName(), row: r.getRow() + i, column: r.getColumn() + j, value: (values[i]?.[j] ?? null) as CellEdit['value'] })
+            }
+          }
+          if (edits.length) latest.current.onEdit?.(edits)
+          setTimeout(drawOverlay, 0)
+        }),
         univerAPI.addEvent(univerAPI.Event.ActiveSheetChanged, () => {
           drawOverlay()
           const name = univerAPI.getActiveWorkbook()?.getActiveSheet()?.getSheetName()

@@ -35,6 +35,7 @@ export class IndasController {
   private lastGenerated: string | null = null
   /** the running Auto-tag's requests; Cancel aborts them */
   private recommending = new AbortController()
+  private readonly fixing = new Set<AbortController>()
 
   constructor(
     private readonly service: IndasPipelineService,
@@ -117,12 +118,23 @@ export class IndasController {
     return this.service.tree(scope, kind)
   }
 
-  check(rows: StatementLine[]): Promise<CheckResult> {
-    return this.service.check(rows)
+  check(rows: StatementLine[], elrs: string[] = []): Promise<CheckResult> {
+    return this.service.check(rows, elrs)
   }
 
-  fix(req: FixRequest): Promise<FixProposal> {
-    return this.service.proposeFix(req)
+  /** Fix with AI; Stop in the AI chat aborts every running request (cancelFix) */
+  async fix(req: FixRequest): Promise<FixProposal> {
+    const stop = new AbortController()
+    this.fixing.add(stop)
+    try {
+      return await this.service.proposeFix(req, stop.signal)
+    } finally {
+      this.fixing.delete(stop)
+    }
+  }
+
+  cancelFix(): void {
+    for (const c of this.fixing) c.abort()
   }
 
   async generate(input: GenerateXmlInput): Promise<GenerateXmlResult> {

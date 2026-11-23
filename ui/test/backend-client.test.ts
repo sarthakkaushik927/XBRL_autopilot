@@ -104,4 +104,17 @@ describe('BackendClient', () => {
     expect(client.getStatus().state).toBe('error')
     expect(client.getLogs().map((l) => l.text)).toContain('Backend connection lost')
   })
+
+  it('getIfChanged sends the ETag and reports 304 without a body, else the new ETag and the answer', async () => {
+    const { client, calls } = make((url, init) => {
+      if (url.endsWith('/health')) return json(health)
+      const sent = (init.headers as Record<string, string>)['If-None-Match']
+      if (sent === '"v1"') return new Response(null, { status: 304 })
+      return new Response(JSON.stringify({ data: 1, success: true, message: '' }), { status: 200, headers: { ETag: '"v1"' } })
+    })
+    expect(await client.getIfChanged('/api/v1/indas/authority', null)).toEqual({ status: 200, etag: '"v1"', data: { data: 1, success: true, message: '' } })
+    expect(await client.getIfChanged('/api/v1/indas/authority', '"v1"')).toEqual({ status: 304, etag: '"v1"', data: null })
+    const sent = calls.filter((c) => c.url.endsWith('/authority')).map((c) => (c.init.headers as Record<string, string>)['If-None-Match'] ?? null)
+    expect(sent).toEqual([null, '"v1"'])
+  })
 })

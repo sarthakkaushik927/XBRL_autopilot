@@ -59,7 +59,26 @@ export interface TaxonomyCatalog {
 /** The part of the sidecar manager that HTTP adapters need. */
 export interface SidecarClient {
   whenReady(timeoutMs: number): Promise<void>
-  request<T>(method: HttpMethod, path: string, body?: unknown, timeoutMs?: number): Promise<SidecarResponse<T>>
+  /** `signal`: the caller can stop the request (e.g. Stop on Fix with AI) */
+  request<T>(method: HttpMethod, path: string, body?: unknown, timeoutMs?: number, signal?: AbortSignal): Promise<SidecarResponse<T>>
+}
+
+/** A GET the server may answer 304 "not changed" when `etag` (from an earlier answer) still matches (If-None-Match). */
+export interface ConditionalGetClient {
+  getIfChanged<T>(path: string, etag: string | null, timeoutMs?: number): Promise<{ status: number; etag: string | null; data: T | null }>
+}
+
+/** One server answer kept on disk with its ETag and the server (`source`) it came from. */
+export interface CachedAnswer<T> {
+  source: string
+  etag: string
+  data: T
+}
+
+/** Where a cached answer lives; `read` gives null when there is none or it can't be read. */
+export interface CachedAnswerStore<T> {
+  read(): Promise<CachedAnswer<T> | null>
+  write(entry: CachedAnswer<T>): Promise<void>
 }
 
 /** File transfer with the sidecar: multipart upload (JSON answer) and binary download. */

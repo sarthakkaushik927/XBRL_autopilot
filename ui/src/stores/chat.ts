@@ -30,8 +30,13 @@ interface ChatStore {
   createThread(title?: string): Promise<string | null>
   deleteThread(threadId: string): Promise<void>
   sendMessage(text: string): Promise<void>
+  /** Stop: the chat stops waiting; the answer, if it still comes, is not shown */
+  stopSending(): void
   clearError(): void
 }
+
+/** bumped by every send and by Stop: an answer whose send is no longer the latest is dropped */
+let sendSeq = 0
 
 export const useChat = create<ChatStore>((set, get) => {
   const api = () => window.xap?.sidecar
@@ -45,6 +50,15 @@ export const useChat = create<ChatStore>((set, get) => {
     error: null,
 
     clearError: () => set({ error: null }),
+
+    stopSending: () => {
+      if (!get().sending) return
+      sendSeq++
+      set((s) => ({
+        sending: false,
+        messages: [...s.messages, { id: `stop-${Date.now()}`, role: 'assistant', content: 'Stopped.', timestamp: new Date().toISOString() }],
+      }))
+    },
 
     init: async () => {
       if (!window.xap?.sidecar) return
@@ -201,6 +215,8 @@ export const useChat = create<ChatStore>((set, get) => {
         sending: true,
         error: null,
       }))
+      const mine = ++sendSeq
+      const stopped = () => mine !== sendSeq
 
       try {
         const sidecar = api()
@@ -217,6 +233,7 @@ export const useChat = create<ChatStore>((set, get) => {
           stream: false,
         })
 
+        if (stopped()) return
         if (res.status === 200 && res.data?.response) {
           const assistantMsg: ChatMessage = {
             id: `assistant-${Date.now()}`,
@@ -256,6 +273,7 @@ export const useChat = create<ChatStore>((set, get) => {
           }))
         }
       } catch (e) {
+        if (stopped()) return
         const errMsg = e instanceof Error ? e.message : 'Unknown communication error with AI engine'
         set((s) => ({
           sending: false,

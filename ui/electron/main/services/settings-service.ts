@@ -7,11 +7,17 @@ import type { AppSettings, SettingsState } from '@shared/project'
 import { ValidationError } from './errors'
 import type { KeyValueRepository, SecretStore } from './ports'
 
+/** Auto-save: every 5 minutes by default (issue #20, point 2), between 1 minute and 1 hour. */
+export const AUTOSAVE_MIN_SECONDS = 60
+export const AUTOSAVE_MAX_SECONDS = 3600
+
 export const DEFAULT_SETTINGS: AppSettings = {
   groqModel: 'openai/gpt-oss-120b',
   mcaToolPath: '',
-  autosaveSeconds: 30,
+  autosaveSeconds: 300,
   aiConsent: false,
+  // Faster Auto-tag (docs/18): off until it has been tried on the hosted backend with AI on
+  parallelAutoTag: false,
 }
 
 const KEY = 'app.settings.v1'
@@ -42,7 +48,10 @@ export class SettingsService extends EventEmitter<SettingsEvents> {
     } catch {
       stored = {}
     }
-    return { ...DEFAULT_SETTINGS, ...stored }
+    const out = { ...DEFAULT_SETTINGS, ...stored }
+    // older versions stored their 30 s default with any other setting: below the minimum means the default now
+    if (!(out.autosaveSeconds >= AUTOSAVE_MIN_SECONDS)) out.autosaveSeconds = DEFAULT_SETTINGS.autosaveSeconds
+    return out
   }
 
   async state(): Promise<SettingsState> {
@@ -94,8 +103,9 @@ function sanitize(p: Partial<AppSettings>): Partial<AppSettings> {
   if (typeof p.groqModel === 'string' && p.groqModel.trim()) out.groqModel = p.groqModel.trim()
   if (typeof p.mcaToolPath === 'string') out.mcaToolPath = p.mcaToolPath.trim()
   if (typeof p.autosaveSeconds === 'number' && Number.isFinite(p.autosaveSeconds)) {
-    out.autosaveSeconds = Math.min(600, Math.max(10, Math.round(p.autosaveSeconds)))
+    out.autosaveSeconds = Math.min(AUTOSAVE_MAX_SECONDS, Math.max(AUTOSAVE_MIN_SECONDS, Math.round(p.autosaveSeconds)))
   }
   if (typeof p.aiConsent === 'boolean') out.aiConsent = p.aiConsent
+  if (typeof p.parallelAutoTag === 'boolean') out.parallelAutoTag = p.parallelAutoTag
   return out
 }

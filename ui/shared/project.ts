@@ -141,6 +141,8 @@ export interface AppSettings {
   mcaToolPath: string
   autosaveSeconds: number
   aiConsent: boolean
+  /** Faster Auto-tag (docs/18): several /recommend batches at once; off = one at a time. Off by default. */
+  parallelAutoTag: boolean
 }
 
 export interface SettingsState extends AppSettings {

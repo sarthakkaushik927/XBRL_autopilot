@@ -136,11 +136,16 @@ export interface GenerateXmlInput {
     signatories: Signatory[]
   }
   statements: Record<StatementKey, StatementLine[]>
+  /** each statement's ELR codes (its Form trees): main adds the totals derived from them (issue #20, point 5) */
+  elrs?: StatementElrs
   tables: TableInput[]
   notes: NoteText[]
   /** used for the output file name */
   companyName: string
 }
+
+/** The error message of a Fix with AI request the user stopped (renderer and main agree on it). */
+export const FIX_STOPPED = 'Fix with AI was stopped.'
 
 /** The error message of a recommend call the user cancelled (renderer and main agree on it). */
 export const RECOMMEND_CANCELLED = 'Auto-tag was cancelled.'
@@ -235,6 +240,25 @@ export interface FactValue {
   py: string | null
 }
 
+/**
+ * A total no line reports, summed from its parts by the taxonomy's calculation in one of the statement's ELRs
+ * (issue #20, point 5): Σ weight × part, per year, monetary concepts only. Never stored in the rows: it always
+ * follows its parts.
+ */
+export interface DerivedTotal {
+  concept: string
+  /** null = no part has an amount that year */
+  cy: string | null
+  py: string | null
+  /** the parts it was summed from (tagged lines or other derived totals) */
+  parts: string[]
+  /** the calculation ELR the parts come from */
+  elr: string
+}
+
+/** Each statement's ELR codes, as its Form trees list them: the calculations a derived total may come from. */
+export type StatementElrs = Partial<Record<StatementKey, string[]>>
+
 export interface CheckResult {
   differences: Difference[]
   /** Σ |difference| as a decimal string; "0" = everything ties */
@@ -243,6 +267,8 @@ export interface CheckResult {
   facts: Record<string, FactValue>
   /** per ELR: Σ |difference| per year (decimal strings) and how many totals don't add up (the Form's footer) */
   byElr: Record<string, ElrDifference>
+  /** totals summed from their tagged parts (also in `facts`); the Form marks them Σ */
+  derived: DerivedTotal[]
 }
 
 export interface ElrDifference {
@@ -277,7 +303,12 @@ export interface FixLine {
 
 export interface FixRequest {
   problems: FixProblem[]
+  /** the problems' statements: what the AI sees */
   lines: FixLine[]
+  /** every tagged line of every statement: the app's dry run scores each change on the whole filing (never sent to the AI) */
+  filing: FixLine[]
+  /** each statement's ELRs: the dry run derives the same totals as the live check (never sent to the AI) */
+  elrs?: StatementElrs
 }
 
 /** One proposed tag change: the line gets another concept ('' = no tag) and/or becomes an opening / closing balance. */
@@ -292,10 +323,12 @@ export interface FixChange {
   periodRole?: PeriodRole
   reason: string
   /**
-   * The app's own dry run of this change alone on its statement (the live Difference check): how many totals don't
-   * add up before and after, Σ |difference| before and after (decimal strings), and whether that is better.
+   * The app's own dry run of this change alone on the whole filing (the live Difference check of every statement +
+   * Generate's statement rules): how many problems before and after, Σ |difference| before and after (decimal
+   * strings), whether that is better, and whether it still helps together with the other helpful changes
+   * (`together`: what Accept all applies).
    */
-  effect: { before: number; after: number; totalBefore: string; totalAfter: string; better: boolean }
+  effect: { before: number; after: number; totalBefore: string; totalAfter: string; better: boolean; together: boolean }
 }
 
 export interface FixProposal {
