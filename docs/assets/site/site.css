@@ -1,0 +1,111 @@
+/* XBRL Autopilot site: page CSS on top of the taste kit (system.css). Only what sits inside a visual and the kit lacks. */
+/* the page runs the full width of the screen: the container grows with the window (kit default 1280px) */
+:root { --container: 1760px; }
+/* hero: the lit sky ground of the art, one soft mint light from the logo's plane */
+.hero__art { background:
+    radial-gradient(70% 60% at 18% 12%, color-mix(in oklab, var(--ground-surface) 80%, white), transparent 70%),
+    radial-gradient(60% 50% at 90% 100%, color-mix(in oklab, var(--ground-bg) 70%, #17dca6), transparent 70%),
+    var(--ground-bg); }
+.hero__art > .ly-piece--note { left: var(--s-6); bottom: var(--s-6); width: 300px; z-index: 2; }
+.hero__proof { font-size: var(--t-small); color: var(--muted); }
+/* the editor section: the real app window across the wrap, cut at the screen's foot */
+.shot-frame { margin: 0; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; background: #fff; box-shadow: 0 30px 70px -40px rgb(6 31 62 / .35); }
+.shot-frame > .frame__img { width: 100%; height: 100%; object-fit: cover; object-position: left top; }
+
+/* features-2x2 */
+#features .panel { --p-h: 300px; }
+@media (max-width: 639px) { #features .panel { --p-h: 180px; } #features .ui-chat__day { display: none; } #features .stage { --fade-h: 40px; } }
+
+/* the statement: the headline set large */
+#promise .mo-lt__type { font: var(--display-weight) clamp(48px, 8vw, 128px)/1 var(--font-display); letter-spacing: var(--display-tracking-xl); max-width: 12ch; }
+#promise .t-lead { max-width: 56ch; margin-top: var(--s-6); }
+#promise [data-moment="marquee-row"] { margin-top: var(--s-8); font: 400 var(--t-lead)/1.4 var(--font-mono); color: var(--muted); }
+
+/* downloads: one real OS mark per card */
+.os-mark { width: 40px; height: 40px; }
+.card--plan .t-small { font-family: var(--font-mono); }
+
+/* the docs reader: the list beside the open document, one window */
+.reader.ui { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); margin-top: var(--s-7); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg); }
+.reader__list { border-right: 1px solid var(--line); padding: var(--s-4); display: grid; align-content: start; gap: var(--s-1); overflow-y: auto; }
+.reader__list label { font-size: var(--t-label); font-weight: 500; color: var(--muted); padding: 0 var(--s-2); }
+.reader__list input { height: 44px; margin: var(--s-2) 0 var(--s-3); padding: 0 var(--s-3); border: 1px solid var(--line); border-radius: var(--r-sm); font: 400 16px var(--font-text); color: var(--ink); background: var(--bg); }
+.reader__item { display: flex; justify-content: space-between; gap: var(--s-3); min-height: 44px; align-items: center; padding: 0 var(--s-3); border-radius: var(--r-sm); text-align: left; background: none; border: 0; font: 400 16px/1.3 var(--font-text); color: var(--ink); cursor: pointer; }
+.reader__item span { font: 400 13px var(--font-mono); color: var(--muted); }
+.reader__item:hover { background: var(--g-alt); }
+.reader__item[aria-current="true"] { background: var(--g-alt); font-weight: 500; box-shadow: inset 2px 0 0 #17dca6; }
+.reader__doc { padding: var(--s-6) var(--s-7); overflow-y: auto; min-width: 0; }
+.reader__head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-4); padding-bottom: var(--s-4); margin-bottom: var(--s-5); border-bottom: 1px solid var(--line); }
+.reader__head p { font: 400 13px var(--font-mono); color: var(--muted); margin: 0; }
+.md { font-size: 16px; line-height: 1.7; color: var(--ink); }
+.md h1 { font: var(--display-weight) 32px/1.15 var(--font-display); letter-spacing: var(--display-tracking); margin: 0 0 var(--s-4); }
+.md h2 { font: 500 22px/1.3 var(--font-text); margin: var(--s-6) 0 var(--s-3); }
+.md h3 { font: 500 18px/1.3 var(--font-text); margin: var(--s-5) 0 var(--s-2); }
+.md p, .md ul, .md ol { margin: 0 0 var(--s-4); }
+.md ul, .md ol { padding-left: var(--s-5); }
+.md a { color: var(--ink); text-decoration: underline; text-decoration-color: #17dca6; text-underline-offset: 3px; }
+.md code { font: 400 .88em var(--font-mono); background: var(--g-alt); padding: 1px 5px; border-radius: var(--r-sm); }
+.md pre { background: #061f3e; color: #e8edf4; padding: var(--s-4); border-radius: var(--r-md); overflow-x: auto; }
+.md pre code { background: none; color: inherit; padding: 0; }
+.md table { width: 100%; border-collapse: collapse; margin: var(--s-4) 0; font-size: 14px; display: block; overflow-x: auto; }
+.md th, .md td { border-bottom: 1px solid var(--line); padding: var(--s-2) var(--s-3); text-align: left; vertical-align: top; }
+.md th { font-weight: 500; }
+.md blockquote { margin: var(--s-4) 0; padding-left: var(--s-4); border-left: 2px solid #17dca6; color: var(--muted); }
+@media (min-width: 640px) { .reader.ui { height: calc(200svh - 2 * var(--padt) - var(--padb) - 220px); } }
+@media (max-width: 639px) {
+  .reader.ui { grid-template-columns: minmax(0, 1fr); }
+  .reader__list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 260px; }
+  .reader__doc { padding: var(--s-5) var(--s-4); max-height: 900px; }
+}
+
+/* the close: the name across the wrap */
+.close__word { font: var(--display-weight) clamp(56px, 12.2vw, 176px)/1 var(--font-display); letter-spacing: var(--display-tracking-xl); white-space: nowrap; }
+.footer .nav__logo img { height: 28px; }
+
+/* downloads: the card for the visitor's own system (os-download.js sets data-yours) */
+.card--plan[data-yours] { border-color: var(--action); box-shadow: inset 0 0 0 1px var(--action); }
+.card--plan[data-yours] h3::after { content: "Your system"; margin-left: var(--s-2); font: 500 13px/1 var(--font-text); padding: 4px 8px; border-radius: 999px; background: #dcf7ee; color: #0a5a43; vertical-align: middle; }
+
+/* ===== compact layout: sections are as tall as their content (the kit's default is one fixed screen each) ===== */
+main > :is(section, .section):not(.hero), footer.closing {
+  height: auto; min-height: 0;
+  padding: var(--s-9) 0;
+}
+main > :is(section, .section):not(.hero) > .wrap, footer.closing > .wrap { height: auto; }
+main > :is(section, .section) > .wrap > .fill, .group > .fill { flex: none; }
+main > :is(section, .section).g2 > .wrap { display: flex; flex-direction: column; gap: var(--s-6); }
+main > :is(section, .section).g2 > .wrap > .grid:last-child,
+main > :is(section, .section).g2 > .wrap > .group > .grid:last-child { flex: none; }
+/* the hero: its content's height, the picture a fixed frame beside the words */
+main > .hero { height: auto; min-height: 0; padding: calc(var(--nav) + var(--s-8)) 0 var(--s-8); }
+.hero > .wrap { height: auto; }
+.hero--collage .hero__grid { align-items: center; }
+.hero--collage .hero__art { height: auto; aspect-ratio: 10 / 7; }
+/* the real editor fills the frame: larger than it, cut by its right and bottom edges */
+.hero--collage .hero__art > .ly-piece--main.shot { left: var(--s-7); top: var(--s-7); width: 125%; max-width: none; height: auto; border-radius: var(--r-md); box-shadow: 0 0 0 1px rgb(6 31 62 / .08), 0 30px 70px -30px rgb(6 31 62 / .45); }
+/* the real app window shown whole at its own ratio */
+.shot-frame { aspect-ratio: 1600 / 682; }
+/* the docs reader: a fixed window, scrolling inside */
+@media (min-width: 640px) { .reader.ui { height: 640px; } }
+/* the close: no screen-tall gap between the button row and the footer links */
+footer.closing > .wrap { gap: var(--s-8); }
+@media (max-width: 639px) {
+  main > :is(section, .section):not(.hero), footer.closing { padding: var(--s-8) 0; }
+  main > .hero { padding: calc(var(--nav) + var(--s-6)) 0 var(--s-7); }
+  .hero--collage .hero__art > .ly-piece--main.shot { left: var(--s-4); top: var(--s-4); }
+}
+
+/* ===== bolder type overall, larger nav ===== */
+:root { --display-weight: 500; }
+body { font-weight: 450; }
+.nav .nav__link { font-size: 17px; font-weight: 600; color: var(--ink); }
+.nav .nav__links { gap: var(--s-6); }
+.nav .btn { font-weight: 600; }
+.btn { font-weight: 600; }
+h3, .t-card, .faq__item > h3 { font-weight: 600; }
+
+/* the hero's results card: one row per check */
+.d-note__line { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 14px; color: #3d4247; border-top: 1px solid rgb(0 0 0 / .06); }
+.d-note__line:first-of-type { border-top: 0; }
+.d-note__line i { width: 18px; height: 18px; border-radius: 50%; flex: none; display: grid; place-items: center; background: #dcf7ee; color: #0a6b4f; font-style: normal; font-size: 13px; font-weight: 700; }
+.d-note__line b { font-weight: 600; color: #16181a; }

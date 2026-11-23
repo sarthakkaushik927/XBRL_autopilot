@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "base": "https://xbrl-autopilot-bucket.s3.ap-south-1.amazonaws.com/releases/latest/",
+  "builds": {
+    "windows": { "label": "Download for Windows", "file": "XBRL+Autopilot-Setup-0.1.0.exe", "size": "about 165 MB" },
+    "linux": { "label": "Download for Linux", "file": "XBRL+Autopilot-0.1.0.AppImage", "size": "about 189 MB" },
+    "debian": { "label": "Get the .deb package", "file": "XBRL+Autopilot-0.1.0.deb", "size": "about 146 MB" }
+  },
+  "fallback": { "label": "Choose a download", "href": "#download" }
+}

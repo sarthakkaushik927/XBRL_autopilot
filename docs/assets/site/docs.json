@@ -1,0 +1,17 @@
+[
+  { "file": "00-product-vision.md", "title": "Product vision and scope", "group": "General" },
+  { "file": "02-architecture.md", "title": "System architecture", "group": "Architecture" },
+  { "file": "03-project-file-axbrl.md", "title": "The .axbrl project file", "group": "Engine" },
+  { "file": "04-xbrl-engine.md", "title": "XBRL engine", "group": "Engine" },
+  { "file": "05-validation.md", "title": "Validation and business rules", "group": "Engine" },
+  { "file": "06-ai-auto-tagging.md", "title": "AI auto-tagging", "group": "AI" },
+  { "file": "07-ai-fix-agent.md", "title": "Fix with AI", "group": "AI" },
+  { "file": "08-ui-ux.md", "title": "Editor and shortcuts", "group": "App" },
+  { "file": "09-ipc-and-sidecar-api.md", "title": "IPC and API contracts", "group": "Architecture" },
+  { "file": "10-packaging-release.md", "title": "Packaging and releases", "group": "Release" },
+  { "file": "11-security-privacy.md", "title": "Security and privacy", "group": "Security" },
+  { "file": "12-reference-data.md", "title": "MCA reference data", "group": "Data" },
+  { "file": "17-team-direction.md", "title": "Team decisions", "group": "Roadmap" },
+  { "file": "STATUS.md", "title": "Status and changelog", "group": "Roadmap" },
+  { "file": "README.md", "title": "Docs index", "group": "General" }
+]

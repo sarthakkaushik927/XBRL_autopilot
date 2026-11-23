@@ -62,3 +62,5 @@ linked.sh
 
 .ruff_cache/
 .pytest_cache/
+# taste-skill working files (gate state, checker shots, Chrome profiles) from building docs/index.html
+.taste-skill/
