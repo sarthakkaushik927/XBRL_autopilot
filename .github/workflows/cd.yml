@@ -40,7 +40,8 @@ jobs:
         run: |
           sudo docker run -d \
             --name "${DOCKER_IMAGE_NAME}-container" \
-            -p {XAP_PORT}:{XAP_PORT} \
+            -p "${XAP_PORT}:${XAP_PORT}" \
+            --env "XAP_PORT=${XAP_PORT}" \
             --env "GROQ_API_KEY=${GROQ_API_KEY}" \
             --env "GROQ_MODEL=${GROQ_MODEL}" \
             --env "EMBEDDING_MODEL=${EMBEDDING_MODEL}" \

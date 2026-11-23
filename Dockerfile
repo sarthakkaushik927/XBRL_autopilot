@@ -4,6 +4,7 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast, reliable dependency resolution and installation
@@ -27,5 +28,5 @@ RUN mkdir -p /app/output /app/static
 EXPOSE 7860
 
 
-# Start FastAPI application with Uvicorn
-CMD ["make start-backend"]
+# Start FastAPI application with Uvicorn via make
+CMD ["make", "start-backend"]
