@@ -24,6 +24,13 @@ describe('filingRuleErrors', () => {
     expect(types([[l('ind-as:ProfitLoss', 100)], [l('ind-as:ProfitLoss', 100)]])).toEqual([])
   })
 
+  it('amounts within 1 INR are the same fact (a statement in rupees, its note total in paise)', () => {
+    expect(types([[l('ind-as:OtherCurrentLiabilities', 100452286)], [l('ind-as:OtherCurrentLiabilities', 100452285.75)]])).toEqual([])
+    expect(types([[l('ind-as:OtherCurrentLiabilities', 100452286)], [l('ind-as:OtherCurrentLiabilities', 100452284.5)]])).toEqual([
+      'DUPLICATE_FACT_CONFLICT ind-as:OtherCurrentLiabilities',
+    ])
+  })
+
   it('lines of one statement with the same concept are added first (merge_lines), not a duplicate', () => {
     expect(types([[l('ind-as:Inventories', 30), l('ind-as:Inventories', 20)], [l('ind-as:Inventories', 50)]])).toEqual([])
   })

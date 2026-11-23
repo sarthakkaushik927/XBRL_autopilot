@@ -97,7 +97,9 @@ class IndASValidator:
                     if v is None:
                         continue
                     key = (concept, when)
-                    if key in seen_at and seen_at[key] != v:
+                    # within MCA's 1 INR rounding tolerance it is the same amount: a statement line in rupees and its
+                    # note total in paise (100,452,286 vs 100,452,285.75, HPL 2026-11-23: 15 of 23 conflicts)
+                    if key in seen_at and abs(Decimal(str(seen_at[key])) - Decimal(str(v))) > 1:
                         errors.append({
                             "level": "ERROR",
                             "type": "DUPLICATE_FACT_CONFLICT",

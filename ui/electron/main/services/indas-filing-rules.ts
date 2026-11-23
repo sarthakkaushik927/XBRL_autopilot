@@ -4,7 +4,8 @@
  * whole filing, so a change that fixes one total but breaks another statement is not shown as helpful.
  *
  * Mirrors the validator's statement gates, in exact decimals:
- * - DUPLICATE_FACT_CONFLICT: one concept, one date, two amounts (also an opening balance ≠ last year's closing);
+ * - DUPLICATE_FACT_CONFLICT: one concept, one date, two amounts more than 1 INR apart (also an opening balance ≠
+ *   last year's closing);
  * - CALCULATION_MISMATCH: CY totals vs their children over the facts of every statement together;
  * - BS_OUT_OF_BALANCE: assets vs equity and liabilities (CY);
  * - NEGATIVE_VALUE_NOT_PERMITTED: MCA's "should be ≥ 0" concepts (CY).
@@ -79,7 +80,8 @@ export function filingRuleErrors(kb: IndasKnowledgeBase, statements: readonly (r
         if (v === null) continue
         const key = `${m.concept}|${when}`
         const prev = seen.get(key)
-        if (prev !== undefined && Dec.cmp(prev, v) !== 0) {
+        // within the 1 INR tolerance it is the same amount (a statement in rupees, its note total in paise)
+        if (prev !== undefined && off(Dec.sub(prev, v))) {
           errors.push({ type: 'DUPLICATE_FACT_CONFLICT', concept: m.concept, message: `${conceptLabel(kb, m.concept)} is reported twice for the same date with different amounts (${show(prev)} and ${show(v)})` })
         }
         if (prev === undefined) seen.set(key, v)
