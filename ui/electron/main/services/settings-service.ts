@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   groqModel: 'openai/gpt-oss-120b',
   mcaToolPath: '',
   autosaveSeconds: 300,
+  autosave: true,
   aiConsent: false,
   // Faster Auto-tag (docs/18): off until it has been tried on the hosted backend with AI on
   parallelAutoTag: false,
@@ -105,6 +106,7 @@ function sanitize(p: Partial<AppSettings>): Partial<AppSettings> {
   if (typeof p.autosaveSeconds === 'number' && Number.isFinite(p.autosaveSeconds)) {
     out.autosaveSeconds = Math.min(AUTOSAVE_MAX_SECONDS, Math.max(AUTOSAVE_MIN_SECONDS, Math.round(p.autosaveSeconds)))
   }
+  if (typeof p.autosave === 'boolean') out.autosave = p.autosave
   if (typeof p.aiConsent === 'boolean') out.aiConsent = p.aiConsent
   if (typeof p.parallelAutoTag === 'boolean') out.parallelAutoTag = p.parallelAutoTag
   return out

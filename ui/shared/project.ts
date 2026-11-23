@@ -140,6 +140,8 @@ export interface AppSettings {
   groqModel: string
   mcaToolPath: string
   autosaveSeconds: number
+  /** auto-save on (the default) or off: off, an Ind AS project is written only by Save (a C&I filing keeps its crash-recovery copies) */
+  autosave: boolean
   aiConsent: boolean
   /** Faster Auto-tag (docs/18): several /recommend batches at once; off = one at a time. Off by default. */
   parallelAutoTag: boolean

@@ -48,11 +48,15 @@ interface UiState extends Layout {
   showActivity(a: Activity): void
   toggleSidebar(): void
   toggleBottom(): void
+  /** Focus: hides both panels; again brings back what was open before */
+  toggleFocus(): void
   setRightTab(t: RightTab): void
   setBottomTab(t: BottomTab): void
 }
 
 export const useUi = create<UiState>((set, get) => {
+  /** the panels open before Focus hid them */
+  let beforeFocus: Layout | null = null
   /** a layout change, remembered */
   const layout = (patch: Partial<Layout>) => {
     set(patch)
@@ -75,6 +79,15 @@ export const useUi = create<UiState>((set, get) => {
     },
     toggleSidebar: () => layout({ sidebarOpen: !get().sidebarOpen }),
     toggleBottom: () => layout({ bottomOpen: !get().bottomOpen }),
+    toggleFocus: () => {
+      const { sidebarOpen, bottomOpen } = get()
+      if (sidebarOpen || bottomOpen) {
+        beforeFocus = { sidebarOpen, bottomOpen }
+        return layout({ sidebarOpen: false, bottomOpen: false })
+      }
+      layout(beforeFocus ?? DEFAULT_LAYOUT)
+      beforeFocus = null
+    },
     setRightTab: (rightTab) => set({ rightTab }),
     // showing a tab (Problems after Generate, a status-bar click) opens the panel
     setBottomTab: (bottomTab) => {

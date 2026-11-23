@@ -47,7 +47,8 @@ class RecordingSuggester implements MappingSuggester {
   }
 }
 
-describe.skipIf(!existsSync(AUTHORITY))('auto-tagging on the sample workbook', () => {
+// data/sample_financials.xlsx left the repo in ee0fafa: these run again when it is put back
+describe.skipIf(!existsSync(AUTHORITY) || !existsSync(SAMPLE))('auto-tagging on the sample workbook', () => {
   let db: AppDatabase
   let projects: ProjectService
   let mapping: MappingService

@@ -62,6 +62,16 @@ describe('SettingsService', () => {
     expect(new SettingsService(db, new MemorySecretStore()).get().autosaveSeconds).toBe(3600)
   })
 
+  it('auto-save is on by default and can be switched off; junk is ignored', async () => {
+    const db = new AppDatabase(':memory:')
+    const s = new SettingsService(db, new MemorySecretStore())
+    expect(s.get().autosave).toBe(true)
+    await s.update({ autosave: false })
+    expect(new SettingsService(db, new MemorySecretStore()).get().autosave).toBe(false)
+    await s.update({ autosave: 'yes' as unknown as boolean })
+    expect(s.get().autosave).toBe(false)
+  })
+
   it('Faster Auto-tag is off by default and for settings saved before it existed; it is stored', async () => {
     const db = new AppDatabase(':memory:')
     expect(new SettingsService(db, new MemorySecretStore()).get().parallelAutoTag).toBe(false)

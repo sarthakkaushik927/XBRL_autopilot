@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { dialog, type BrowserWindow } from 'electron'
 import type { AutoTagColumnOptions, MappingStatus, Scope, SetSheetColumnsInput } from '@shared/editor'
-import { IPC, type AppInfo, type HttpMethod } from '@shared/ipc'
+import { IPC, type AppInfo, type HttpMethod, type MenuName } from '@shared/ipc'
 import type { AppSettings, NewFilingInput } from '@shared/project'
 import { PREVIEW_SPACINGS, type PreviewFormat } from '@xap/engine/basics'
 import type { ProjectController } from '../project/project-controller'
@@ -42,6 +42,9 @@ import { requireAlsoInput, requireBlockInput, requireCell, requireIndex, require
 
 export interface IpcDeps {
   appInfo: () => AppInfo
+  /** the custom title bar's menu names, and opening one of them (title-bar.ts) */
+  menuLabels: () => MenuName[]
+  popupMenu: (index: number, x: number, y: number) => void
   sidecar: BackendClient
   projects: ProjectService
   projectController: ProjectController
@@ -92,6 +95,14 @@ export function registerIpc(d: IpcDeps): void {
 
 function registerAppIpc(d: IpcDeps): void {
   handleQuery(IPC.appInfo, () => d.appInfo())
+  handleQuery(IPC.menuLabels, () => d.menuLabels())
+  handleQuery(IPC.menuPopup, (_e, index: unknown, x: unknown, y: unknown) => d.popupMenu(requireIndex(index), coordinate(x), coordinate(y)))
+}
+
+/** a renderer-supplied position in the window (CSS px) */
+function coordinate(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100_000) throw new Error('Invalid position')
+  return v
 }
 
 function registerSidecarIpc({ sidecar }: IpcDeps): void {

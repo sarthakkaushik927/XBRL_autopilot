@@ -41,7 +41,12 @@ export function SettingsPanel() {
       </Section>
 
       <Section title="Saving">
-        <Field label="Auto-save every (minutes)" hint="An Ind AS project is saved to its file; a C&I filing's unsaved work is copied for crash recovery. 1 to 60 minutes.">
+        <Checkbox
+          checked={state.autosave}
+          onChange={(autosave) => void update({ autosave })}
+          label="Auto-save (also the cloud switch at the top right of the editor)"
+        />
+        <Field label="Auto-save every (minutes)" hint="An Ind AS project is saved to its file (when auto-save is on); a C&I filing's unsaved work is always copied for crash recovery. 1 to 60 minutes.">
           <Input
             key={state.autosaveSeconds}
             type="number"

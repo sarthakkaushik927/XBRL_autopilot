@@ -111,6 +111,8 @@ interface IndasState {
   savedPath: string | null
   /** when the project file was last written (ISO), and whether that was the auto-save */
   savedAt: { at: string; auto: boolean } | null
+  /** a save is being written right now (the toolbar's auto-save icon animates) */
+  saving: 'auto' | 'manual' | null
   dirty: boolean
 
   /** New project: validated and saved in main; returns the problems to show in the dialog ([] = created) */
@@ -209,6 +211,7 @@ const closed = () => ({
   projectId: '',
   savedPath: null as string | null,
   savedAt: null as { at: string; auto: boolean } | null,
+  saving: null as 'auto' | 'manual' | null,
   dirty: false,
 })
 
@@ -349,12 +352,18 @@ export const useIndas = create<IndasState>((set, get) => {
     save: async (opts) => {
       const s = get()
       if (!s.open || !s.details) return false
+      set({ saving: opts?.auto ? 'auto' : 'manual' })
       const saved = await unwrap(api().save({ projectId: s.projectId, path: s.savedPath, draft: toDraft({ ...s, details: s.details }), details: s.details }), { quiet: opts?.auto })
-      if (!saved) return false
+      const same = get().projectId === s.projectId
+      if (!saved) {
+        if (same) set({ saving: null })
+        return false
+      }
       // edits made while the file was being written stay unsaved
       const now = get()
       const unchanged = SAVED_PARTS.every((k) => now[k] === s[k])
-      set({ savedPath: saved.path, savedAt: { at: saved.savedAt, auto: !!opts?.auto }, dirty: unchanged ? false : now.dirty })
+      // `saving` ends in the same update as the new save time: the toolbar goes straight from saving to saved
+      if (same) set({ savedPath: saved.path, savedAt: { at: saved.savedAt, auto: !!opts?.auto }, dirty: unchanged ? false : now.dirty, saving: null })
       if (!opts?.auto) toast.success(`Saved ${saved.path}`)
       return true
     },
