@@ -158,6 +158,7 @@ const indas = new IndasController(
     sidecar,
     { write: (_p, name, text) => new FileOutputWriter(projectsFolder.dir()).write(null, name, text) },
     () => settings.get().aiConsent,
+    () => settings.get().parallelAutoTag,
   ),
   getWindow,
   () => projectsFolder.dir(),

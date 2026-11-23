@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { GenerateXmlInput } from '@shared/indas'
+import { RECOMMEND_CANCELLED, type GenerateXmlInput } from '@shared/indas'
 import type { HttpMethod, SidecarResponse } from '@shared/ipc'
-import { IndasPipelineService, RECOMMEND_BATCH, toPayload, xmlFileName } from '../electron/main/services/indas-pipeline-service'
+import { IndasPipelineService, RECOMMEND_BATCH, RECOMMEND_PARALLEL, toPayload, xmlFileName } from '../electron/main/services/indas-pipeline-service'
 import type { SidecarClient, SidecarFileClient } from '../electron/main/services/ports'
 
 type Call = { method: string; path: string; body?: unknown }
@@ -97,6 +97,75 @@ describe('IndasPipelineService', () => {
     expect(out[0]).toEqual([{ qname: 'ind-as:k0', label: 'Label k0', score: 0.9, type: 'monetaryItemType', periodType: null, balance: null, pickedBy: null }])
     expect(out[1]).toEqual([]) // nothing matched; a match without a qname is dropped
     expect(progress).toEqual([RECOMMEND_BATCH, keys.length])
+  })
+
+  /** A sidecar whose later /recommend batches answer sooner, logging when each batch starts and ends. */
+  function slowRecommend(keys: string[], answer: (batch: string[]) => SidecarResponse<unknown> = (b) => ok(b.map((k) => [{ metadata: { qname: `ind-as:${k}` } }]))) {
+    const log: string[] = []
+    let running = 0
+    let mostAtOnce = 0
+    const { sidecar } = fakeSidecar()
+    sidecar.request = async <T,>(_m: HttpMethod, _p: string, body?: unknown) => {
+      const batch = (body as { keys: string[] }).keys
+      const n = keys.indexOf(batch[0]) / RECOMMEND_BATCH
+      log.push(`start ${n}`)
+      mostAtOnce = Math.max(mostAtOnce, ++running)
+      await new Promise((r) => setTimeout(r, (8 - n) * 40))
+      running--
+      log.push(`end ${n}`)
+      return answer(batch) as SidecarResponse<T>
+    }
+    return { sidecar, log, mostAtOnce: () => mostAtOnce }
+  }
+
+  describe.each([
+    { mode: 'one batch at a time (the default)', parallel: false, atOnce: 1 },
+    { mode: 'Faster Auto-tag on', parallel: true, atOnce: RECOMMEND_PARALLEL },
+  ])('recommend, $mode', ({ parallel, atOnce }) => {
+    const service = (sidecar: SidecarClient & SidecarFileClient) => new IndasPipelineService(sidecar, writer(), () => false, () => parallel)
+    const keysOf = (n: number) => Array.from({ length: n }, (_, i) => `k${i}`)
+
+    it('returns the suggestions in key order and reports progress in lines done', async () => {
+      const keys = keysOf(RECOMMEND_BATCH * 5 + 3) // 6 batches
+      const { sidecar, log, mostAtOnce } = slowRecommend(keys)
+      const progress: [number, number][] = []
+      const out = await service(sidecar).recommend({ keys, scope: 'CANONICAL_NOTES' }, 3, (d, t) => progress.push([d, t]))
+      expect(out.map((s) => s[0]?.qname)).toEqual(keys.map((k) => `ind-as:${k}`))
+      expect(mostAtOnce()).toBe(atOnce)
+      // the first batch alone either way (in parallel it fills the backend's scope cache for the others)
+      expect(log.slice(0, 2)).toEqual(['start 0', 'end 0'])
+      if (parallel) expect(log.indexOf('end 3')).toBeLessThan(log.indexOf('end 1')) // a later batch did answer first
+      else expect(log).toEqual([0, 1, 2, 3, 4, 5].flatMap((n) => [`start ${n}`, `end ${n}`])) // exactly as before
+      const done = progress.map(([d]) => d)
+      expect(done).toHaveLength(6)
+      expect(done.every((d, i) => i === 0 || d > done[i - 1])).toBe(true)
+      expect(done.at(-1)).toBe(keys.length)
+      expect(progress.every(([, t]) => t === keys.length)).toBe(true)
+    })
+
+    it('Cancel starts no new batch: the running ones finish, then it reports RecommendCancelled', async () => {
+      const keys = keysOf(RECOMMEND_BATCH * 6)
+      const { sidecar, log } = slowRecommend(keys)
+      const cancel = new AbortController()
+      const run = service(sidecar).recommend({ keys, scope: 'CANONICAL_BS' }, 3, (done) => {
+        if (done > RECOMMEND_BATCH) cancel.abort() // a second batch is back
+      }, cancel.signal)
+      await expect(run).rejects.toMatchObject({ name: 'RecommendCancelled', message: RECOMMEND_CANCELLED })
+      // the first batch, then the one (or the parallel ones) running when Cancel came
+      const started = Array.from({ length: 1 + atOnce }, (_, n) => `start ${n}`)
+      expect(log.filter((l) => l.startsWith('start'))).toEqual(started)
+      expect(log.filter((l) => l.startsWith('end'))).toHaveLength(started.length)
+    })
+
+    it('a failed batch fails Auto-tag with the backend message and starts no new batch', async () => {
+      const keys = keysOf(RECOMMEND_BATCH * 6)
+      // the batch that answers first after the first one fails (the last one started: later batches answer sooner)
+      const { sidecar, log } = slowRecommend(keys, (b) =>
+        b[0] === `k${RECOMMEND_BATCH * atOnce}` ? { status: 500, data: { success: false, message: 'Recommendation failed: boom' } } : ok(b.map(() => [])),
+      )
+      await expect(service(sidecar).recommend({ keys, scope: 'CANONICAL_BS' })).rejects.toThrow('Recommendation failed: boom')
+      expect(log.filter((l) => l.startsWith('start'))).toHaveLength(1 + atOnce)
+    })
   })
 
   it('writes the generated XML to the projects folder', async () => {

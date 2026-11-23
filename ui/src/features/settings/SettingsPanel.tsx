@@ -20,6 +20,17 @@ export function SettingsPanel() {
         </p>
       </Section>
 
+      <Section title="Auto-tag">
+        <Checkbox
+          checked={state.parallelAutoTag}
+          onChange={(parallelAutoTag) => void update({ parallelAutoTag })}
+          label="Faster Auto-tag (3–4 batches at once)"
+        />
+        <p className="text-[11px] leading-relaxed text-muted">
+          With AI on, a few AI picks can differ (more Groq rate limits → model switch). Cancel stops after the running batches.
+        </p>
+      </Section>
+
       <Section title="MCA Validation Tool">
         <Field label="Tool location" hint="MCA_XBRL_Valiation_Tool_V5.1.exe — download it from mca.gov.in">
           <Input value={state.mcaToolPath} readOnly placeholder="Not set" className="font-mono text-[11px]" />

@@ -27,11 +27,35 @@ The three causes, in plain words:
 
 Slow work also shows a progress card with Cancel, so a long Auto-tag doesn't feel like a hang.
 
+## Faster Auto-tag: parallel batches (2026-11-22, `perf/autotag-parallel`)
+
+Auto-tag sends a sheet's lines to the backend in batches of 20. **Settings → Auto-tag → "Faster Auto-tag (3–4 batches at once)"** sends up to 4 at a time (`RECOMMEND_PARALLEL`). **Off by default** until it has been tried on the hosted backend with AI on.
+- **Off:** one batch at a time, exactly as before.
+- **On:** the sheet's first batch goes alone, then 4 at a time.
+  - **Why the first goes alone:** on its first call for a sheet, the backend embeds the sheet's concepts and keeps them in memory. If 4 first calls arrived together, each would embed them (1,843 concepts for the notes).
+  - **Unchanged:** suggestions come back in line order, the progress bar counts lines done, and Cancel starts no new batch. The batches already running finish first, then Auto-tag stops as before.
+  - **Code:** `IndasPipelineService.recommend` over `runLimited` (`ui/electron/main/util/run-limited.ts`, a small concurrency limit); the setting is `AppSettings.parallelAutoTag`.
+  - **Groq:** with AI on, more batches at once means more rate limits (429). The backend then switches to the next model, so a few AI picks can differ.
+
+Measured on DGPL (`ui/e2e/indas-perf.mjs`, dev build, laptop backend, no AI, 256 lines; `XAP_PERF_PARALLEL=1` switches it on):
+
+| Auto-tag | Off | On |
+|---|---|---|
+| Backend already warm (the hosted server after its first Auto-tag) | 34 s | **22 s** |
+| Backend just started (cold) | 161 s | 162 s |
+
+- **Same result:** the tags were the same in both modes, 256 of 256 lines with the same suggestion lists.
+- **The gain is 1.5×, not 3–4×:** most sheets have only 1–3 batches, and the first goes alone.
+- **On a cold backend almost all the time is the first call per sheet:** 26 s for the balance sheet (loading the models) and **95 s for the notes** (embedding 1,843 concepts on one CPU core). Parallel batches can't help there. Saving those embeddings once (next steps, point 1) is the bigger gain.
+
 ## What to optimise next
 
 Ordered by expected gain. Points 1–3 come from numbers measured on 2026-11-22; 4–6 are estimates to measure first.
 
 1. **Faster Auto-tag (the biggest remaining wait: 31–209 s without AI, 173 s with it).**
+   - **Parallel batches:** done, behind a setting (section above): 34 s → 22 s on a warm backend. Next: switch it on by default once it has run on the hosted backend with AI on.
+   - **Cache the concepts' embeddings on disk (now the biggest item):** `rank_scope` caches them only in memory (`_scope_matrix`, `lru_cache`), so after each backend start the first Auto-tag pays 95 s for the notes and 26 s for the balance sheet. Compute them once (at `make rebuild`) and save them. Backend: ask Vashu first.
+   - **Lighter models:** convert the embedding model and the reranker to ONNX or a quantized form. Usually 2–4× faster at nearly the same quality.
    - **Parallel batches:** lines go in batches of 20, one batch at a time. Sending 3–4 batches at once should divide the time by about 3–4; the limit is Groq's rate limit, and we already switch models on a 429. The change is in `IndasPipelineService.recommend`.
    - **Lighter models (Vashu's, 2026-11-22):** convert the embedding model and the reranker to ONNX or a quantized form. Usually 2–4× faster at nearly the same quality. **It changes the tag suggestions** (another or compressed model ranks differently), so it is left to Vashu: measure the quality first on the DGPL / HPL answer keys.
    - **Cache the concepts' embeddings:** the taxonomy never changes, so compute them once and save them. Check first whether `rank_scope` already caches.
