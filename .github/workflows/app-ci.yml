@@ -1,0 +1,41 @@
+# The desktop app's checks (Electron + React UI, engine types): typecheck and the UI unit tests, on every push and PR.
+# Separate from ci.yml (the backend's tests, Docker image and deploy). Proposed 2026-11-23 (docs/17 log, docs/18).
+# Not run yet: the engine's own tests need knowledge_base/*_engine_authority.json, removed in b97ccc1 (open item, docs/17).
+name: App CI
+
+on:
+  push:
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: app-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # the unit tests never start Electron: skip its ~100 MB binary
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # the version comes from package.json "packageManager"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck (engine + ui)
+        run: pnpm typecheck
+
+      # vitest directly: the ui "test" script first assembles the engine authority, whose files are gone (see top)
+      - name: UI unit tests
+        run: pnpm --filter ui exec vitest run

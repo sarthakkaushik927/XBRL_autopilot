@@ -54,6 +54,10 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-23, App CI proposed (branch `ci/app-tests`, for Vashu):** `.github/workflows/app-ci.yml` runs `pnpm typecheck` and the UI unit tests on every push and PR. Until now no app test ran in CI: `ci.yml` covers the backend.
+  - **Kept apart from `ci.yml`:** the backend's tests, Docker image and deploy are untouched.
+  - **Not run:** the engine's own tests. They need `knowledge_base/*_engine_authority.json`, removed in `b97ccc1`; there 8 vitest files fail to load and 52 of 68 legacy tests fail (open item, docs/17).
+  - **`mapping-helpers.test.ts`:** the 3 tests that read the removed `data/sample_financials.xlsx` now skip while it is missing, like the other KB-based tests. UI: 210 pass, 145 skipped.
 - **2026-11-23, knowledge base kept on disk, app side (branch `perf/kb-disk-cache`, [18](18-performance.md#what-to-optimise-next)):** `CachedKnowledgeBase` asks `/authority` with `If-None-Match` and uses its copy on a `304`.
   - **Until the server sends an `ETag` (Vashu's):** nothing changes.
   - **Live, behind an ETag test proxy:** session 1 `200` (saved), session 2 `304` (copy used). Same results with and without the copy: 55 statements, identical Difference checks.
@@ -73,6 +77,7 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
   - **Same tags** in both modes (256 of 256).
   - **Tests:** `run-limited.test.ts` (6), `indas-pipeline-service.test.ts` (both modes: order, progress, Cancel, failure), `settings-service.test.ts`. `pnpm typecheck` green; `indas-perf.mjs` passes in both modes. The 3 `mapping-helpers` failures (removed `sample_financials.xlsx`) are pre-existing.
 - **2026-11-22, editor toolbar (branch `feat/editor-toolbar`, [08](08-ui-ux.md)):** a VS Code-style custom title bar (menu names drawn by the app, each opening the real submenu; OS window buttons via `titleBarOverlay`; main `title-bar.ts` + `menu:labels` / `menu:popup` IPC). The side / bottom panel toggles moved there from the status bar, joined by ⤢ Focus (Ctrl+Alt+F), 💾 Save (dirty dot) and ☁ Auto: an auto-save on/off switch (`settings.autosave`, default on) whose cloud pulses while an auto-save is written and ticks when it lands. `runCommand` moved to `app/commands.ts` so the toolbar and the menu share it. Alt+letter opens a menu, a lone Alt tap enters the menu bar (`menu-keys.ts`). Tests: ui-layout (Focus), settings-service (autosave), title-bar, menu-keys; checked in the dev app over CDP (scratch script). `data/sample_financials.xlsx` left the repo in `ee0fafa`: the tests that read it (auto-tag-service, editor-services, 3 in mapping-helpers) now skip when it is missing instead of failing, like the other fixture-bound tests.
+- **2026-11-22, gzip on the backend ([18](18-performance.md) step 5, branch `perf/backend-gzip`):** `GZipMiddleware` (≥ 1 KB) in `api/app.py`. The knowledge base download goes from 4.3 MB to 356 KB. Server-sent events (`text/event-stream`) stay uncompressed (Starlette 1.10). `tests/test_gzip.py`: 2 pass.
 - **2026-11-22, issue #20 points 5 and 6 (branch `fix/issue-20`, [19](19-indas-fix-with-ai.md#calculated-totals-issue-20-point-5), docs/17 log):**
   - **5. Calculated totals:** a new Electron-free service, `ui/electron/main/services/indas-derived-totals.ts`.
     - `deriveTotals(kb, lines, elrs)` sums a total no line reports from its tagged parts, bottom-up, by the KB calculation of the **statement's own ELRs** (from its Form trees, never the union):

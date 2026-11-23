@@ -8,7 +8,7 @@ import { cellAmount, formatPlaces, rangeAmount } from '../electron/main/mapping/
 import { inferScope } from '../electron/main/mapping/scope-inference'
 
 const SAMPLE = resolve(__dirname, '../../data/sample_financials.xlsx')
-/** data/sample_financials.xlsx left the repo in ee0fafa: the tests that read it run again when it is put back */
+// removed from data/ in the new architecture: the tests that read it skip until it is back (like the KB-based tests)
 const hasSample = existsSync(SAMPLE)
 
 describe('A1 helpers', () => {
