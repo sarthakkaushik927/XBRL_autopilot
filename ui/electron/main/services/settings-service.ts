@@ -17,6 +17,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autosaveSeconds: 300,
   autosave: true,
   aiConsent: false,
+  // Faster Auto-tag (docs/18): off until it has been tried on the hosted backend with AI on
+  parallelAutoTag: false,
 }
 
 const KEY = 'app.settings.v1'
@@ -106,5 +108,6 @@ function sanitize(p: Partial<AppSettings>): Partial<AppSettings> {
   }
   if (typeof p.autosave === 'boolean') out.autosave = p.autosave
   if (typeof p.aiConsent === 'boolean') out.aiConsent = p.aiConsent
+  if (typeof p.parallelAutoTag === 'boolean') out.parallelAutoTag = p.parallelAutoTag
   return out
 }
