@@ -17,6 +17,7 @@ import re
 import time
 from typing import Any, Literal
 
+import groq
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
@@ -76,7 +77,13 @@ PROMPT = ChatPromptTemplate.from_messages([
         "that total. Never tag a part with its total's concept just to make a sum work (share capital stays share "
         "capital): when the line that reports a total is missing or untagged, say so instead. In the explanation and "
         "the reasons, name lines by their line item (never by id or qname alone) and don't mention field names; "
-        "write for an accountant."),
+        "write for an accountant.\n\n"
+        # JSON mode, not a tool call: gpt-oss on Groq often answers without calling the tool and Groq rejects it with
+        # a 400 "tool_use_failed" (2026-11-23, HPL Fix all: every part failed, /indas/fix answered 500)
+        'Answer with JSON only, in this shape: {{"explanation": "<two or three sentences>", "changes": '
+        '[{{"problem_id": "<P1…>", "line_id": "<line id>", "concept": "<allowed qname>" or null, '
+        '"period_role": "start" or "end" or null, "reason": "<one sentence>"}}]}}. '
+        'Use "changes": [] when no tag change can fix it.'),
     ),
     ("human", "{body}"),
 ])
@@ -279,7 +286,7 @@ async def propose_fix(kb: dict[str, Any], problems: list[dict], lines: list[dict
     Fix all is asked in parts that fit the token limit (`plan`), one after the other. A part that fails is named in
     the explanation and the others still count; raises when every part failed (the app says so; nothing changes).
     """
-    chain = PROMPT | get_llm().with_structured_output(FixAnswer)
+    chain = PROMPT | get_llm().with_structured_output(FixAnswer, method="json_mode")
     chunks = plan(kb, merge_years(problems), lines)
     deadline = time.monotonic() + FIX_DEADLINE_S
     explanations: list[str] = []
@@ -292,7 +299,9 @@ async def propose_fix(kb: dict[str, Any], problems: list[dict], lines: list[dict
         allowed = allowed_concepts(kb, aliased, part_lines)
         try:
             answer = await _ask(chain, render(kb, aliased, part_lines, allowed), deadline)
-        except (RuntimeError, TimeoutError, ConnectionError, ValueError, OSError) as e:  # no key, network, every model of the chain rate limited
+        # no key, network, every model of the chain rate limited, a Groq error (400 bad answer…), unparsable JSON:
+        # this part fails, the others still count
+        except (groq.APIError, RuntimeError, TimeoutError, ConnectionError, ValueError, OSError) as e:
             logger.exception("indas_fix.part_failed", problems=len(part_problems), error=str(e)[:300])
             failed.append((part_problems, e))
             continue
@@ -328,7 +337,7 @@ def _rate_limited(error: Exception) -> bool:
 
 def _malformed(error: Exception) -> bool:
     text = str(error)
-    return "tool_use_failed" in text or "parse tool call" in text
+    return "tool_use_failed" in text or "parse tool call" in text or "json_validate_failed" in text
 
 
 def _retry_after(error: Exception) -> float:
