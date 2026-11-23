@@ -97,12 +97,13 @@ export function emptyContent(manifest: AxbrlManifest, filing: unknown): AxbrlCon
 }
 
 const json = (v: unknown) => JSON.stringify(v, null, 1)
-// Fixed timestamp on every entry so identical content gives an identical archive.
+// Fixed timestamp on every entry so identical content gives an identical archive. No implicit
+// folder entries: JSZip stamps those with the current time, which made packs straddling a tick differ.
 const ZIP_DATE = new Date('2000-01-01T00:00:00Z')
 
 export async function packAxbrl(c: AxbrlContent): Promise<Buffer> {
   const zip = new JSZip()
-  const add = (name: string, data: string | Uint8Array) => zip.file(name, data, { date: ZIP_DATE })
+  const add = (name: string, data: string | Uint8Array) => zip.file(name, data, { date: ZIP_DATE, createFolders: false })
   add('manifest.json', json(c.manifest)) // first entry: readers can sniff it cheaply
   add('filing.json', JSON.stringify(c.filing))
   add('mapping.json', json(c.mapping))

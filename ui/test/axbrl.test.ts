@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import JSZip from 'jszip'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   AXBRL_FORMAT_VERSION,
   AxbrlFormatError,
@@ -69,6 +69,18 @@ describe('.axbrl pack/unpack', () => {
 
   it('is deterministic for identical content', async () => {
     expect((await packAxbrl(fullContent())).equals(await packAxbrl(fullContent()))).toBe(true)
+  })
+
+  it('is deterministic across a clock tick (no wall-clock folder timestamps)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+      const a = await packAxbrl(fullContent())
+      vi.setSystemTime(new Date('2026-01-01T00:00:10Z'))
+      expect(a.equals(await packAxbrl(fullContent()))).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('preserves entries written by a future version', async () => {
