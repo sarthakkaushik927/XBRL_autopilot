@@ -98,6 +98,18 @@ jobs:
             --env "PYDANTIC_LOGFIRE_API_KEY=${PYDANTIC_LOGFIRE_API_KEY}" \
             "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
 
+      # A deploy is done only when the backend answers. Without this a container that crashed on start left the
+      # deploy green and the backend down (06aadd0; the step was lost in a later rewrite of this file).
+      - name: Wait for the backend to answer /health
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS -m 5 -o /dev/null "http://127.0.0.1:${XAP_PORT}/health" && { echo "backend up after ~$((i * 3)) s"; exit 0; }
+            sleep 3
+          done
+          echo "backend did not answer /health within 3 minutes; its last log lines:"
+          sudo docker logs --tail 80 "${DOCKER_IMAGE_NAME}-container" || true
+          exit 1
+
   # Each installer is built on its own OS. electron-builder's NSIS target runs the installer under Wine to make the
   # uninstaller, and the Ubuntu runner has no Wine ("spawn wine ENOENT", 2026-11-23), so the .exe builds on Windows.
   build-desktop-linux:
