@@ -42,6 +42,9 @@ rebuild-knowledge-base:
 
 
 # ================= Common ================
+install:
+	pnpm install --frozen-lockfile
+
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	rm -rf .pytest_cache .ruff_cache build dist sidecar-dist ui/out ui/release
@@ -72,3 +75,5 @@ build-app-windows: build-ui
 	@cp -f ui/release/*Setup*.exe dist/ 2>/dev/null || cp -f ui/release/*.exe dist/ 2>/dev/null || true
 	@echo "==> Windows artifact ready in dist/:"
 	@ls -lh dist/*.exe 2>/dev/null || true
+
+

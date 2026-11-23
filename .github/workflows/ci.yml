@@ -39,28 +39,19 @@ jobs:
       - name: Run tests
         run: uv run pytest -v -n=8
 
-  build:
-    needs: test
-    # only main's image is built and pushed (CD deploys it); a PR or a manual run on another branch never is
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    env:
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }}
+  # build:
+  #   needs: test
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  #     DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+  #     DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }}
 
-    steps:
-      - uses: actions/checkout@v4
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Docker login
-        run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+  #     - name: Docker login
+  #       run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
 
-      # tagged with the commit too: CD deploys exactly this commit's image, not whatever `latest` is by then
-      # (two merges in a row used to race on `latest`)
-      - name: Build the Docker image
-        run: docker build -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${GITHUB_SHA}" -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest" .
-
-      - name: Push to Docker Hub
-        run: |
-          docker push "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${GITHUB_SHA}"
-          docker push "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
+  #     - name: Build the Docker image
+  #       run: docker build -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest" .
