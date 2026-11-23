@@ -9,7 +9,7 @@ from .base import BaseEmbedding
 class HuggingFaceEmbedding(BaseEmbedding):
     def __init__(
         self,
-        model_name: str = "sentence-transformers/all-mpnet-base-v2",
+        model_name: str = "sentence-transformers/BAAI/bge-small-en-v1.5",
         **kwargs
     ):
         super().__init__()
