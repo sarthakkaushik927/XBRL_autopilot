@@ -54,6 +54,7 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-23, project website redesigned (branch `docs/site-logo-theme`, GitHub Pages from `/docs`):** `docs/index.html` (from #42) rebuilt in the logo's colours (navy `#061f3e`, mint `#17dca6` on white) with the taste-skill kit in `docs/assets/` (system, motion, layout, cards, diagrams, two moments). Real app screenshots in `docs/assets/shots/` come from `ui/e2e/indas-valid-xml.mjs` on the **synthetic** filing against the hosted backend (no client data on a public page). The main download button follows the visitor's OS (`assets/site/os-download.js`, builds in `releases.json`); the docs reader is `assets/site/docs-reader.js` with its list in `docs.json`. Copy corrected: no "100% offline" (taxonomy data and AI come from the backend), no "open source" (the repo has no LICENSE), no invented figures. `.taste-skill/` (checker working files) is git-ignored.
 - **2026-11-23, CI/CD fixes (branch `fix/cicd-deploy-race`):**
   - **Deploys raced on `latest`:** every merge started up to two deploys. CD ran for every completed CI run and pulled the moving `latest` tag, so it could ship another commit's image, and a second deploy ran `docker rm -f` on the container the first had just started (the 10:41 "crash" was this). Now:
     - CI tags the image with the commit (`:<sha>` and `latest`), and CD deploys `workflow_run.head_sha`;
