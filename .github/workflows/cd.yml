@@ -6,6 +6,9 @@ on:
     types: [completed]
     branches: ["main"]
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 # One deploy at a time: a second one used to `docker rm -f` the container the first had just started (outage
 # 2026-11-23 10:41). A newer pending deploy replaces an older pending one.
@@ -14,13 +17,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker login
+        run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+
+      - name: Build the Docker image
+        run: docker build -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest" .
+
+      - name: Push to Docker Hub
+        run: docker push "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
+
   deploy:
-    # only a green CI run of a push to main (CI also runs on PRs, which must never deploy), or a manual redeploy
-    if: >-
-      ${{ github.event_name == 'workflow_dispatch' ||
-          (github.event.workflow_run.conclusion == 'success' &&
-           github.event.workflow_run.event == 'push' &&
-           github.event.workflow_run.head_branch == 'main') }}
+    needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: self-hosted
     env:
       # the image CI built for that commit (not `latest`, which a later merge may have replaced); a manual run
@@ -70,13 +89,94 @@ jobs:
             --env "QDRANT_CLUSTER_ENDPOINT=${QDRANT_CLUSTER_ENDPOINT}" \
             --env "SERVICE_NAME=${SERVICE_NAME}" \
             --env "PYDANTIC_LOGFIRE_API_KEY=${PYDANTIC_LOGFIRE_API_KEY}" \
-            "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
+            "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
 
-      - name: Wait for the backend to answer /health
+  build-desktop-app:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+      XAP_API_URL: ${{ vars.XAP_API_URL }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install system dependencies (AppImage support)
         run: |
-          for i in $(seq 1 60); do
-            curl -fsS -m 5 -o /dev/null "http://127.0.0.1:${XAP_PORT}/health" && { echo "backend up after ~$((i * 3)) s"; exit 0; }
-            sleep 3
-          done
-          echo "backend did not answer /health within 3 minutes"
-          exit 1
+          sudo apt-get update
+          sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64 || true
+          sudo apt install make
+
+      - name: Install dependencies (make install)
+        run: make install
+
+      - name: Build Linux app (.deb & .AppImage)
+        run: make build-app-linux
+
+      - name: Build Windows app (.exe)
+        run: make build-app-windows
+
+      - name: Verify build artifacts
+        run: |
+          echo "Generated artifacts in dist/:"
+          ls -lh dist/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+
+      - name: Upload installers to AWS S3
+        run: |
+          # Read version from ui/package.json
+          VERSION=$(node -p "require('./ui/package.json').version")
+          echo "Package version: ${VERSION}"
+
+          # If triggered by a git tag (e.g. v0.1.0), use the tag name; otherwise v${VERSION}
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            RELEASE_TAG="${{ github.ref_name }}"
+          else
+            RELEASE_TAG="v${VERSION}"
+          fi
+
+          echo "Uploading artifacts to s3://${AWS_S3_BUCKET}/releases/${RELEASE_TAG}/"
+          aws s3 cp dist/ "s3://${AWS_S3_BUCKET}/releases/${RELEASE_TAG}/" \
+            --recursive \
+            --exclude "*" \
+            --include "*.exe" \
+            --include "*.AppImage" \
+            --include "*.deb"
+
+          echo "Updating latest release in s3://${AWS_S3_BUCKET}/releases/latest/"
+          aws s3 cp dist/ "s3://${AWS_S3_BUCKET}/releases/latest/" \
+            --recursive \
+            --exclude "*" \
+            --include "*.exe" \
+            --include "*.AppImage" \
+            --include "*.deb"
+
+          echo "Upload complete! S3 contents:"
+          aws s3 ls "s3://${AWS_S3_BUCKET}/releases/${RELEASE_TAG}/"
+
+      - name: Upload artifacts to GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-installers
+          path: |
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
