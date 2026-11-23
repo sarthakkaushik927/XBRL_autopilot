@@ -61,7 +61,7 @@ build-ui:
 
 build-app-linux: build-ui
 	@echo "==> Packaging Linux Debian package (.deb) & AppImage..."
-	pnpm --filter ui exec electron-builder --linux
+	pnpm --filter ui exec electron-builder --linux --publish never
 	@mkdir -p dist
 	@cp -f ui/release/*.deb dist/ 2>/dev/null || true
 	@cp -f ui/release/*.AppImage dist/ 2>/dev/null || true
@@ -70,7 +70,7 @@ build-app-linux: build-ui
 
 build-app-windows: build-ui
 	@echo "==> Packaging Windows installer (.exe)..."
-	pnpm --filter ui exec electron-builder --win
+	pnpm --filter ui exec electron-builder --win --publish never
 	@mkdir -p dist
 	@cp -f ui/release/*Setup*.exe dist/ 2>/dev/null || cp -f ui/release/*.exe dist/ 2>/dev/null || true
 	@echo "==> Windows artifact ready in dist/:"
