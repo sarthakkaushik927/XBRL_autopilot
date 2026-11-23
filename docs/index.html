@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XBRL Autopilot — MCA AOC-4 XBRL Filing Desktop Platform</title>
+  <meta name="description" content="AI-powered offline-first desktop platform for Chartered Accountants and Corporate Finance teams. Transform Excel Financials into MCA Validation Tool-certified XBRL/XML with AI auto-tagging.">
+  <link rel="icon" type="image/png" href="assets/icon.png">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              400: '#34d399',
+              500: '#10b981',
+              600: '#059669',
+            },
+            navy: {
+              800: '#0f172a',
+              900: '#090d16',
+              950: '#05080f'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Markdown Parser for Interactive Docs -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    
+    .glow-mint {
+      box-shadow: 0 0 50px -10px rgba(16, 185, 129, 0.25);
+    }
+    
+    /* Markdown Docs Styling */
+    .markdown-body {
+      color: #cbd5e1;
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+    .markdown-body h1 {
+      font-size: 1.85rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-top: 1.5rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 0.5rem;
+    }
+    .markdown-body h2 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-top: 1.75rem;
+      margin-bottom: 0.75rem;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 0.3rem;
+    }
+    .markdown-body h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-top: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .markdown-body p { margin-bottom: 1rem; }
+    .markdown-body ul, .markdown-body ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+    .markdown-body ul { list-style-type: disc; }
+    .markdown-body ol { list-style-type: decimal; }
+    .markdown-body li { margin-bottom: 0.35rem; }
+    .markdown-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.25rem 0;
+      font-size: 0.88rem;
+    }
+    .markdown-body th, .markdown-body td {
+      border: 1px solid #334155;
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+    .markdown-body th {
+      background-color: #1e293b;
+      color: #f8fafc;
+      font-weight: 600;
+    }
+    .markdown-body tr:nth-child(even) { background-color: #0f172a; }
+    .markdown-body code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85em;
+      background: #1e293b;
+      color: #34d399;
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.25rem;
+    }
+    .markdown-body pre {
+      background: #0b1120;
+      border: 1px solid #1e293b;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      overflow-x: auto;
+      margin: 1.25rem 0;
+    }
+    .markdown-body pre code {
+      background: transparent;
+      padding: 0;
+      color: #e2e8f0;
+      font-size: 0.88rem;
+    }
+    .markdown-body blockquote {
+      border-left: 4px solid #10b981;
+      padding-left: 1rem;
+      color: #94a3b8;
+      margin: 1rem 0;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body class="bg-navy-950 text-slate-300 font-sans antialiased selection:bg-brand-500 selection:text-navy-950">
+
+  <!-- ================= NAVBAR ================= -->
+  <header class="sticky top-0 z-50 backdrop-blur-md bg-navy-950/80 border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <a href="#" class="flex items-center gap-3 group">
+        <img src="assets/icon.png" alt="XBRL Autopilot Logo" class="w-9 h-9 object-contain rounded-lg transition-transform group-hover:scale-105">
+        <span class="font-bold text-lg text-white tracking-tight">XBRL <span class="text-brand-400">Autopilot</span></span>
+        <span class="text-xs bg-slate-800 text-brand-400 font-mono px-2 py-0.5 rounded-full border border-slate-700">v0.1.0</span>
+      </a>
+
+      <nav class="hidden md:flex items-center gap-7 text-sm font-medium text-slate-300">
+        <a href="#features" class="hover:text-brand-400 transition-colors">Features</a>
+        <a href="#how-it-works" class="hover:text-brand-400 transition-colors">Workflow</a>
+        <a href="#downloads" class="hover:text-brand-400 transition-colors">Download App</a>
+        <a href="#docs" class="hover:text-brand-400 transition-colors flex items-center gap-1.5">
+          <span>Documentation</span>
+          <span class="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse"></span>
+        </a>
+        <a href="https://github.com/VashuTheGreat/XBRL_autopilot" target="_blank" rel="noreferrer" class="hover:text-white transition-colors flex items-center gap-1 text-slate-400">
+          <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        </a>
+      </nav>
+
+      <div class="flex items-center gap-3">
+        <a href="#downloads" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-navy-950 font-semibold text-sm transition-all shadow-sm hover:shadow-brand-500/20 shadow-brand-500/10">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          <span>Get Desktop App</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= HERO SECTION ================= -->
+  <section class="relative pt-20 pb-28 overflow-hidden">
+    <!-- Background gradients -->
+    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-brand-500/10 via-transparent to-transparent blur-3xl pointer-events-none"></div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+      <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-700/70 text-xs font-medium text-brand-400 mb-8">
+        <span class="w-2 h-2 rounded-full bg-brand-400 animate-ping"></span>
+        <span>MCA AOC-4 XBRL Filing Desktop Automation</span>
+      </div>
+
+      <h1 class="text-4xl sm:text-6xl font-extrabold text-white tracking-tight max-w-4xl mx-auto leading-tight sm:leading-none">
+        MCA XBRL Filings on <span class="bg-gradient-to-r from-brand-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">Autopilot</span> with AI Precision
+      </h1>
+
+      <p class="mt-6 text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
+        The modern, offline-first desktop app for Chartered Accountants. Automatically convert Excel financials into MCA Validation Tool-certified XBRL/XML with neural tagging and deterministic math assurance.
+      </p>
+
+      <!-- Primary Download Button with OS Auto-Detection -->
+      <div class="mt-10 flex flex-wrap items-center justify-center gap-4" id="hero-actions">
+        <a id="hero-primary-download" href="https://xbrl-autopilot-bucket.s3.ap-south-1.amazonaws.com/releases/latest/XBRL+Autopilot-Setup-0.1.0.exe" class="inline-flex items-center gap-3 px-6 py-3.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-navy-950 font-bold text-base transition-all transform hover:-translate-y-0.5 shadow-lg shadow-brand-500/25">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          <span id="hero-primary-text">Download for Windows (.exe)</span>
+        </a>
+
+        <a href="#docs" class="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-base border border-slate-700 transition-all">
+          <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+          <span>Explore Documentation</span>
+        </a>
+      </div>
+
+      <p class="mt-4 text-xs text-slate-500">
+        Free & Open Source · Direct S3 Downloads: <a href="https://xbrl-autopilot-bucket.s3.ap-south-1.amazonaws.com/releases/latest/XBRL+Autopilot-Setup-0.1.0.exe" class="underline hover:text-brand-400">Windows (.exe)</a> | <a href="https://xbrl-autopilot-bucket.s3.ap-south-1.amazonaws.com/releases/latest/XBRL+Autopilot-0.1.0.AppImage" class="underline hover:text-brand-400">Linux (.AppImage)</a> | <a href="https://xbrl-autopilot-bucket.s3.ap-south-1.amazonaws.com/releases/latest/XBRL+Autopilot-0.1.0.deb" class="underline hover:text-brand-400">Debian/Ubuntu (.deb)</a>
+      </p>
+
+      <!-- App Interface Graphic Preview -->
+      <div class="mt-14 max-w-5xl mx-auto rounded-2xl p-2 bg-gradient-to-b from-slate-700/60 to-slate-900/60 border border-slate-800 shadow-2xl glow-mint">
+        <div class="rounded-xl overflow-hidden bg-navy-900 border border-slate-800 p-4 sm:p-6 text-left">
+          <!-- Window bar -->
+          <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-rose-500/80"></span>
+              <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
+              <span class="w-3 h-3 rounded-full bg-emerald-500/80"></span>
+              <span class="ml-2 text-xs font-mono text-slate-400">XBRL Autopilot — Reliance_Industries_AOC4_2025.axbrl</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs bg-emerald-950 text-emerald-400 px-2.5 py-0.5 rounded border border-emerald-800/80 font-mono">MCA Status: 0 Errors</span>
+            </div>
+          </div>
+
+          <!-- Dual view mockup grid -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4 font-mono text-xs">
+            <!-- Left: Financial Spreadsheet -->
+            <div class="lg:col-span-6 bg-slate-950/70 p-4 rounded-lg border border-slate-800/80">
+              <div class="flex items-center justify-between mb-3 text-slate-400 font-sans font-semibold text-xs border-b border-slate-800 pb-2">
+                <span class="flex items-center gap-2">
+                  <svg class="w-4 h-4 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                  Client Balance Sheet (Excel Input)
+                </span>
+                <span class="text-brand-400">FY 2024-25 (CY)</span>
+              </div>
+              <div class="space-y-1.5 text-slate-300">
+                <div class="flex justify-between p-1 rounded hover:bg-slate-800/50">
+                  <span>I. Equity Share Capital</span>
+                  <span class="text-white font-semibold">6,765.00 Cr</span>
+                </div>
+                <div class="flex justify-between p-1 rounded bg-brand-500/10 border border-brand-500/30 text-white">
+                  <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-brand-400"></span>Other Equity & Reserves</span>
+                  <span class="font-bold text-brand-400">4,52,190.00 Cr</span>
+                </div>
+                <div class="flex justify-between p-1 rounded hover:bg-slate-800/50">
+                  <span>Non-Current Borrowings</span>
+                  <span class="text-white">1,82,340.00 Cr</span>
+                </div>
+                <div class="flex justify-between p-1 rounded hover:bg-slate-800/50">
+                  <span>Deferred Tax Liabilities (Net)</span>
+                  <span class="text-white">52,100.00 Cr</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: XBRL Taxonomy Auto-Mapping -->
+            <div class="lg:col-span-6 bg-slate-950/70 p-4 rounded-lg border border-slate-800/80">
+              <div class="flex items-center justify-between mb-3 text-slate-400 font-sans font-semibold text-xs border-b border-slate-800 pb-2">
+                <span class="flex items-center gap-2">
+                  <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                  Mapped MCA Taxonomy Concept
+                </span>
+                <span class="text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded text-[10px]">99.4% AI Match</span>
+              </div>
+              <div class="space-y-2">
+                <div class="p-2 rounded bg-slate-900 border border-slate-800">
+                  <div class="text-[11px] text-teal-300 font-bold">in-gaap:OtherEquityReservesAndSurplus</div>
+                  <div class="text-[10px] text-slate-400 mt-0.5">ELR: [100100] Balance Sheet · Instant Duration · Credit</div>
+                  <div class="flex items-center gap-3 mt-2 text-[10px] text-slate-500">
+                    <span>Decimals: -5</span>
+                    <span>Unit: INR</span>
+                    <span class="text-emerald-400 font-medium">✓ Formula Check Passed</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FEATURES ================= -->
+  <section id="features" class="py-24 border-t border-slate-800 bg-navy-900/40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto">
+        <h2 class="text-xs font-mono uppercase tracking-wider text-brand-400 font-semibold">Engineered For Chartered Accountants</h2>
+        <p class="mt-3 text-3xl sm:text-4xl font-extrabold text-white">Why Replace Outdated Desktop XBRL Software?</p>
+        <p class="mt-4 text-base text-slate-400">Built to solve the pains of legacy clunky tools with modern speed, local security, and intelligent guidance.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-16">
+        <!-- Feature 1 -->
+        <div class="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition-all hover:-translate-y-1">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </div>
+          <h3 class="text-lg font-bold text-white">AI Auto-Tagging Engine</h3>
+          <p class="mt-2.5 text-sm text-slate-400 leading-relaxed">
+            Instant semantic retrieval matching your Excel line items against complete MCA Ind AS (2017) and C&I (2016) taxonomies in seconds.
+          </p>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition-all hover:-translate-y-1">
+          <div class="w-12 h-12 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h3 class="text-lg font-bold text-white">Guaranteed MCA Validation Parity</h3>
+          <p class="mt-2.5 text-sm text-slate-400 leading-relaxed">
+            Built-in calculation engine validates all rules, cross-statement consistency, and balance sheet formulas before generating the final XML.
+          </p>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition-all hover:-translate-y-1">
+          <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </div>
+          <h3 class="text-lg font-bold text-white">100% Offline & Private</h3>
+          <p class="mt-2.5 text-sm text-slate-400 leading-relaxed">
+            Financial figures, CINs, and client data never leave your computer. Work is saved in standalone <code class="text-brand-400">.axbrl</code> files you can resume anytime.
+          </p>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition-all hover:-translate-y-1">
+          <div class="w-12 h-12 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </div>
+          <h3 class="text-lg font-bold text-white">Dual-Pane Interactive Grid</h3>
+          <p class="mt-2.5 text-sm text-slate-400 leading-relaxed">
+            See your raw Excel spreadsheet on the left and the generated XBRL mapping on the right. Bidirectional highlighting keeps you in total control.
+          </p>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition-all hover:-translate-y-1">
+          <div class="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+          </div>
+          <h3 class="text-lg font-bold text-white">AI Error Fix Agent</h3>
+          <p class="mt-2.5 text-sm text-slate-400 leading-relaxed">
+            Got an unmapped line or broken business rule? The AI Fix Agent diagnoses the root cause and suggests exact adjustments for one-click resolution.
+          </p>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="p-6 rounded-2xl bg-slate-900/70 border border-slate-800 hover:border-slate-700 transition-all hover:-translate-y-1">
+          <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-5">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </div>
+          <h3 class="text-lg font-bold text-white">Seamless Cloud CD Updates</h3>
+          <p class="mt-2.5 text-sm text-slate-400 leading-relaxed">
+            Continuous deployment automated via GitHub Actions directly pushing latest releases and auto-updates to AWS S3.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= DOWNLOAD SECTION ================= -->
+  <section id="downloads" class="py-24 border-t border-slate-800 bg-navy-950">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto">
+        <h2 class="text-xs font-mono uppercase tracking-wider text-brand-400 font-semibold">Direct AWS S3 Downloads</h2>
+        <p class="mt-3 text-3xl sm:text-4xl font-extrabold text-white">Download XBRL Autopilot for Your OS</p>
+        <p class="mt-4 text-base text-slate-400">Standalone desktop binaries. Zero dependencies required — no Python, Node.js or Java needed on client machines.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16 max-w-5xl mx-auto">
+        <!-- Windows Card -->
+        <div class="p-8 rounded-2xl bg-slate-900/80 border-2 border-slate-800 hover:border-brand-500/50 transition-all flex flex-col justify-between">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-6">
+              <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+            </div>
+            <h3 class="text-xl font-bold text-white">Windows</h3>
+            <p class="text-xs text-slate-400 font-mono mt-1">Windows 10 / 11 (64-bit)</p>
+            <p class="text-sm text-slate-400 mt-4 leading-relaxed">
+              Standard NSIS one-click installer. Creates desktop & Start Menu shortcuts and associates with <code class="text-brand-400">.axbrl</code> files.
+            </p>
+          </div>
+          <div class="mt-8 pt-6 border-t border-slate-800">
+            <a href="https://xbrl-autopilot-bucket.s3.ap-south-1.amazonaws.com/releases/latest/XBRL+Autopilot-Setup-0.1.0.exe" class="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-brand-500 hover:bg-brand-400 text-navy-950 font-bold text-sm transition-all shadow-md">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              <span>Download .exe (Installer)</span>
+            </a>
+            <span class="block text-center text-[11px] text-slate-500 mt-2 font-mono">v0.1.0 · ~165 MB</span>
+          </div>
+        </div>
+
+        <!-- Linux AppImage Card -->
+        <div class="p-8 rounded-2xl bg-slate-900/80 border-2 border-slate-800 hover:border-brand-500/50 transition-all flex flex-col justify-between">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-6">
+              <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M12.004 0C5.372 0 0 5.372 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.628-5.373-12-11.996-12z"/></svg>
+            </div>
+            <h3 class="text-xl font-bold text-white">Linux (AppImage)</h3>
+            <p class="text-xs text-slate-400 font-mono mt-1">Universal Linux Binary</p>
+            <p class="text-sm text-slate-400 mt-4 leading-relaxed">
+              Standalone executable that runs on any modern Linux distribution without installation. Simply make executable and run.
+            </p>
+          </div>
+          <div class="mt-8 pt-6 border-t border-slate-800">
+            <a href="https://xbrl-autopilot-bucket.s3.ap-south-1.amazonaws.com/releases/latest/XBRL+Autopilot-0.1.0.AppImage" class="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-sm border border-slate-700 transition-all">
+              <svg class="w-4 h-4 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              <span>Download .AppImage</span>
+            </a>
+            <span class="block text-center text-[11px] text-slate-500 mt-2 font-mono">v0.1.0 · ~189 MB</span>
+          </div>
+        </div>
+
+        <!-- Linux Debian/Ubuntu (.deb) Card -->
+        <div class="p-8 rounded-2xl bg-slate-900/80 border-2 border-slate-800 hover:border-brand-500/50 transition-all flex flex-col justify-between">
+          <div>
+            <div class="w-12 h-12 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center mb-6">
+              <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+            </div>
+            <h3 class="text-xl font-bold text-white">Debian / Ubuntu</h3>
+            <p class="text-xs text-slate-400 font-mono mt-1">Debian Package (.deb)</p>
+            <p class="text-sm text-slate-400 mt-4 leading-relaxed">
+              Native DEB package for Ubuntu, Debian, Linux Mint, and derivatives. Installs cleanly via <code class="text-brand-400">sudo dpkg -i</code>.
+            </p>
+          </div>
+          <div class="mt-8 pt-6 border-t border-slate-800">
+            <a href="https://xbrl-autopilot-bucket.s3.ap-south-1.amazonaws.com/releases/latest/XBRL+Autopilot-0.1.0.deb" class="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-sm border border-slate-700 transition-all">
+              <svg class="w-4 h-4 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              <span>Download .deb</span>
+            </a>
+            <span class="block text-center text-[11px] text-slate-500 mt-2 font-mono">v0.1.0 · ~146 MB</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= INTERACTIVE DOCS READER ================= -->
+  <section id="docs" class="py-24 border-t border-slate-800 bg-navy-900/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
+        <div>
+          <h2 class="text-xs font-mono uppercase tracking-wider text-brand-400 font-semibold">Knowledge Hub</h2>
+          <p class="mt-2 text-3xl font-extrabold text-white">Interactive Documentation Reader</p>
+          <p class="mt-2 text-sm text-slate-400">Browse official project architecture, engineering ADRs, and guides right in your browser.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="text" id="doc-search" placeholder="Search docs..." class="px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500">
+        </div>
+      </div>
+
+      <!-- Docs Reader Layout -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl min-h-[700px]">
+        <!-- Sidebar Navigation -->
+        <aside class="lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-950/80 p-5 flex flex-col h-[500px] lg:h-[750px]">
+          <span class="text-xs font-mono uppercase tracking-wider text-slate-500 font-semibold mb-3 px-2">Table of Contents</span>
+          <div class="overflow-y-auto space-y-1 pr-2 flex-1" id="doc-list">
+            <!-- Populated via JS -->
+          </div>
+        </aside>
+
+        <!-- Markdown Viewer Area -->
+        <main class="lg:col-span-8 p-6 lg:p-10 flex flex-col h-[500px] lg:h-[750px] overflow-y-auto" id="doc-viewer-container">
+          <div class="flex items-center justify-between pb-4 mb-6 border-b border-slate-800 shrink-0">
+            <div>
+              <span id="active-doc-badge" class="text-xs font-mono text-brand-400 uppercase tracking-wider">DOCS</span>
+              <h2 id="active-doc-title" class="text-xl font-bold text-white mt-1">Loading Document...</h2>
+            </div>
+            <a id="view-raw-link" href="#" target="_blank" class="text-xs text-slate-400 hover:text-white flex items-center gap-1 font-mono">
+              <span>Raw Markdown</span>
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>
+          </div>
+
+          <div id="markdown-content" class="markdown-body flex-1">
+            <!-- Rendered markdown inserted here -->
+          </div>
+        </main>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= HOW IT WORKS ================= -->
+  <section id="how-it-works" class="py-24 border-t border-slate-800 bg-navy-950">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h2 class="text-xs font-mono uppercase tracking-wider text-brand-400 font-semibold">Streamlined Workflow</h2>
+      <p class="mt-3 text-3xl sm:text-4xl font-extrabold text-white">From Spreadsheet to Certified MCA Filing</p>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16 max-w-5xl mx-auto text-left">
+        <div class="p-6 rounded-xl bg-slate-900 border border-slate-800 relative">
+          <span class="text-3xl font-extrabold text-brand-400/30 absolute top-4 right-6 font-mono">01</span>
+          <h3 class="text-lg font-bold text-white">Import Financials</h3>
+          <p class="mt-3 text-sm text-slate-400 leading-relaxed">
+            Drag & drop your client's existing audited balance sheet and P&L Excel workbook (<code class="text-brand-400">.xlsx</code>). The app detects CY/PY tables automatically.
+          </p>
+        </div>
+
+        <div class="p-6 rounded-xl bg-slate-900 border border-slate-800 relative">
+          <span class="text-3xl font-extrabold text-brand-400/30 absolute top-4 right-6 font-mono">02</span>
+          <h3 class="text-lg font-bold text-white">AI Tagging & Review</h3>
+          <p class="mt-3 text-sm text-slate-400 leading-relaxed">
+            The hybrid taxonomy matcher maps line items against official MCA C&I and Ind AS dictionaries with confidence scores. Review in dual-pane view.
+          </p>
+        </div>
+
+        <div class="p-6 rounded-xl bg-slate-900 border border-slate-800 relative">
+          <span class="text-3xl font-extrabold text-brand-400/30 absolute top-4 right-6 font-mono">03</span>
+          <h3 class="text-lg font-bold text-white">Validate & Export</h3>
+          <p class="mt-3 text-sm text-slate-400 leading-relaxed">
+            Run complete business rule audits and mathematical verification with 0 errors, then generate the official MCA Validation Tool-compliant XML file.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="py-12 border-t border-slate-800 bg-navy-950 text-slate-500 text-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-3">
+        <img src="assets/icon.png" alt="XBRL Autopilot Logo" class="w-7 h-7 object-contain">
+        <span class="text-white font-bold tracking-tight">XBRL Autopilot</span>
+        <span class="text-slate-600">|</span>
+        <span>Open Source MCA XBRL Filing Automation</span>
+      </div>
+
+      <div class="flex items-center gap-6">
+        <a href="#features" class="hover:text-white transition-colors">Features</a>
+        <a href="#downloads" class="hover:text-white transition-colors">Downloads</a>
+        <a href="#docs" class="hover:text-white transition-colors">Documentation</a>
+        <a href="https://github.com/VashuTheGreat/XBRL_autopilot" target="_blank" rel="noreferrer" class="hover:text-white transition-colors">GitHub Repository</a>
+      </div>
+
+      <p class="text-xs text-slate-600">
+        Copyright © 2026 XBRL Autopilot. All rights reserved.
+      </p>
+    </div>
+  </footer>
+
+  <!-- ================= INTERACTIVE SCRIPTS ================= -->
+  <script>
+    // Document manifest
+    const DOCS = [
+      { id: '00-product-vision.md', title: 'Product Vision & Scope', category: 'General' },
+      { id: '02-architecture.md', title: 'System Architecture', category: 'Architecture' },
+      { id: '03-project-file-axbrl.md', title: 'Project File (.axbrl)', category: 'Engine' },
+      { id: '04-xbrl-engine.md', title: 'XBRL Core Engine', category: 'Engine' },
+      { id: '05-validation.md', title: 'Validation & Business Rules', category: 'Engine' },
+      { id: '06-ai-auto-tagging.md', title: 'AI Auto-Tagging System', category: 'AI & Pipeline' },
+      { id: '07-ai-fix-agent.md', title: 'AI Error Fix Agent', category: 'AI & Pipeline' },
+      { id: '08-ui-ux.md', title: 'UI / UX Design & Shortcuts', category: 'Frontend' },
+      { id: '09-ipc-and-sidecar-api.md', title: 'IPC & FastAPI Contracts', category: 'Architecture' },
+      { id: '10-packaging-release.md', title: 'Packaging & S3 Releases', category: 'DevOps' },
+      { id: '11-security-privacy.md', title: 'Security & Privacy Architecture', category: 'Security' },
+      { id: '12-reference-data.md', title: 'MCA Reference Fixtures', category: 'Data' },
+      { id: '17-team-direction.md', title: 'Team Direction & Decisions', category: 'Roadmap' },
+      { id: 'STATUS.md', title: 'Project Status & Changelog', category: 'Roadmap' },
+      { id: 'README.md', title: 'Docs Index & Glossary', category: 'General' }
+    ];
+
+    let currentDocId = '00-product-vision.md';
+
+    // Populate Sidebar
+    function renderDocList(filter = '') {
+      const listEl = document.getElementById('doc-list');
+      listEl.innerHTML = '';
+      
+      const filtered = DOCS.filter(d => 
+        d.title.toLowerCase().includes(filter.toLowerCase()) || 
+        d.id.toLowerCase().includes(filter.toLowerCase()) ||
+        d.category.toLowerCase().includes(filter.toLowerCase())
+      );
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<p class="text-xs text-slate-500 p-2">No matching documentation found.</p>';
+        return;
+      }
+
+      filtered.forEach(doc => {
+        const btn = document.createElement('button');
+        const isActive = doc.id === currentDocId;
+        btn.className = `w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-between ${
+          isActive 
+            ? 'bg-brand-500/15 text-brand-400 border border-brand-500/30' 
+            : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+        }`;
+        btn.innerHTML = `
+          <span class="truncate">${doc.title}</span>
+          <span class="text-[10px] text-slate-600 font-mono ml-2 shrink-0">${doc.category}</span>
+        `;
+        btn.onclick = () => loadDoc(doc.id, doc.title);
+        listEl.appendChild(btn);
+      });
+    }
+
+    // Load and render markdown document
+    async function loadDoc(fileId, title) {
+      currentDocId = fileId;
+      renderDocList(document.getElementById('doc-search').value);
+      
+      const titleEl = document.getElementById('active-doc-title');
+      const badgeEl = document.getElementById('active-doc-badge');
+      const contentEl = document.getElementById('markdown-content');
+      const rawLinkEl = document.getElementById('view-raw-link');
+
+      titleEl.innerText = title;
+      badgeEl.innerText = fileId;
+      rawLinkEl.href = fileId;
+      contentEl.innerHTML = '<div class="py-12 text-center text-slate-500 text-sm">Loading document contents...</div>';
+
+      try {
+        const res = await fetch(fileId);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const mdText = await res.text();
+        contentEl.innerHTML = marked.parse(mdText);
+      } catch (err) {
+        contentEl.innerHTML = `
+          <div class="p-6 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-sm">
+            <h3 class="text-base font-bold text-white mb-2">Documentation Preview</h3>
+            <p class="mb-4">Could not load <code>${fileId}</code> directly via relative fetch (this is normal when opening this HTML directly from a <code>file://</code> URL without a local web server).</p>
+            <p>When hosted on <strong>GitHub Pages</strong>, all documentation files render dynamically with full syntax highlighting.</p>
+            <a href="${fileId}" target="_blank" class="inline-block mt-3 px-4 py-2 rounded bg-brand-500 text-navy-950 font-bold text-xs">Open Raw Markdown File</a>
+          </div>
+        `;
+      }
+    }
+
+    // OS Auto-Detection for hero download button
+    function detectOS() {
+      const platform = navigator.userAgent.toLowerCase();
+      const heroBtn = document.getElementById('hero-primary-download');
+      const heroText = document.getElementById('hero-primary-text');
+      
+      if (platform.includes('win')) {
+        heroBtn.href = "https://xbrl-autopilot-bucket.s3.ap-south-1.amazonaws.com/releases/latest/XBRL+Autopilot-Setup-0.1.0.exe";
+        heroText.innerText = "Download for Windows (.exe)";
+      } else if (platform.includes('linux')) {
+        heroBtn.href = "https://xbrl-autopilot-bucket.s3.ap-south-1.amazonaws.com/releases/latest/XBRL+Autopilot-0.1.0.AppImage";
+        heroText.innerText = "Download for Linux (.AppImage)";
+      } else {
+        heroBtn.href = "#downloads";
+        heroText.innerText = "Download Desktop App";
+      }
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      detectOS();
+      renderDocList();
+      loadDoc(currentDocId, 'Product Vision & Scope');
+
+      // Search event
+      document.getElementById('doc-search').addEventListener('input', (e) => {
+        renderDocList(e.target.value);
+      });
+    });
+  </script>
+</body>
+</html>
