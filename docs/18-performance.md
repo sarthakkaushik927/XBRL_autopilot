@@ -84,7 +84,15 @@ Re-ordered after the measurements above.
    - **Compress responses:** done (gzip, `perf/backend-gzip`): the knowledge base download goes from 4.3 MB to 356 KB.
    - **Keep the knowledge base on disk:** the app needs a way to know when the server's copy changed. `/health`'s `version` is fixed (`"0.1.0"`), so it can't tell.
      - **Server: Vashu's.** It would send an `ETag` (a hash of the file) on `/authority` and answer `304 Not Modified` when the app's copy is current.
-     - **App:** `perf/kb-disk-cache`. It keeps the knowledge base on disk only when the server sends an `ETag`; until then nothing changes.
+     - **App: done** (`perf/kb-disk-cache`).
+       - **Where:** `<userData>/cache/indas-authority.json`, holding the copy, its `ETag` and the server it came from.
+       - **Each session** asks with `If-None-Match`. On a `304` it uses the copy; on a `200` it replaces it.
+       - **Until the server sends an ETag:** nothing is kept and the app downloads every session, as before.
+       - **Never used:** a copy from another server (`XAP_API_URL` changed), or a damaged file.
+       - **Code:** `CachedKnowledgeBase` (`ui/electron/main/services/cached-knowledge-base.ts`) over two ports, `ConditionalGetClient` (`BackendClient.getIfChanged`) and `CachedAnswerStore` (`JsonFileCache`).
+       - **Checked live** behind a test proxy that adds a content ETag:
+         - session 1: `200`, 4.3 MB saved; session 2: `304`, copy used;
+         - same results with and without the copy: 55 statements, identical Difference checks.
 3. **Keep it fast.** Run `ui/e2e/indas-perf.mjs` on the packaged build in CI with a 150 ms limit per action. A change that makes any action slower then fails before it ships.
 4. **Future improvement: draw only the rows on screen** in long lists (XBRL Form, taxonomy tree up to 1,843 concepts, Problems). Not needed now: the longest action in the installed app is 71 ms. Take it up when a bigger filing goes over 100 ms, and keep "scroll to the fact" working.
 5. **Skipped: Univer memory.** Nothing to fix: the JS data, Univer's included, is under 50 MB; the rest is Chromium's own.

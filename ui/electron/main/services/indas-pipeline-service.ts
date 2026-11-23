@@ -2,7 +2,7 @@
  * IndasPipelineService: Vashu's Ind AS pipeline (docs/17) over the sidecar's /api/v1/indas/* routes.
  * Excel → canonical sheets (/transform) → tag suggestions (/recommend) → masters → XML (/generateXML).
  * The master fields and the live Difference check are computed here from the knowledge base (/authority, read
- * once per session), so editing a cell never calls the sidecar (PR #15 review).
+ * once per session, kept on disk by CachedKnowledgeBase), so editing a cell never calls the sidecar (PR #15 review).
  * Electron-free: the sidecar, the output folder and the writer come in as ports. The AI only proposes tags;
  * the renderer sends the tags the user accepted.
  */
@@ -27,6 +27,7 @@ import { runLimited } from '../util/run-limited'
 import { deriveFiling, deriveTotals } from './indas-derived-totals'
 import { checkDifferences } from './indas-difference-check'
 import { dryRun, type ProposedChange } from './indas-fix-dry-run'
+import type { KnowledgeBaseSource } from './cached-knowledge-base'
 import type { IndasKnowledgeBase } from './indas-knowledge-base'
 import { masterFieldsOf } from './indas-master-fields'
 import type { OutputWriter } from './mca-tool-service'
@@ -64,6 +65,10 @@ export class IndasPipelineService {
     private readonly aiAllowed: () => boolean = () => false,
     /** Settings → Faster Auto-tag: RECOMMEND_PARALLEL batches at once; off = one at a time */
     private readonly parallelAllowed: () => boolean = () => false,
+    /** where the knowledge base comes from; by default a plain download per session */
+    private readonly kbSource: KnowledgeBaseSource = {
+      load: () => sidecarCall<IndasKnowledgeBase>(sidecar, 'GET', `${BASE}/authority`, { timeoutMs: SLOW_MS, what: 'Knowledge base' }),
+    },
   ) {}
 
   /** The standard template workbook (.xlsx bytes) — input path 1. */
@@ -172,9 +177,9 @@ export class IndasPipelineService {
     return masterFieldsOf(await this.knowledgeBase())
   }
 
-  /** The Ind AS knowledge base, fetched once; a failed fetch is retried on the next call. */
+  /** The Ind AS knowledge base, loaded once per session; a failed load is retried on the next call. */
   private knowledgeBase(): Promise<IndasKnowledgeBase> {
-    this.kb ??= sidecarCall<IndasKnowledgeBase>(this.sidecar, 'GET', `${BASE}/authority`, { timeoutMs: SLOW_MS, what: 'Knowledge base' }).catch((e) => {
+    this.kb ??= this.kbSource.load().catch((e) => {
       this.kb = null
       throw e
     })

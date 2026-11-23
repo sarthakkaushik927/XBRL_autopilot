@@ -118,6 +118,13 @@ export class BackendClient extends EventEmitter {
     return { status: res.status, data: parseBody<T>(await res.text()) }
   }
 
+  /** A GET sent with If-None-Match when `etag` is given: 304 = the copy with that ETag is still current (no body). */
+  async getIfChanged<T>(path: string, etag: string | null, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<{ status: number; etag: string | null; data: T | null }> {
+    const res = await this.send(path, { method: 'GET', headers: etag ? { 'If-None-Match': etag } : {} }, timeoutMs)
+    if (res.status === 304) return { status: 304, etag, data: null }
+    return { status: res.status, etag: res.headers.get('ETag'), data: parseBody<T>(await res.text()) }
+  }
+
   /** Multipart upload of one file (e.g. /indas/transform); the answer is parsed like `request`. */
   async upload<T>(path: string, file: { field: string; fileName: string; bytes: Uint8Array }, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<SidecarResponse<T>> {
     const form = new FormData()

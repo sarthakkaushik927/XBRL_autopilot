@@ -54,6 +54,11 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-23, knowledge base kept on disk, app side (branch `perf/kb-disk-cache`, [18](18-performance.md#what-to-optimise-next)):** `CachedKnowledgeBase` asks `/authority` with `If-None-Match` and uses its copy on a `304`.
+  - **Until the server sends an `ETag` (Vashu's):** nothing changes.
+  - **Live, behind an ETag test proxy:** session 1 `200` (saved), session 2 `304` (copy used). Same results with and without the copy: 55 statements, identical Difference checks.
+  - **Tests:** `cached-knowledge-base.test.ts` (9) and `backend-client.test.ts` (`getIfChanged`). `pnpm typecheck` green; 264 UI tests pass, except the 3 `mapping-helpers` failures that were already there.
+  - **Seen:** `indas-perf.mjs` takes the statement list before every sheet tree has loaded, so it opens 52–55 statements depending on timing.
 - **2026-11-22, the installed app timed (branch `perf/packaged-timing`, [18](18-performance.md#the-installed-app-packaged-build-2026-11-22-perfpackaged-timing)):** `XAP_TEST_BUILD=1` builds a production bundle that keeps the e2e hooks, so `indas-perf.mjs` can drive `release/win-unpacked`.
   - **DGPL, packaged vs dev:** open a statement 9 vs 101 ms, click a line 18 vs 114 ms, switch sheet 48 vs 229 ms (longest 71 vs 387 ms), JS heap 49 vs 132 MB.
   - **Decided from it (Sarthak):** drawing only the visible rows is a future improvement; the Univer memory check is skipped (the "750 MB" is the whole app; the JS data is under 50 MB).
