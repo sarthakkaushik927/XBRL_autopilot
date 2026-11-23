@@ -3,10 +3,11 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import FileResponse, Response
 
 from api.helper.delete_file import delete_file_after
+from api.helper.etag import get_kb_etag
 from api.middlewares.multi_middleware import multer_middleware
 from api.v1.schemas.indas_schema import FixRequest, GenerateXML, RecommendSchema
 from src.constants import (
@@ -33,12 +34,22 @@ router = APIRouter()
 
 
 @router.get("/authority")
-async def get_autherity():
+async def get_autherity(request:Request):
     with logger.span("indas.get_authority"):
         try:
+            logger.info("indas.authority_check_hash_hit")
+            etag = get_kb_etag(file_path=INDAS_OUTPUT_JSON_PATH)
+            client_etag = request.headers.get("if-none-match")
+            if etag == client_etag:
+                logger.info("indas.authority_hash_hit")
+                return Response(status_code=304,headers={"ETag":etag})
+            logger.info("indas.authority_hash_hit_failed")
             data = await load_json(path=INDAS_OUTPUT_JSON_PATH)
             logger.info("indas.authority_served", path=str(INDAS_OUTPUT_JSON_PATH))
-            return success_response(data=data)
+            res= success_response(data=data)
+            res.headers['ETag']=etag
+            return res
+        
         except FileNotFoundError as e:
             logger.exception("indas.authority_not_found", path=str(INDAS_OUTPUT_JSON_PATH), error=str(e))
             return error_response(message="Knowledge Base file not found", status_code=500, errors=e)

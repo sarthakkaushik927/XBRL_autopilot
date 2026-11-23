@@ -45,7 +45,7 @@ class QdrantVectorStore(BaseVectorDB):
         self.collection_name = collection_name or self.app_config.collection_name
         self.url = url or self.app_config.qdrant_cluster_endpoint
         self.api_key = api_key or self.app_config.qdrant_api_key
-        self.embedder = embedding_service or HuggingFaceEmbedding()
+        self.embedder = embedding_service or HuggingFaceEmbedding(model_name=self.app_config.embedding_model)
         self._async_client: AsyncQdrantClient | None = None
         self._sync_client: QdrantClient | None = None
 
