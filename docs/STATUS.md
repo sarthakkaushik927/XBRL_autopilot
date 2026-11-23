@@ -54,11 +54,17 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-22, the installed app timed (branch `perf/packaged-timing`, [18](18-performance.md#the-installed-app-packaged-build-2026-11-22-perfpackaged-timing)):** `XAP_TEST_BUILD=1` builds a production bundle that keeps the e2e hooks, so `indas-perf.mjs` can drive `release/win-unpacked`.
+  - **DGPL, packaged vs dev:** open a statement 9 vs 101 ms, click a line 18 vs 114 ms, switch sheet 48 vs 229 ms (longest 71 vs 387 ms), JS heap 49 vs 132 MB.
+  - **Decided from it (Sarthak):** drawing only the visible rows is a future improvement; the Univer memory check is skipped (the "750 MB" is the whole app; the JS data is under 50 MB).
+  - **Left:** Auto-tag (backend). The knowledge base disk cache: the `ETag` on `/authority` is Vashu's, the app side is `perf/kb-disk-cache`. CI perf runs with a 150 ms limit.
+  - **Embeddings saved to disk and lighter models:** left to Vashu (Sarthak).
+  - **Tests:** `pnpm typecheck` green; UI tests pass except the 3 pre-existing `mapping-helpers` failures.
 - **2026-11-22, Faster Auto-tag (branch `perf/autotag-parallel`, [18](18-performance.md#faster-auto-tag-parallel-batches-2026-11-22-perfautotag-parallel)):** Settings → Auto-tag → "Faster Auto-tag (3–4 batches at once)", **off by default** (`AppSettings.parallelAutoTag`; old settings read as off).
   - **On:** `/recommend` batches go 4 at a time after the sheet's first batch (`runLimited`, `ui/electron/main/util/run-limited.ts`).
   - **Off:** one at a time, as before.
   - **Both modes:** key order, progress and Cancel are unchanged.
-  - **DGPL, dev, no AI:** 34 s → 22 s on a warm backend. A cold one is 161 s either way: 95 s of that is the notes' first call embedding 1,843 concepts. Caching those on disk is next (backend, ask first).
+  - **DGPL, dev, no AI:** 34 s → 22 s on a warm backend. A cold one is 161 s either way: 95 s of that is the notes' first call embedding 1,843 concepts. Caching those on disk: Vashu's.
   - **Same tags** in both modes (256 of 256).
   - **Tests:** `run-limited.test.ts` (6), `indas-pipeline-service.test.ts` (both modes: order, progress, Cancel, failure), `settings-service.test.ts`. `pnpm typecheck` green; `indas-perf.mjs` passes in both modes. The 3 `mapping-helpers` failures (removed `sample_financials.xlsx`) are pre-existing.
 - **2026-11-22, gzip on the backend ([18](18-performance.md) step 5, branch `perf/backend-gzip`):** `GZipMiddleware` (≥ 1 KB) in `api/app.py`. The knowledge base download goes from 4.3 MB to 356 KB. Server-sent events (`text/event-stream`) stay uncompressed (Starlette 1.10). `tests/test_gzip.py`: 2 pass.

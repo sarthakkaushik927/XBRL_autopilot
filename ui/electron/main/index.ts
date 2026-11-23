@@ -77,8 +77,10 @@ const isDev = !app.isPackaged
 // In dev, app.getAppPath() is <repo>/ui; the Python sidecar, engine and .env live at the repo root.
 const repoRoot = resolve(app.getAppPath(), '..')
 app.setName('XBRL Autopilot')
-// XAP_USER_DATA (dev only) isolates automated test runs from the developer's real app data.
-app.setPath('userData', (isDev && process.env.XAP_USER_DATA) || join(app.getPath('appData'), 'XBRL Autopilot'))
+// XAP_USER_DATA (dev, or an XAP_TEST_BUILD=1 bundle) isolates automated test runs from the developer's real app data.
+declare const __XAP_TEST_BUILD__: boolean
+const testBuild = typeof __XAP_TEST_BUILD__ === 'boolean' && __XAP_TEST_BUILD__
+app.setPath('userData', ((isDev || testBuild) && process.env.XAP_USER_DATA) || join(app.getPath('appData'), 'XBRL Autopilot'))
 
 let mainWindow: BrowserWindow | null = null
 const getWindow = () => mainWindow

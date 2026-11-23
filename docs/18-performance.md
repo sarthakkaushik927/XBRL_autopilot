@@ -46,10 +46,49 @@ Measured on DGPL (`ui/e2e/indas-perf.mjs`, dev build, laptop backend, no AI, 256
 
 - **Same result:** the tags were the same in both modes, 256 of 256 lines with the same suggestion lists.
 - **The gain is 1.5×, not 3–4×:** most sheets have only 1–3 batches, and the first goes alone.
-- **On a cold backend almost all the time is the first call per sheet:** 26 s for the balance sheet (loading the models) and **95 s for the notes** (embedding 1,843 concepts on one CPU core). Parallel batches can't help there. Saving those embeddings once (next steps, point 1) is the bigger gain.
+- **On a cold backend almost all the time is the first call per sheet:** 26 s for the balance sheet (loading the models) and **95 s for the notes** (embedding 1,843 concepts on one CPU core). Parallel batches can't help there. Saving those embeddings once would be the bigger gain (Vashu's, next steps point 1).
+
+## The installed app (packaged build, 2026-11-22, `perf/packaged-timing`)
+
+All earlier numbers come from the dev build. This is the app as a CA gets it: the production bundle in `release/win-unpacked` (the same files the installer copies), DGPL workbook, laptop backend, no AI. Dev was run right after on the same machine and the same saved project.
+
+| Action | Dev build | **Installed app** |
+|---|---|---|
+| Reload the window → start screen | 1.5 s | **0.66 s** |
+| Open a statement (54×) | 101 ms average, 274 ms longest | **9 ms**, 37 ms longest |
+| Click a line (21×) | 114 ms, 188 ms longest | **18 ms**, 27 ms longest |
+| Switch Excel sheet (12×, Notes included) | 229 ms, 387 ms longest | **48 ms**, 71 ms longest |
+| Double-click a problem (6×) | 11 ms | **4 ms** |
+| JS memory (heap) at the end | 132 MB | **49 MB** |
+| Open the workbook (`.xls`, converted by the backend) | — | 5.2 s |
+| Auto-tag, 256 lines (backend just started) | — | 137 s |
+
+What this means:
+- **Clicking around is instant in the installed app.** It is 5–10× faster than dev, and no action reached 100 ms (the point where people start to notice a delay).
+- **The only waits a CA still sees are on the backend:** Auto-tag and, less so, opening the workbook.
+- **Memory:** all of the app's processes together use about 750–870 MB in both builds, the largest about 360 MB. That was the "750 MB" seen before: the whole app, not the spreadsheet. The JS data, Univer's included, is under 50 MB after Auto-tag and every sheet shown, so Univer doesn't keep data it no longer needs. The rest is Chromium's own (GPU, drawing, code).
+
+How to run it again:
+1. Build: `XAP_TEST_BUILD=1 XAP_API_URL=http://127.0.0.1:<port> pnpm --filter ui build`, then `pnpm --filter ui exec electron-builder --win --dir`. `XAP_TEST_BUILD=1` keeps the e2e hooks and `XAP_USER_DATA`; a normal build has neither.
+2. Start the app: `XAP_USER_DATA=<temp dir> "ui/release/win-unpacked/XBRL Autopilot.exe" --remote-debugging-port=<port>`.
+3. Time it: `node ui/e2e/indas-perf.mjs <port> <screenshotDir> <workbook> 150 [saved.axbrl]`.
 
 ## What to optimise next
 
+Re-ordered after the measurements above.
+
+1. **Auto-tag: the biggest wait left (137 s on a just-started backend, 22–34 s on a warm one).** All of it is backend time.
+   - **Parallel batches:** done, behind a setting (section above). Next: on by default once it has run on the hosted backend with AI on.
+   - **Concept embeddings saved to disk, lighter models (ONNX / quantized): not ours. Left to Vashu** (Sarthak, 2026-11-22). For him: `rank_scope` already keeps the embeddings in memory (`_scope_matrix`, `lru_cache`), so only the first Auto-tag after a backend start pays for them (95 s for the notes, 26 s for the balance sheet).
+2. **Faster first open.**
+   - **Compress responses:** done (gzip, `perf/backend-gzip`): the knowledge base download goes from 4.3 MB to 356 KB.
+   - **Keep the knowledge base on disk:** the app needs a way to know when the server's copy changed. `/health`'s `version` is fixed (`"0.1.0"`), so it can't tell.
+     - **Server: Vashu's.** It would send an `ETag` (a hash of the file) on `/authority` and answer `304 Not Modified` when the app's copy is current.
+     - **App:** `perf/kb-disk-cache`. It keeps the knowledge base on disk only when the server sends an `ETag`; until then nothing changes.
+3. **Keep it fast.** Run `ui/e2e/indas-perf.mjs` on the packaged build in CI with a 150 ms limit per action. A change that makes any action slower then fails before it ships.
+4. **Future improvement: draw only the rows on screen** in long lists (XBRL Form, taxonomy tree up to 1,843 concepts, Problems). Not needed now: the longest action in the installed app is 71 ms. Take it up when a bigger filing goes over 100 ms, and keep "scroll to the fact" working.
+5. **Skipped: Univer memory.** Nothing to fix: the JS data, Univer's included, is under 50 MB; the rest is Chromium's own.
+6. **Fewer round trips to the remote server** (a whole sheet per request, progress streamed back): Vashu's review first.
 Ordered by expected gain. Points 1–3 come from numbers measured on 2026-11-22; 4–6 are estimates to measure first.
 
 1. **Faster Auto-tag (the biggest remaining wait: 31–209 s without AI, 173 s with it).**
