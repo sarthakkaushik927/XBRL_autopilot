@@ -164,6 +164,27 @@ def _num_or_dash(v):
     return None
 
 
+def total_level(lines: list[dict], path: list[str], cy: float | None, py: float | None) -> int | None:
+    """Which open section a bare "Total" row closes, decided by arithmetic, not by its words.
+
+    `lines`: the statement's rows so far, each {"path": [...section headings], "cy", "py", "is_total"}.
+    `path`: the headings open at the "Total" row (outermost first). Returns k, the depth of the deepest section
+    (`path[:k]`) whose non-total lines add up to the total in either year, or None when none does. One year is
+    enough: a workbook's own total can be off in the other (HPL's PY E&L total is 2,000 off its lines).
+    HPL: the "Equity and liabilities" grand total comes right after the current-liability lines, so the open
+    path is [E&L, Current liabilities]; only E&L's lines add up to it, so k = 1.
+    """
+    for k in range(len(path), 0, -1):
+        members = [x for x in lines if not x["is_total"] and x["path"][:k] == path[:k]]
+        if not members:
+            continue
+        tol = 1 + 0.5 * len(members)  # each line was rounded to whole rupees
+        adds_up = [abs(sum(x[year] or 0 for x in members) - amount) <= tol for year, amount in (("cy", cy), ("py", py)) if amount]
+        if any(adds_up):
+            return k
+    return None
+
+
 def _sentence_case(t: str) -> str:
     t = re.sub(r"\s+", " ", t).strip(" :-–")
     if t.isupper() and len(t) > 3:
@@ -1037,6 +1058,7 @@ class FinancialNotesExtractor:
 
         hierarchy = []
         rows_out = []
+        seen: list[dict] = []  # each row's open headings and amounts, for total_level
         sub_sections = [
             "NON-CURRENT ASSETS", "CURRENT ASSETS", "NON-CURRENT LIABILITIES", "CURRENT LIABILITIES",
             "SHAREHOLDER’S FUNDS", "SHAREHOLDERS FUNDS", "SHAREHOLDERS’ FUNDS", "EQUITY"
@@ -1100,22 +1122,37 @@ class FinancialNotesExtractor:
 
             line_item = part_clean
             bc = list(hierarchy)
+            cy_amt = round(cy_num * factor) if cy_num is not None else 0
+            py_amt = round(py_num * factor) if py_num is not None else 0
+            is_total = False
             if re.search(r"(?i)total\s*assets", part):
                 bc = ["ASSETS", "Total Assets"]
                 line_item = "Total Assets"
+                is_total = True
             elif re.search(r"(?i)total.*(?:equity|liabilit)", part):
                 bc = ["EQUITY AND LIABILITIES", "Total Equity and Liabilities"]
                 line_item = "Total Equity and Liabilities"
+                is_total = True
+            elif re.fullmatch(r"(?i)total", part_clean.strip(" :")):
+                # a bare "Total": the section it closes is the one its lines add up to (total_level)
+                is_total = True
+                k = total_level(seen, hierarchy, cy_amt, py_amt) if hierarchy else None
+                if k == 1 and hierarchy[0] in ("ASSETS", "EQUITY AND LIABILITIES"):
+                    line_item = "Total Assets" if hierarchy[0] == "ASSETS" else "Total Equity and Liabilities"
+                    bc = [hierarchy[0], line_item]
+                else:
+                    bc = (hierarchy[:k] if k else bc) + [line_item]
             else:
                 bc.append(line_item)
+            seen.append({"path": list(hierarchy), "cy": cy_amt, "py": py_amt, "is_total": is_total})
 
             rows_out.append({
                 "Row_Index": len(rows_out) + 1,
                 "Line_Item": line_item,
                 "Breadcrumb_Hierarchy": " > ".join(bc),
                 "Note_No": note_val,
-                "Current_Year_Amount": round(cy_num * factor) if cy_num is not None else 0,
-                "Previous_Year_Amount": round(py_num * factor) if py_num is not None else 0,
+                "Current_Year_Amount": cy_amt,
+                "Previous_Year_Amount": py_amt,
             })
         df_res = pd.DataFrame(rows_out)
         for col in BS_COLS:

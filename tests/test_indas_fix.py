@@ -139,13 +139,17 @@ def test_propose_fix_runs_the_llm_answer_through_the_guard_rails(kb, monkeypatch
                           {"problem_id": PROBLEM["id"], "line_id": "balanceSheet:2", "concept": "ind-as:Nope", "reason": "x"})
 
     class FakeLlm:
-        def with_structured_output(self, _):
+        method = None
+
+        def with_structured_output(self, _, method=None):
+            FakeLlm.method = method
             return FakeChain()
 
     monkeypatch.setattr(indas_fix, "get_llm", lambda: FakeLlm())
     monkeypatch.setattr(indas_fix, "PROMPT", FakeChain())
     import asyncio
     out = asyncio.run(indas_fix.propose_fix(kb, [PROBLEM], LINES))
+    assert FakeLlm.method == "json_mode"  # JSON, not a tool call (Groq 400 tool_use_failed with gpt-oss)
     assert [c["concept"] for c in out["changes"]] == ["ind-as:TradeReceivablesCurrent"]
     assert out["changes"][0]["problemId"] == PROBLEM["id"]  # mapped back from P1
 
@@ -191,7 +195,7 @@ def _fake_llm(monkeypatch, answers):
             return a
 
     class FakeLlm:
-        def with_structured_output(self, _):
+        def with_structured_output(self, _, method=None):
             return FakeChain()
 
     monkeypatch.setattr(indas_fix, "get_llm", lambda: FakeLlm())
@@ -206,6 +210,22 @@ def test_a_part_that_hits_the_rate_limit_is_named_and_the_others_still_count(kb,
     out = asyncio.run(indas_fix.propose_fix(kb, [PROBLEM, INV], LINES + NOTE_LINES))
     assert [c["rowId"] for c in out["changes"]] == ["balanceSheet:2"]
     assert out["explanation"].endswith("1 total(s) were not checked: the AI service's per-minute limit was reached, ask again in a minute.")
+
+
+def test_a_groq_error_fails_only_its_part(kb, monkeypatch):
+    """2026-11-23: a Groq 400 escaped propose_fix and /indas/fix answered 500 for the whole Fix all."""
+    import asyncio
+
+    import groq
+    import httpx
+
+    req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    bad = groq.BadRequestError("Tool choice is required, but model did not call a tool", response=httpx.Response(400, request=req), body=None)
+    good = answer({"problem_id": PROBLEM["id"], "line_id": "balanceSheet:2", "concept": "ind-as:TradeReceivablesCurrent", "reason": "current"})
+    _fake_llm(monkeypatch, [good, bad])
+    out = asyncio.run(indas_fix.propose_fix(kb, [PROBLEM, INV], LINES + NOTE_LINES))
+    assert [c["rowId"] for c in out["changes"]] == ["balanceSheet:2"]
+    assert "1 total(s) were not checked" in out["explanation"]
 
 
 def test_every_part_failing_is_an_error(kb, monkeypatch):
