@@ -54,6 +54,13 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
 - **Ask the team** for Helmier's instance XML (an exact C&I golden; today only the PDF) and the Rebel workbook (a second Ind AS before/after pair).
 
 ## Log
+- **2026-11-23, CI/CD fixes (branch `fix/cicd-deploy-race`):**
+  - **Deploys raced on `latest`:** every merge started up to two deploys. CD ran for every completed CI run and pulled the moving `latest` tag, so it could ship another commit's image, and a second deploy ran `docker rm -f` on the container the first had just started (the 10:41 "crash" was this). Now:
+    - CI tags the image with the commit (`:<sha>` and `latest`), and CD deploys `workflow_run.head_sha`;
+    - only one deploy runs at a time (`concurrency: deploy-backend`);
+    - only a green CI run of a **push to main** deploys (`workflow_run` filtered by branch and event). A manual run redeploys `latest`.
+  - **Backend tests now run on PRs to main.** Before, `ci.yml` ran only after the merge. The image is built and pushed only for `main`. The tests need no keys, so fork PRs work too.
+  - **Still open:** `GROQ_API_KEY` / `PYDANTIC_LOGFIRE_API_KEY` are repo *variables* and show unmasked in the public Actions logs. Rotate them, store them as secrets, switch `vars.` → `secrets.` (Sarthak: later).
 - **2026-11-23, HPL follow-ups to #33 (branch `fix/indas-hpl-followups`):**
   - **Fix with AI used JSON mode too.** `/indas/fix` answered 500 on Fix all: `gpt-oss` didn't call the forced tool and Groq replied `400 tool_use_failed`, which `propose_fix` didn't catch. It now asks for JSON (`method="json_mode"`, the shape in the prompt), a Groq error fails only its own part, and `json_validate_failed` counts as malformed (asked once more).
   - **A bare "Total" on the balance sheet closes the section its lines add up to** (`total_level` in `src/transformation/indas.py`). This is decided by arithmetic, not keywords, and one year adding up is enough. HPL's E&L grand total had the heading "Current liabilities > Total", so Auto-tag tagged it `CurrentLiabilities`. It is now "Total Equity and Liabilities", and the assets "Total" is "Total Assets".

@@ -4,13 +4,28 @@ on:
   workflow_run:
     workflows: ["CI Pipeline"]
     types: [completed]
+    branches: ["main"]
   workflow_dispatch:
+
+# One deploy at a time: a second one used to `docker rm -f` the container the first had just started (outage
+# 2026-11-23 10:41). A newer pending deploy replaces an older pending one.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    # only a green CI run of a push to main (CI also runs on PRs, which must never deploy), or a manual redeploy
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (github.event.workflow_run.conclusion == 'success' &&
+           github.event.workflow_run.event == 'push' &&
+           github.event.workflow_run.head_branch == 'main') }}
     runs-on: self-hosted
     env:
+      # the image CI built for that commit (not `latest`, which a later merge may have replaced); a manual run
+      # redeploys `latest`
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha || 'latest' }}
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }}
@@ -26,7 +41,9 @@ jobs:
       XAP_PORT: ${{ vars.XAP_PORT }}
     steps:
       - name: Pull Docker image
-        run: sudo docker pull "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
+        run: |
+          echo "deploying ${IMAGE_TAG}"
+          sudo docker pull "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
 
       - name: Delete Old docker container
         run: |
@@ -53,7 +70,7 @@ jobs:
             --env "QDRANT_CLUSTER_ENDPOINT=${QDRANT_CLUSTER_ENDPOINT}" \
             --env "SERVICE_NAME=${SERVICE_NAME}" \
             --env "PYDANTIC_LOGFIRE_API_KEY=${PYDANTIC_LOGFIRE_API_KEY}" \
-            "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
+            "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
 
       - name: Wait for the backend to answer /health
         run: |

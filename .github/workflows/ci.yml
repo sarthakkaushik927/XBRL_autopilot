@@ -1,9 +1,18 @@
 name: CI Pipeline
 
+# Backend tests on every PR to main (until 2026-11-23 they ran only after the merge), the image built and pushed only
+# for main. The tests need no keys (forks' PRs get no vars/secrets).
 on:
   push:
     branches: ["main"]
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # a newer push to a PR replaces its running check; main's runs all finish (each one's image is deployed)
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -32,6 +41,8 @@ jobs:
 
   build:
     needs: test
+    # only main's image is built and pushed (CD deploys it); a PR or a manual run on another branch never is
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
@@ -44,8 +55,12 @@ jobs:
       - name: Docker login
         run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
 
+      # tagged with the commit too: CD deploys exactly this commit's image, not whatever `latest` is by then
+      # (two merges in a row used to race on `latest`)
       - name: Build the Docker image
-        run: docker build -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest" .
+        run: docker build -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${GITHUB_SHA}" -t "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest" .
 
       - name: Push to Docker Hub
-        run: docker push "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
+        run: |
+          docker push "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${GITHUB_SHA}"
+          docker push "${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:latest"
