@@ -61,6 +61,7 @@ Re-planned on 2026-11-10 from the real client data ([12-reference-data](12-refer
   - **DGPL, dev, no AI:** 34 s → 22 s on a warm backend. A cold one is 161 s either way: 95 s of that is the notes' first call embedding 1,843 concepts. Caching those on disk is next (backend, ask first).
   - **Same tags** in both modes (256 of 256).
   - **Tests:** `run-limited.test.ts` (6), `indas-pipeline-service.test.ts` (both modes: order, progress, Cancel, failure), `settings-service.test.ts`. `pnpm typecheck` green; `indas-perf.mjs` passes in both modes. The 3 `mapping-helpers` failures (removed `sample_financials.xlsx`) are pre-existing.
+- **2026-11-22, gzip on the backend ([18](18-performance.md) step 5, branch `perf/backend-gzip`):** `GZipMiddleware` (≥ 1 KB) in `api/app.py`. The knowledge base download goes from 4.3 MB to 356 KB. Server-sent events (`text/event-stream`) stay uncompressed (Starlette 1.10). `tests/test_gzip.py`: 2 pass.
 - **2026-11-22, issue #20 points 5 and 6 (branch `fix/issue-20`, [19](19-indas-fix-with-ai.md#calculated-totals-issue-20-point-5), docs/17 log):**
   - **5. Calculated totals:** a new Electron-free service, `ui/electron/main/services/indas-derived-totals.ts`.
     - `deriveTotals(kb, lines, elrs)` sums a total no line reports from its tagged parts, bottom-up, by the KB calculation of the **statement's own ELRs** (from its Form trees, never the union):

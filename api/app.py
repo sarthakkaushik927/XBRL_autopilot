@@ -18,6 +18,7 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS"):
 import hmac
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from api.v1.routes import (
@@ -48,6 +49,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="XBRL Autopilot sidecar", version=SIDECAR_VERSION, lifespan=lifespan)
+# gzip for clients that ask for it (the app's fetch does): the knowledge base (/indas/authority, ~4.5 MB of JSON)
+# is the app's biggest download on first open (docs/18). Streamed chat (text/event-stream) is left uncompressed.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 try:
     logger.instrument_fastapi(app)
 except Exception:
